@@ -99,7 +99,16 @@ USE_TZ = True
 
 STATIC_URL = "static/"
 STATIC_ROOT = BASE_DIR / "staticfiles"
-STATICFILES_STORAGE = "whitenoise.storage.CompressedManifestStaticFilesStorage"
+
+# Images : Cloudinary en production (CLOUDINARY_URL defini), disque local sinon.
+STORAGES = {
+    "default": {
+        "BACKEND": "config.storage.CloudinaryMediaStorage"
+        if os.environ.get("CLOUDINARY_URL")
+        else "django.core.files.storage.FileSystemStorage"
+    },
+    "staticfiles": {"BACKEND": "whitenoise.storage.CompressedManifestStaticFilesStorage"},
+}
 
 MEDIA_URL = "media/"
 MEDIA_ROOT = BASE_DIR / "media"

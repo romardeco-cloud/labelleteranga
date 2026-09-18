@@ -39,6 +39,8 @@ services:
         sync: false
       - key: STRIPE_CURRENCY
         value: "xof"
+      - key: CLOUDINARY_URL
+        sync: false
       - key: WAVE_API_KEY
         sync: false
       - key: ORANGE_MONEY_CLIENT_ID

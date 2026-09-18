@@ -99,6 +99,10 @@ Endpoints (reserves admin, JWT requis) :
 
 Tous se basent sur les commandes au statut `paid`.
 
+## Images (Cloudinary)
+
+Le disque de Render est ephemere : sans stockage externe, les photos envoyees depuis l'admin disparaissent au prochain deploiement. Definir la variable `CLOUDINARY_URL` (`cloudinary://API_KEY:API_SECRET@CLOUD_NAME`, visible dans Cloudinary > Dashboard > "API Environment variable") sur Render : toutes les images (upload admin et colonne `image_url` de l'import Excel) sont alors stockees sur Cloudinary et servies en format/qualite optimises. Sans cette variable, le disque local est utilise (developpement).
+
 ## Application mobile (PWA)
 
 Le site est une Progressive Web App : installable directement depuis le navigateur, sans passer par l'App Store ni le Play Store (donc sans compte developpeur Apple/Google a payer).
