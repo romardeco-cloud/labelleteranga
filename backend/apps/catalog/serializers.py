@@ -20,6 +20,8 @@ class ProductSerializer(serializers.ModelSerializer):
     stocks = StockSerializer(many=True, read_only=True)
     effective_price = serializers.SerializerMethodField()
     active_promotion_name = serializers.SerializerMethodField()
+    in_stock = serializers.SerializerMethodField()
+    store_stock = serializers.SerializerMethodField()
 
     class Meta:
         model = Product
@@ -41,17 +43,31 @@ class ProductSerializer(serializers.ModelSerializer):
             "image",
             "is_active",
             "in_stock",
+            "store_stock",
             "created_at",
             "updated_at",
         ]
         read_only_fields = ["id", "slug", "created_at", "updated_at"]
 
+    def _store_quantity(self, product):
+        store = self.context.get("store")
+        if not store:
+            return None
+        return next((s.quantity for s in product.stocks.all() if s.point_of_sale_id == store.id), 0)
+
+    def get_store_stock(self, product):
+        return self._store_quantity(product)
+
+    def get_in_stock(self, product):
+        q = self._store_quantity(product)
+        return product.in_stock if q is None else q > 0
+
     def get_effective_price(self, product):
-        promo = product.active_promotion()
+        promo = product.active_promotion(self.context.get("store"))
         return promo.discounted_price(product.price) if promo else product.price
 
     def get_active_promotion_name(self, product):
-        promo = product.active_promotion()
+        promo = product.active_promotion(self.context.get("store"))
         return promo.name if promo else None
 
 

@@ -2,6 +2,9 @@
 
 import { useEffect, useState } from "react";
 import { useParams } from "next/navigation";
+import Link from "next/link";
+import ProductVisual from "@/components/ProductVisual";
+import { useSite } from "@/components/site/SiteContext";
 import { Product, api, addToCart } from "@/lib/api";
 
 function formatXof(value: string | number) {
@@ -12,22 +15,19 @@ export default function ProductDetailPage() {
   const params = useParams();
   const [product, setProduct] = useState<Product | null>(null);
   const [added, setAdded] = useState(false);
+  const [error, setError] = useState("");
+  const { site, base } = useSite();
 
   useEffect(() => {
-    api.get(`/catalog/products/${params.id}/`).then((res) => setProduct(res.data));
-  }, [params.id]);
+    api.get(`/catalog/products/${params.id}/`, { params: { store: site.slug } }).then((res) => setProduct(res.data));
+  }, [params.id, site.slug]);
 
   if (!product) return <p className="p-8">Chargement...</p>;
 
   return (
     <div className="max-w-3xl mx-auto px-4 py-8 grid sm:grid-cols-2 gap-8">
       <div className="aspect-square bg-brand-light rounded-lg flex items-center justify-center overflow-hidden">
-        {product.image ? (
-          // eslint-disable-next-line @next/next/no-img-element
-          <img src={product.image} alt={product.name} className="object-cover w-full h-full" />
-        ) : (
-          <span className="text-brand">{product.name}</span>
-        )}
+        <ProductVisual image={product.image} name={product.name} category={product.category?.name} />
       </div>
       <div>
         <span className="text-xs text-gray-400">{product.category?.name}</span>
@@ -36,15 +36,24 @@ export default function ProductDetailPage() {
         <p className="text-2xl font-bold text-brand-dark mb-4">{formatXof(product.price)}</p>
         <button
           onClick={async () => {
-            await addToCart(product.id, 1);
-            setAdded(true);
-            setTimeout(() => setAdded(false), 1500);
+            setError("");
+            try {
+              await addToCart(product.id, 1);
+              setAdded(true);
+              setTimeout(() => setAdded(false), 1500);
+            } catch (e: any) {
+              setError(e?.response?.data?.detail ?? "Ajout impossible.");
+            }
           }}
           disabled={!product.in_stock}
           className="bg-brand text-white px-6 py-3 rounded-lg font-medium hover:bg-brand-dark transition disabled:opacity-40"
         >
           {!product.in_stock ? "Rupture de stock" : added ? "Ajoute au panier" : "Ajouter au panier"}
         </button>
+        {error && <p className="text-red-600 text-sm mt-2">{error}</p>}
+        <Link href={base || "/"} className="block text-sm text-brand underline mt-4">
+          &larr; Retour
+        </Link>
       </div>
     </div>
   );

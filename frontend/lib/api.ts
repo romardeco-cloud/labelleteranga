@@ -1,4 +1,5 @@
 import axios from "axios";
+import { getActiveStore } from "./site";
 
 export const API_URL = process.env.NEXT_PUBLIC_API_URL || "http://localhost:8000/api";
 
@@ -152,12 +153,18 @@ export type CartData = {
   total: string;
 };
 
+// Panier separe pour chaque site (supermarche, resto...) : cle de session propre au site actif.
+const notifyCartChanged = () => {
+  if (typeof window !== "undefined") window.dispatchEvent(new Event("lbt-cart-changed"));
+};
+
 export function getSessionKey(): string {
   if (typeof window === "undefined") return "";
-  let key = localStorage.getItem("lbt_cart_session");
+  const storageKey = `lbt_cart_session${getActiveStore() ? `_${getActiveStore()}` : ""}`;
+  let key = localStorage.getItem(storageKey);
   if (!key) {
     key = crypto.randomUUID();
-    localStorage.setItem("lbt_cart_session", key);
+    localStorage.setItem(storageKey, key);
   }
   return key;
 }
@@ -168,7 +175,8 @@ export async function fetchProducts(params: Record<string, string> = {}) {
 }
 
 export async function fetchCart() {
-  const { data } = await api.get<CartData>(`/cart/${getSessionKey()}/`);
+  const store = getActiveStore();
+  const { data } = await api.get<CartData>(`/cart/${getSessionKey()}/`, { params: store ? { store } : {} });
   return data;
 }
 
@@ -176,17 +184,21 @@ export async function addToCart(productId: number, quantity = 1) {
   const { data } = await api.post<CartData>(`/cart/${getSessionKey()}/add/`, {
     product_id: productId,
     quantity,
+    store: getActiveStore(),
   });
+  notifyCartChanged();
   return data;
 }
 
 export async function updateCartItem(itemId: number, quantity: number) {
   const { data } = await api.patch<CartData>(`/cart/${getSessionKey()}/items/${itemId}/`, { quantity });
+  notifyCartChanged();
   return data;
 }
 
 export async function removeCartItem(itemId: number) {
   const { data } = await api.delete<CartData>(`/cart/${getSessionKey()}/items/${itemId}/`);
+  notifyCartChanged();
   return data;
 }
 
@@ -199,11 +211,13 @@ export type CustomerInfo = {
   delivery_address: string;
   delivery_latitude?: number | null;
   delivery_longitude?: number | null;
+  fulfillment?: "delivery" | "pickup";
 };
 
 export type Order = {
   id: number;
   reference: string;
+  fulfillment?: "delivery" | "pickup";
   point_of_sale: number | null;
   point_of_sale_name: string | null;
   customer_name: string;
@@ -219,6 +233,7 @@ export type Order = {
   items: CartItem[];
   created_at: string;
   paid_at: string | null;
+  voided_at?: string | null;
   whatsapp_confirmation_sent_at: string | null;
   customer_whatsapp_link: string | null;
   shop_whatsapp_link: string | null;

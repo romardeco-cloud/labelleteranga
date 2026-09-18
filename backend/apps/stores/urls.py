@@ -1,6 +1,10 @@
 from rest_framework.routers import DefaultRouter
 
+from django.urls import path
+
 from .views import (
+    SiteDetailView,
+    SiteListView,
     InventoryCountViewSet,
     PointOfSaleViewSet,
     StockMovementViewSet,
@@ -15,4 +19,7 @@ router.register("categories", StoreCategoryViewSet, basename="store-category")
 router.register("movements", StockMovementViewSet, basename="stock-movement")
 router.register("inventories", InventoryCountViewSet, basename="inventory")
 
-urlpatterns = router.urls
+urlpatterns = [
+    path("sites/", SiteListView.as_view()),
+    path("sites/<slug:slug>/", SiteDetailView.as_view()),
+] + router.urls

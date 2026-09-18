@@ -33,6 +33,9 @@ export type StoreConfig = {
   address: string;
   phone: string;
   is_active: boolean;
+  slug: string | null;
+  online_enabled: boolean;
+  description: string;
   timezone: string;
   email: string;
   legal_form: string;
@@ -58,6 +61,13 @@ export async function fetchStoreConfig(storeId: number) {
 }
 export async function saveStoreConfig(storeId: number, patch: Partial<StoreConfig>) {
   return (await api.patch<StoreConfig>(`/stores/points-of-sale/${storeId}/settings/`, patch)).data;
+}
+
+export async function fetchSecurityCode() {
+  return (await api.get<{ is_set: boolean }>("/accounts/security-code/")).data;
+}
+export async function saveSecurityCode(newPin: string, currentPin?: string) {
+  return (await api.post<{ is_set: boolean }>("/accounts/security-code/", { new_pin: newPin, current_pin: currentPin })).data;
 }
 
 export type StaffUser = { id: number; username: string; email: string; role: string; last_login: string | null };

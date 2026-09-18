@@ -29,8 +29,8 @@ def create_checkout_session(order):
         "amount": str(int(order.total_amount)),
         "currency": settings.WAVE_CURRENCY,
         "client_reference": order.reference,
-        "success_url": f"{settings.FRONTEND_URL}/checkout/success?order={order.reference}",
-        "error_url": f"{settings.FRONTEND_URL}/checkout/cancel?order={order.reference}",
+        "success_url": f"{settings.FRONTEND_URL}{order.site_base}/checkout/success?order={order.reference}",
+        "error_url": f"{settings.FRONTEND_URL}{order.site_base}/checkout/cancel?order={order.reference}",
     }
     response = requests.post(f"{WAVE_API_BASE}/checkout/sessions", json=payload, headers=headers, timeout=15)
     response.raise_for_status()

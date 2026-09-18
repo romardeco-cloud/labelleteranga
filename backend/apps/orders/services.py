@@ -17,7 +17,13 @@ def create_order_from_cart(session_key, customer_data, payment_method):
     if not items:
         return None
 
+    fulfillment = customer_data.get("fulfillment")
+    if fulfillment not in (Order.Fulfillment.DELIVERY, Order.Fulfillment.PICKUP):
+        fulfillment = Order.Fulfillment.DELIVERY
+
     order = Order.objects.create(
+        point_of_sale=cart.point_of_sale,
+        fulfillment=fulfillment,
         customer_name=customer_data.get("customer_name", ""),
         customer_email=customer_data.get("customer_email", ""),
         customer_phone=customer_data.get("customer_phone", ""),
@@ -61,8 +67,64 @@ def mark_order_paid(order, **extra_fields):
     order.paid_at = timezone.now()
     order.save()
 
+    _decrement_store_stock(order)
+
     from apps.notifications.whatsapp import send_order_confirmation
 
     send_order_confirmation(order)
 
+    return order
+
+
+def _decrement_store_stock(order):
+    """Sortie de stock du point de vente d'une commande en ligne (jamais bloquante : la commande est deja payee)."""
+    if order.channel != Order.Channel.ONLINE or not order.point_of_sale_id:
+        return
+    from rest_framework.exceptions import ValidationError
+
+    from apps.stores.models import StockMovement
+    from apps.stores.services import change_stock
+
+    for item in order.items.select_related("product"):
+        if not item.product_id:
+            continue
+        kwargs = dict(reason=StockMovement.Reason.ONLINE_ORDER, reference=order.reference[:8].upper())
+        try:
+            change_stock(item.product, order.point_of_sale, delta=-item.quantity, **kwargs)
+        except ValidationError:  # stock insuffisant : on met a zero plutot que de refuser une commande payee
+            change_stock(item.product, order.point_of_sale, set_to=0, **kwargs)
+
+
+def void_order(order, user, reason):
+    """
+    Annule (supprime des ventes) une commande : statut ANNULEE, motif et auteur conserves pour le controle, stock
+    remis en rayon si la vente l'avait deja decremente. Les rapports ne comptent que les commandes payees.
+    """
+    from django.db import transaction
+    from rest_framework.exceptions import ValidationError
+
+    with transaction.atomic():
+        order = Order.objects.select_for_update().get(pk=order.pk)
+        if order.status == Order.Status.CANCELLED:
+            raise ValidationError({"detail": "Cette vente est deja annulee."})
+        was_paid = order.status == Order.Status.PAID
+        if was_paid and order.point_of_sale_id:
+            from apps.stores.models import StockMovement
+            from apps.stores.services import change_stock
+
+            for item in order.items.select_related("product"):
+                if item.product_id:
+                    change_stock(
+                        item.product,
+                        order.point_of_sale,
+                        delta=item.quantity,
+                        reason=StockMovement.Reason.SALE_VOID,
+                        reference=order.reference[:8].upper(),
+                        user=user,
+                    )
+        order.status = Order.Status.CANCELLED
+        order.voided_at = timezone.now()
+        order.voided_by = user
+        order.void_reason = (reason or "")[:200]
+        order.save(update_fields=["status", "voided_at", "voided_by", "void_reason"])
     return order

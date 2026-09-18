@@ -15,6 +15,9 @@ class Cart(models.Model):
     user = models.ForeignKey(
         settings.AUTH_USER_MODEL, null=True, blank=True, on_delete=models.SET_NULL, related_name="carts"
     )
+    point_of_sale = models.ForeignKey(
+        "stores.PointOfSale", null=True, blank=True, on_delete=models.SET_NULL, related_name="carts"
+    )
     created_at = models.DateTimeField(auto_now_add=True)
     updated_at = models.DateTimeField(auto_now=True)
 

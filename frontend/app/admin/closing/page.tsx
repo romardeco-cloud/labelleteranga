@@ -1,6 +1,7 @@
 "use client";
 
 import { useEffect, useState } from "react";
+import CashierTills from "@/components/admin/CashierTills";
 import {
   ClosingPreview,
   DailyClosing,
@@ -97,6 +98,22 @@ export default function AdminClosingPage() {
   return (
     <div className="space-y-8">
       <h1 className="text-2xl font-bold">Cloture de caisse</h1>
+
+      <div className="flex flex-wrap items-center gap-3 -mb-4">
+        <label className="text-sm font-medium">Journee du</label>
+        <input type="date" value={date} max={todayIso()} onChange={(e) => setDate(e.target.value)} className="border rounded px-2 py-1" />
+        <label className="text-sm font-medium ml-2">Point de vente</label>
+        <select value={storeId ?? ""} onChange={(e) => setStoreId(e.target.value ? Number(e.target.value) : null)} className="border rounded px-2 py-1">
+          <option value="">Tous / en ligne</option>
+          {stores.map((s) => (
+            <option key={s.id} value={s.id}>
+              {s.name}
+            </option>
+          ))}
+        </select>
+      </div>
+
+      <CashierTills date={date} storeId={storeId} onChanged={loadHistory} />
 
       <div className="border rounded-lg bg-white p-4 space-y-4">
         <div className="flex flex-wrap items-center gap-3">

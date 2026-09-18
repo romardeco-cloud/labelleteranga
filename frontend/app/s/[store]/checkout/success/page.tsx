@@ -3,6 +3,7 @@
 import { Suspense, useEffect, useState } from "react";
 import { useSearchParams } from "next/navigation";
 import Link from "next/link";
+import { useSite } from "@/components/site/SiteContext";
 import { Order, fetchOrder } from "@/lib/api";
 
 const PAYMENT_LABELS: Record<string, string> = {
@@ -14,6 +15,7 @@ const PAYMENT_LABELS: Record<string, string> = {
 
 function SuccessContent() {
   const params = useSearchParams();
+  const { site, base } = useSite();
   const reference = params.get("order");
   const [order, setOrder] = useState<Order | null>(null);
 
@@ -51,7 +53,7 @@ function SuccessContent() {
     return (
       <div className="max-w-md mx-auto px-4 py-16 text-center">
         <h1 className="text-2xl font-bold text-brand-dark mb-2">Merci pour votre commande !</h1>
-        <Link href="/" className="text-brand underline">
+        <Link href={base || "/"} className="text-brand underline">
           Retour a la boutique
         </Link>
       </div>
@@ -83,8 +85,8 @@ function SuccessContent() {
         <div className="bg-brand-light border border-brand-accent/50 rounded-lg p-4 mb-6">
           <p className="text-brand-dark font-medium">Commande enregistree !</p>
           <p className="text-sm text-gray-600 mt-1">
-            Vous payerez en especes a la livraison. La confirmation WhatsApp vous sera envoyee au moment de la
-            livraison, une fois le paiement recu.
+            Vous payerez en especes {order?.fulfillment === "pickup" ? "au retrait" : "a la livraison"}. La confirmation
+            WhatsApp vous sera envoyee une fois le paiement recu.
           </p>
         </div>
       )}
@@ -95,7 +97,14 @@ function SuccessContent() {
 
       {order?.status === "failed" && <p className="text-red-500 mb-6">Le paiement a echoue. Vous pouvez reessayer.</p>}
 
-      <Link href="/" className="text-brand underline">
+      {order?.fulfillment === "pickup" && (
+        <p className="text-sm text-gray-600 mb-6">
+          A retirer chez <strong>{site.name}</strong>
+          {site.address ? ` — ${site.address}` : ""}.
+        </p>
+      )}
+
+      <Link href={base || "/"} className="text-brand underline">
         Retour a la boutique
       </Link>
     </div>

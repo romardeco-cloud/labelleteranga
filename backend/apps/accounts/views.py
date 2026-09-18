@@ -6,7 +6,7 @@ from rest_framework.views import APIView
 from rest_framework_simplejwt.serializers import TokenObtainPairSerializer
 from rest_framework_simplejwt.views import TokenObtainPairView
 
-from .models import CashierProfile
+from .models import AdminSecurityCode, CashierProfile
 
 
 class AdminTokenObtainPairSerializer(TokenObtainPairSerializer):
@@ -107,3 +107,25 @@ class StaffListView(APIView):
                 for u in users
             ]
         )
+
+
+class SecurityCodeView(APIView):
+    """
+    GET  /api/accounts/security-code/ -> {is_set}
+    POST /api/accounts/security-code/ {new_pin, current_pin?} : definit ou change le code (le code actuel est exige
+    des qu'un code existe).
+    """
+
+    permission_classes = [permissions.IsAdminUser]
+
+    def get(self, request):
+        return Response({"is_set": AdminSecurityCode.current().is_set})
+
+    def post(self, request):
+        code = AdminSecurityCode.current()
+        new_pin = str(request.data.get("new_pin") or "")
+        AdminSecurityCode.validate_format(new_pin)
+        if code.is_set:
+            code.verify(str(request.data.get("current_pin") or ""))
+        code.set_pin(new_pin)
+        return Response({"is_set": True})

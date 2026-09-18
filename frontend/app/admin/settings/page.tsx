@@ -7,9 +7,18 @@ import Icon, { IconName } from "@/components/admin/Icon";
 import { Cashier, PointOfSale, fetchCashiers, fetchPointsOfSale } from "@/lib/api";
 import { storeImage } from "@/lib/branding";
 import { apiErrorMessage } from "@/lib/documents";
-import { PayMethodKey, StaffUser, StoreConfig, fetchStaff, fetchStoreConfig, saveStoreConfig } from "@/lib/store-admin";
+import {
+  PayMethodKey,
+  StaffUser,
+  StoreConfig,
+  fetchSecurityCode,
+  fetchStaff,
+  fetchStoreConfig,
+  saveSecurityCode,
+  saveStoreConfig,
+} from "@/lib/store-admin";
 
-type Tab = "general" | "finances" | "appearance" | "modules" | "users" | "managers";
+type Tab = "general" | "finances" | "appearance" | "modules" | "users" | "managers" | "security";
 
 const TABS: { key: Tab; label: string; icon: IconName }[] = [
   { key: "general", label: "General", icon: "store" },
@@ -18,6 +27,7 @@ const TABS: { key: Tab; label: string; icon: IconName }[] = [
   { key: "modules", label: "Modules", icon: "dashboard" },
   { key: "users", label: "Utilisateurs", icon: "users" },
   { key: "managers", label: "Gestionnaires", icon: "lock" },
+  { key: "security", label: "Securite", icon: "lock" },
 ];
 
 const TIMEZONES = ["Africa/Dakar", "Africa/Abidjan", "Africa/Bamako", "Africa/Conakry", "Africa/Banjul", "Europe/Paris", "UTC"];
@@ -41,7 +51,7 @@ const MODULES: { key: keyof StoreConfig; label: string; hint: string }[] = [
 ];
 
 const EDITABLE: (keyof StoreConfig)[] = [
-  "name", "address", "phone", "timezone", "email", "legal_form", "share_capital", "ninea", "rccm", "vat_rate",
+  "name", "address", "phone", "slug", "online_enabled", "description", "timezone", "email", "legal_form", "share_capital", "ninea", "rccm", "vat_rate",
   "prices_include_vat", "payment_methods", "receipt_slogan", "receipt_footer",
   "module_hold", "module_history", "module_qr", "module_dine_in", "module_customer_orders", "module_drawer", "module_xreport",
 ];
@@ -91,6 +101,23 @@ export default function AdminSettingsPage() {
   const [msg, setMsg] = useState<{ ok: boolean; text: string } | null>(null);
   const [cashiers, setCashiers] = useState<Cashier[]>([]);
   const [staff, setStaff] = useState<StaffUser[]>([]);
+  const [pinSet, setPinSet] = useState<boolean | null>(null);
+  const [pinForm, setPinForm] = useState({ current: "", next: "", confirm: "" });
+  const [pinMsg, setPinMsg] = useState<{ ok: boolean; text: string } | null>(null);
+
+  async function submitPin(e: React.FormEvent) {
+    e.preventDefault();
+    setPinMsg(null);
+    if (pinForm.next !== pinForm.confirm) return setPinMsg({ ok: false, text: "Les deux codes ne correspondent pas." });
+    try {
+      await saveSecurityCode(pinForm.next, pinSet ? pinForm.current : undefined);
+      setPinSet(true);
+      setPinForm({ current: "", next: "", confirm: "" });
+      setPinMsg({ ok: true, text: "Code secret enregistre." });
+    } catch (err) {
+      setPinMsg({ ok: false, text: apiErrorMessage(err, "Enregistrement impossible.") });
+    }
+  }
 
   useEffect(() => {
     fetchPointsOfSale().then((list) => {
@@ -100,6 +127,7 @@ export default function AdminSettingsPage() {
     });
     fetchCashiers().then(setCashiers).catch(() => setCashiers([]));
     fetchStaff().then(setStaff).catch(() => setStaff([]));
+    fetchSecurityCode().then((r) => setPinSet(r.is_set)).catch(() => setPinSet(null));
   }, []);
 
   const load = useCallback(() => {
@@ -119,6 +147,7 @@ export default function AdminSettingsPage() {
     try {
       const patch: Record<string, unknown> = {};
       EDITABLE.forEach((k) => (patch[k] = cfg[k]));
+      patch.slug = cfg.slug ? cfg.slug : null;
       patch.share_capital = cfg.share_capital === "" || cfg.share_capital === null ? null : cfg.share_capital;
       const saved = await saveStoreConfig(storeId, patch as Partial<StoreConfig>);
       setCfg(saved);
@@ -185,6 +214,34 @@ export default function AdminSettingsPage() {
                 </select>
               </Field>
             </div>
+          </Card>
+          <Card icon="globe" title="Site web et commande en ligne" tone="text-rose-400">
+            <div className="flex items-center justify-between gap-4">
+              <div>
+                <p className="font-medium">Site web en ligne</p>
+                <p className="text-sm text-gray-500">Un site dedie a ce point de vente, avec son catalogue, son panier et son application installable.</p>
+              </div>
+              <Toggle checked={cfg.online_enabled} onChange={(v) => set("online_enabled", v)} />
+            </div>
+            <div className="grid sm:grid-cols-2 gap-4">
+              <Field label="Identifiant du site (adresse)">
+                <input
+                  value={cfg.slug ?? ""}
+                  onChange={(e) => set("slug", e.target.value.toLowerCase().replace(/[^a-z0-9-]/g, "") as never)}
+                  placeholder="ex. supermarche"
+                  className={inputCls}
+                />
+              </Field>
+              <Field label="Description courte (page d'accueil)">
+                <input value={cfg.description} onChange={(e) => set("description", e.target.value)} className={inputCls} />
+              </Field>
+            </div>
+            {cfg.slug && (
+              <p className="text-sm text-gray-500">
+                Adresse : <span className="text-[#f5b942]">/s/{cfg.slug}</span>
+                {process.env.NEXT_PUBLIC_ROOT_DOMAIN ? ` ou https://${cfg.slug}.${process.env.NEXT_PUBLIC_ROOT_DOMAIN}` : ""}
+              </p>
+            )}
           </Card>
           <Card icon="globe" title="Coordonnees" tone="text-emerald-400">
             <Field label="Adresse complete">
@@ -369,7 +426,60 @@ export default function AdminSettingsPage() {
         </Card>
       )}
 
-      {cfg && !["users", "managers"].includes(tab) && (
+      {tab === "security" && (
+        <Card icon="lock" title="Code secret administrateur" tone="text-amber-400">
+          <p className="text-sm text-gray-500">
+            Ce code a 4 chiffres est demande pour supprimer une vente deja validee. Les caissiers n&apos;ont aucune possibilite de supprimer une
+            vente. {pinSet === false && <strong className="text-amber-400">Aucun code n&apos;est defini : la suppression est bloquee.</strong>}
+          </p>
+          <form onSubmit={submitPin} className="grid sm:grid-cols-3 gap-4 max-w-2xl">
+            {pinSet && (
+              <Field label="Code actuel">
+                <input
+                  type="password"
+                  inputMode="numeric"
+                  maxLength={4}
+                  value={pinForm.current}
+                  onChange={(e) => setPinForm({ ...pinForm, current: e.target.value.replace(/\D/g, "") })}
+                  className={`${inputCls} tracking-[0.5em] text-center`}
+                />
+              </Field>
+            )}
+            <Field label={pinSet ? "Nouveau code" : "Code (4 chiffres)"}>
+              <input
+                type="password"
+                inputMode="numeric"
+                maxLength={4}
+                value={pinForm.next}
+                onChange={(e) => setPinForm({ ...pinForm, next: e.target.value.replace(/\D/g, "") })}
+                className={`${inputCls} tracking-[0.5em] text-center`}
+              />
+            </Field>
+            <Field label="Confirmer le code">
+              <input
+                type="password"
+                inputMode="numeric"
+                maxLength={4}
+                value={pinForm.confirm}
+                onChange={(e) => setPinForm({ ...pinForm, confirm: e.target.value.replace(/\D/g, "") })}
+                className={`${inputCls} tracking-[0.5em] text-center`}
+              />
+            </Field>
+            <div className="sm:col-span-3 flex items-center gap-4">
+              <button
+                disabled={pinForm.next.length !== 4 || pinForm.confirm.length !== 4 || (pinSet === true && pinForm.current.length !== 4)}
+                className="bg-brand text-white rounded-xl px-6 py-2.5 font-medium disabled:opacity-40"
+              >
+                Enregistrer le code
+              </button>
+              {pinMsg && <p className={`text-sm ${pinMsg.ok ? "text-emerald-400" : "text-red-400"}`}>{pinMsg.text}</p>}
+            </div>
+          </form>
+          <p className="text-xs text-gray-500">Apres 5 essais errones, le code est bloque 15 minutes. Il est stocke chiffre et ne peut pas etre relu.</p>
+        </Card>
+      )}
+
+      {cfg && !["users", "managers", "security"].includes(tab) && (
         <div className="flex items-center gap-4 sticky bottom-0 py-3 bg-[#120e0d]/90 backdrop-blur border-t">
           <button onClick={save} disabled={saving} className="bg-brand text-white rounded-xl px-6 py-2.5 font-medium disabled:opacity-50">
             {saving ? "Enregistrement..." : "Enregistrer"}

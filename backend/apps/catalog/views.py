@@ -44,7 +44,17 @@ class ProductViewSet(viewsets.ModelViewSet):
         store = self.request.query_params.get("point_of_sale")
         if store:  # produits rattaches a ce point de vente
             qs = qs.filter(stocks__point_of_sale_id=store).distinct()
+        site = self.request.query_params.get("store")
+        if site:  # site web d'un point de vente : ses produits actifs uniquement
+            qs = qs.filter(is_active=True, stocks__point_of_sale__slug=site, stocks__point_of_sale__online_enabled=True).distinct()
         return qs
+
+    def get_serializer_context(self):
+        ctx = super().get_serializer_context()
+        site = self.request.query_params.get("store")
+        if site:
+            ctx["store"] = PointOfSale.objects.filter(slug=site).first()
+        return ctx
 
     # --- photos : erreurs de stockage lisibles + diagnostic ---------------------------------
     def _save_with_photo_guard(self, serializer, **extra):

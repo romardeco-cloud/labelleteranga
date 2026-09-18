@@ -2,6 +2,8 @@
 
 import { useEffect, useState } from "react";
 import { useRouter } from "next/navigation";
+import Link from "next/link";
+import { useSite } from "@/components/site/SiteContext";
 import { CartData, fetchCart, removeCartItem, updateCartItem } from "@/lib/api";
 
 function formatXof(value: string | number) {
@@ -11,6 +13,8 @@ function formatXof(value: string | number) {
 export default function CartPage() {
   const [cart, setCart] = useState<CartData | null>(null);
   const router = useRouter();
+  const { base } = useSite();
+  const [error, setError] = useState("");
 
   function reload() {
     fetchCart().then(setCart);
@@ -19,8 +23,12 @@ export default function CartPage() {
   useEffect(reload, []);
 
   async function handleQty(itemId: number, quantity: number) {
-    const updated = await updateCartItem(itemId, quantity);
-    setCart(updated);
+    setError("");
+    try {
+      setCart(await updateCartItem(itemId, quantity));
+    } catch (e: any) {
+      setError(e?.response?.data?.detail ?? "Quantite impossible.");
+    }
   }
 
   async function handleRemove(itemId: number) {
@@ -35,9 +43,15 @@ export default function CartPage() {
       <h1 className="text-2xl font-bold mb-6">Votre panier</h1>
 
       {cart.items.length === 0 ? (
-        <p className="text-gray-500">Votre panier est vide.</p>
+        <div className="text-gray-500">
+          <p>Votre panier est vide.</p>
+          <Link href={base || "/"} className="text-brand underline">
+            Retour a la boutique
+          </Link>
+        </div>
       ) : (
         <div className="space-y-4">
+          {error && <p className="text-red-600 text-sm">{error}</p>}
           {cart.items.map((item) => (
             <div key={item.id} className="flex items-center justify-between border rounded-lg p-4 bg-white">
               <div>
@@ -66,7 +80,7 @@ export default function CartPage() {
           </div>
 
           <button
-            onClick={() => router.push("/checkout")}
+            onClick={() => router.push(`${base}/checkout`)}
             className="w-full bg-brand text-white py-3 rounded-lg font-medium hover:bg-brand-dark transition"
           >
             Passer la commande

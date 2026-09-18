@@ -43,6 +43,11 @@ class Order(models.Model):
         DIRECT = "direct", "Vente directe"
         DINE_IN = "dine_in", "Sur place"
 
+    class Fulfillment(models.TextChoices):
+        DELIVERY = "delivery", "Livraison"
+        PICKUP = "pickup", "A emporter"
+
+    fulfillment = models.CharField(max_length=10, choices=Fulfillment.choices, default=Fulfillment.DELIVERY)
     service_mode = models.CharField(max_length=10, choices=ServiceMode.choices, default=ServiceMode.DIRECT)
     table_label = models.CharField("Table", max_length=40, blank=True)
     customer_name = models.CharField(max_length=150)
@@ -61,6 +66,9 @@ class Order(models.Model):
     whatsapp_confirmation_sent_at = models.DateTimeField(null=True, blank=True)
     created_at = models.DateTimeField(auto_now_add=True)
     paid_at = models.DateTimeField(null=True, blank=True)
+    voided_at = models.DateTimeField(null=True, blank=True)
+    voided_by = models.ForeignKey("auth.User", null=True, blank=True, on_delete=models.SET_NULL, related_name="+")
+    void_reason = models.CharField(max_length=200, blank=True)
 
     class Meta:
         ordering = ["-created_at"]
@@ -68,6 +76,12 @@ class Order(models.Model):
     def recompute_total(self):
         self.total_amount = sum(item.subtotal for item in self.items.all())
         return self.total_amount
+
+    @property
+    def site_base(self):
+        """Prefixe d'URL du site d'ou vient la commande (retour de paiement au bon site)."""
+        store = self.point_of_sale
+        return f"/s/{store.slug}" if store and store.slug else ""
 
     @property
     def location_maps_url(self):

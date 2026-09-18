@@ -2,24 +2,28 @@
 
 import { useState } from "react";
 import { useRouter } from "next/navigation";
+import { useSite } from "@/components/site/SiteContext";
 import { PaymentMethod, createCashOrder, createCheckoutSession, getBrowserLocation } from "@/lib/api";
 
 const PAYMENT_METHODS: { value: PaymentMethod; label: string; hint: string }[] = [
   { value: "card", label: "Carte bancaire", hint: "Visa, Mastercard via Stripe" },
   { value: "wave", label: "Wave", hint: "Paiement mobile Wave" },
   { value: "orange_money", label: "Orange Money", hint: "Paiement mobile Orange" },
-  { value: "cash", label: "Especes", hint: "Paiement a la livraison" },
+  { value: "cash", label: "Especes", hint: "Paiement a la livraison ou au retrait" },
 ];
 
 export default function CheckoutPage() {
   const router = useRouter();
+  const { site, base } = useSite();
+  const [fulfillment, setFulfillment] = useState<"delivery" | "pickup">("delivery");
+  const methods = PAYMENT_METHODS.filter((m) => site.payment_methods.includes(m.value));
   const [form, setForm] = useState({
     customer_name: "",
     customer_email: "",
     customer_phone: "",
     delivery_address: "",
   });
-  const [method, setMethod] = useState<PaymentMethod>("wave");
+  const [method, setMethod] = useState<PaymentMethod>("cash");
   const [location, setLocation] = useState<{ lat: number; lng: number } | null>(null);
   const [locating, setLocating] = useState(false);
   const [loading, setLoading] = useState(false);
@@ -42,6 +46,8 @@ export default function CheckoutPage() {
 
     const customer = {
       ...form,
+      fulfillment,
+      delivery_address: fulfillment === "pickup" ? `A emporter - ${site.name}` : form.delivery_address,
       delivery_latitude: location?.lat ?? null,
       delivery_longitude: location?.lng ?? null,
     };
@@ -49,7 +55,7 @@ export default function CheckoutPage() {
     try {
       if (method === "cash") {
         const order = await createCashOrder(customer);
-        router.push(`/checkout/success?order=${order.reference}`);
+        router.push(`${base}/checkout/success?order=${order.reference}`);
         return;
       }
       const { checkout_url } = await createCheckoutSession(method, customer);
@@ -62,8 +68,29 @@ export default function CheckoutPage() {
 
   return (
     <div className="max-w-md mx-auto px-4 py-8">
-      <h1 className="text-2xl font-bold mb-6">Finaliser la commande</h1>
+      <h1 className="text-2xl font-bold mb-1">Finaliser la commande</h1>
+      <p className="text-sm text-gray-500 mb-6">{site.name}</p>
       <form onSubmit={handleSubmit} className="space-y-4">
+        <div className="grid grid-cols-2 gap-2">
+          {(
+            [
+              ["delivery", "Livraison", "Chez vous"],
+              ["pickup", "A emporter", `Retrait : ${site.address || "au point de vente"}`],
+            ] as const
+          ).map(([key, label, hint]) => (
+            <button
+              type="button"
+              key={key}
+              onClick={() => setFulfillment(key)}
+              className={`text-left border rounded-lg px-3 py-2 transition ${
+                fulfillment === key ? "border-brand bg-brand-light ring-1 ring-brand" : "border-gray-200 hover:border-brand/50"
+              }`}
+            >
+              <span className="block text-sm font-medium">{label}</span>
+              <span className="block text-xs text-gray-500 line-clamp-2">{hint}</span>
+            </button>
+          ))}
+        </div>
         <div>
           <label className="block text-sm font-medium mb-1">Nom complet</label>
           <input
@@ -96,6 +123,7 @@ export default function CheckoutPage() {
             Utilise pour Wave / Orange Money et pour vous envoyer la confirmation WhatsApp.
           </p>
         </div>
+        {fulfillment === "delivery" && (
         <div>
           <label className="block text-sm font-medium mb-1">Adresse de livraison</label>
           <textarea
@@ -114,11 +142,12 @@ export default function CheckoutPage() {
             {locating ? "Localisation en cours..." : location ? "Position GPS ajoutee" : "Partager ma position GPS (optionnel)"}
           </button>
         </div>
+        )}
 
         <div>
           <label className="block text-sm font-medium mb-2">Moyen de paiement</label>
           <div className="grid grid-cols-2 gap-2">
-            {PAYMENT_METHODS.map((m) => (
+            {methods.map((m) => (
               <button
                 type="button"
                 key={m.value}
@@ -146,7 +175,9 @@ export default function CheckoutPage() {
           {loading
             ? "Traitement en cours..."
             : method === "cash"
-              ? "Valider la commande (paiement a la livraison)"
+              ? fulfillment === "pickup"
+                ? "Valider la commande (paiement au retrait)"
+                : "Valider la commande (paiement a la livraison)"
               : `Payer avec ${PAYMENT_METHODS.find((m) => m.value === method)?.label}`}
         </button>
       </form>

@@ -48,8 +48,8 @@ class CreateCheckoutSessionView(APIView):
         checkout_session = stripe.checkout.Session.create(
             mode="payment",
             line_items=line_items,
-            success_url=f"{settings.FRONTEND_URL}/checkout/success?order={order.reference}",
-            cancel_url=f"{settings.FRONTEND_URL}/checkout/cancel?order={order.reference}",
+            success_url=f"{settings.FRONTEND_URL}{order.site_base}/checkout/success?order={order.reference}",
+            cancel_url=f"{settings.FRONTEND_URL}{order.site_base}/checkout/cancel?order={order.reference}",
             customer_email=order.customer_email or None,
             metadata={"order_reference": order.reference},
         )

@@ -17,7 +17,7 @@ from .models import (
 class PointOfSaleSerializer(serializers.ModelSerializer):
     class Meta:
         model = PointOfSale
-        fields = ["id", "name", "address", "phone", "is_active", "created_at"]
+        fields = ["id", "name", "slug", "online_enabled", "description", "address", "phone", "is_active", "created_at"]
 
 
 class StockSerializer(serializers.ModelSerializer):
@@ -143,6 +143,9 @@ def store_config(store):
         "address": store.address,
         "phone": store.phone,
         "is_active": store.is_active,
+        "slug": store.slug,
+        "online_enabled": store.online_enabled,
+        "description": store.description,
         **StoreSettingsSerializer(get_settings(store)).data,
     }
 

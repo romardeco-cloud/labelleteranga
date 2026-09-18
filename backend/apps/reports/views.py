@@ -270,6 +270,106 @@ class DailyClosingViewSet(viewsets.ModelViewSet):
         point_of_sale = serializer.instance.point_of_sale_id
         self._apply_expected_totals(serializer, for_date, point_of_sale)
 
+    # ---- Caisses des caissiers, pilotees par l'administrateur -----------------------------------------
+    @staticmethod
+    def _date_param(value):
+        try:
+            return date_cls.fromisoformat(value) if value else timezone.localdate()
+        except ValueError:
+            raise ValidationError({"date": "Date invalide."})
+
+    @staticmethod
+    def _profile(value):
+        from apps.accounts.models import CashierProfile
+
+        profile = CashierProfile.objects.select_related("user", "point_of_sale").filter(pk=value).first()
+        if not profile:
+            raise ValidationError({"cashier": "Caissier introuvable."})
+        return profile
+
+    @action(detail=False, methods=["get"])
+    def cashiers(self, request):
+        """GET ?date=&point_of_sale= : etat de la caisse de chaque caissier actif pour ce jour."""
+        from apps.accounts.models import CashierProfile
+        from apps.pos.services import cashier_sales_totals
+
+        for_date = self._date_param(request.query_params.get("date"))
+        profiles = CashierProfile.objects.select_related("user", "point_of_sale").filter(is_active=True)
+        store = request.query_params.get("point_of_sale")
+        if store:
+            profiles = profiles.filter(point_of_sale_id=store)
+        rows = []
+        for pr in profiles.order_by("point_of_sale__name", "user__username"):
+            totals, n = cashier_sales_totals(pr, for_date)
+            closing = DailyClosing.objects.filter(date=for_date, point_of_sale=pr.point_of_sale, cashier=pr.user).first()
+            rows.append(
+                {
+                    "id": pr.id,
+                    "username": pr.user.username,
+                    "point_of_sale": pr.point_of_sale_id,
+                    "point_of_sale_name": pr.point_of_sale.name,
+                    "sales_count": n,
+                    "expected_total": sum(totals.values()),
+                    "closed": closing is not None,
+                    "discrepancy_total": closing.discrepancy_total if closing else None,
+                    "closing": DailyClosingSerializer(closing).data if closing else None,
+                }
+            )
+        return Response(rows)
+
+    @action(detail=False, methods=["get"], url_path="cashier-preview")
+    def cashier_preview(self, request):
+        """GET ?date=&cashier=<id> : montants attendus pour la caisse de ce caissier (l'administrateur les voit)."""
+        from apps.pos.services import cashier_sales_totals
+
+        for_date = self._date_param(request.query_params.get("date"))
+        profile = self._profile(request.query_params.get("cashier"))
+        totals, n = cashier_sales_totals(profile, for_date)
+        closing = DailyClosing.objects.filter(date=for_date, point_of_sale=profile.point_of_sale, cashier=profile.user).first()
+        return Response(
+            {
+                "date": for_date,
+                "cashier": profile.id,
+                "username": profile.user.username,
+                "point_of_sale_name": profile.point_of_sale.name,
+                "sales_count": n,
+                "expected": {
+                    "card": totals["card"],
+                    "wave": totals["wave"],
+                    "orange_money": totals["orange_money"],
+                    "cash": totals["cash"],
+                },
+                "closing": DailyClosingSerializer(closing).data if closing else None,
+            }
+        )
+
+    @action(detail=False, methods=["post"], url_path="close-cashier")
+    def close_cashier(self, request):
+        """
+        POST {date, cashier, declared_cash, declared_wave, declared_orange_money, declared_card, notes} :
+        ferme (ou corrige) la caisse d'un caissier au nom de l'administrateur.
+        """
+        from apps.pos.services import close_cashier_day
+
+        d = request.data
+        for_date = self._date_param(d.get("date"))
+        if for_date > timezone.localdate():
+            raise ValidationError({"date": "Impossible de fermer une caisse dans le futur."})
+        profile = self._profile(d.get("cashier"))
+        closing, created = close_cashier_day(
+            profile,
+            {
+                "cash": d.get("declared_cash"),
+                "wave": d.get("declared_wave"),
+                "orange_money": d.get("declared_orange_money"),
+                "card": d.get("declared_card"),
+            },
+            d.get("notes", ""),
+            for_date=for_date,
+            closed_by=request.user,
+        )
+        return Response(DailyClosingSerializer(closing).data, status=status.HTTP_201_CREATED if created else status.HTTP_200_OK)
+
     @action(detail=False, methods=["get"])
     def preview(self, request):
         date_str = request.query_params.get("date")

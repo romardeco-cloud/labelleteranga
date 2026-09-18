@@ -5,6 +5,9 @@ class PointOfSale(models.Model):
     name = models.CharField("Nom", max_length=120, unique=True)
     address = models.CharField("Adresse", max_length=255, blank=True)
     phone = models.CharField("Telephone", max_length=30, blank=True)
+    slug = models.SlugField("Identifiant du site", max_length=60, unique=True, null=True, blank=True)
+    online_enabled = models.BooleanField("Site web en ligne", default=False)
+    description = models.CharField("Description courte", max_length=200, blank=True)
     is_active = models.BooleanField(default=True)
     created_at = models.DateTimeField(auto_now_add=True)
 
@@ -40,6 +43,8 @@ class StockMovement(models.Model):
         INVOICE = "invoice", "Facture client"
         INVOICE_CANCEL = "invoice_cancel", "Annulation de facture"
         PURCHASE_RECEIPT = "purchase_receipt", "Reception fournisseur"
+        ONLINE_ORDER = "online_order", "Commande en ligne"
+        SALE_VOID = "sale_void", "Vente annulee"
         MANUAL = "manual", "Correction manuelle"
         INVENTORY = "inventory", "Ajustement d'inventaire"
         IMPORT = "import", "Import Excel"
@@ -123,7 +128,7 @@ class StoreSettings(models.Model):
 
     point_of_sale = models.OneToOneField(PointOfSale, related_name="settings", on_delete=models.CASCADE)
     timezone = models.CharField("Fuseau horaire", max_length=60, default="Africa/Dakar")
-    email = models.EmailField(blank=True)
+    email = models.EmailField(blank=True, default="info@labelleteranga.com")
     # informations legales
     legal_form = models.CharField("Forme juridique", max_length=60, blank=True)
     share_capital = models.DecimalField("Capital social", max_digits=14, decimal_places=0, null=True, blank=True)

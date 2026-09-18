@@ -34,6 +34,9 @@ labelleteranga/
 - **Comptabilite (admin)** : un onglet regroupe tous les documents financiers — vue d'ensemble (ventes, factures, creances, dettes, devis, ecarts de caisse), Devis, Factures, Bons de commande, Clotures de caisse, Clients / Fournisseurs et Rapports.
 - **Inventaire (admin)** : inventaires physiques par point de vente (stock theorique fige, saisie du comptage ou feuille Excel a exporter/reimporter, ecarts en unites et en valeur, validation qui ajuste le stock). Chaque variation de stock (vente en caisse, facture, annulation, reception fournisseur, correction, inventaire, import) est journalisee dans **Mouvements de stock** (filtrable, exportee dans les rapports Excel).
 - **Modele d'import Excel** : bouton "Telecharger le modele" dans Admin > Produits (feuille a remplir, exemple, instructions, une colonne de stock par point de vente).
+- **Un site par point de vente** : Supermarche, Restaurant, Quincaillerie et Depot ont chacun leur site (`/s/supermarche`, `/s/resto`, `/s/quincaillerie`, `/s/depot`), leur catalogue, leurs categories, leur panier, leurs commandes (rattachees au point de vente, visibles dans « Commandes client » a la caisse, stock decremente au paiement) et leur application installable (manifeste PWA par site). Livraison ou retrait a emporter. Adresse de contact unique : info@labelleteranga.com. Sous-domaines : voir « Sites dedies par sous-domaine ».
+- **Securite des ventes** : un caissier ne peut jamais supprimer une vente. Seul l'administrateur peut l'annuler (Admin > Commandes), avec son code secret a 4 chiffres (Parametres > Securite) ; motif et auteur sont conserves et le stock est remis en rayon.
+- **Fermeture de caisse depuis l'admin** : Admin > Comptabilite > Clotures de caisse permet de fermer ou corriger la caisse de chaque caissier pour n'importe quel jour.
 
 ## Demarrage local
 
@@ -137,6 +140,10 @@ Pour les commandes especes, la confirmation n'est envoyee qu'au moment ou l'admi
 
 - Wave : creer un compte [Wave for Business](https://www.wave.com/fr/business), recuperer la cle API et la renseigner dans `WAVE_API_KEY` ; verifier le format exact de la reponse `create_checkout_session` et implementer `verify_webhook_signature()` avec le secret fourni par Wave.
 - Orange Money : creer un compte marchand sur le [Orange Developer Center](https://developer.orange.com/apis/om-webpay), recuperer `client_id`/`client_secret`/`merchant_key` et les renseigner dans les variables correspondantes ; verifier le code devise attendu par votre contrat (XOF ISO vs code sandbox specifique).
+
+## Sites dedies par sous-domaine
+
+Le meme deploiement Vercel sert tous les sites. Une fois `labelleteranga.com` relie a Vercel, ajoutez les domaines `supermarche.`, `resto.`, `quincaillerie.` et `depot.labelleteranga.com` (ou un joker `*.labelleteranga.com`) au projet, puis definissez `NEXT_PUBLIC_ROOT_DOMAIN=labelleteranga.com`. Le fichier `frontend/proxy.ts` affiche alors le bon site pour chaque sous-domaine ; sans domaine, les adresses `/s/<site>` fonctionnent deja.
 
 ## Deploiement
 

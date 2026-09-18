@@ -113,14 +113,14 @@ def cashier_sales_totals(cashier_profile, for_date):
 
 
 @transaction.atomic
-def close_cashier_day(cashier_profile, declared, notes=""):
+def close_cashier_day(cashier_profile, declared, notes="", for_date=None, closed_by=None):
     """
     Fermeture de caisse du caissier. Un premier appel cree la fermeture (comptage a l'aveugle) ;
     les appels suivants, le meme jour, corrigent le comptage apres que le caissier a vu son ecart.
     L'ecart initial et le nombre de corrections restent enregistres pour l'administrateur.
     Retourne (fermeture, creee).
     """
-    today = timezone.localdate()
+    today = for_date or timezone.localdate()
 
     def amount(key):
         try:
@@ -155,7 +155,7 @@ def close_cashier_day(cashier_profile, declared, notes=""):
             date=today,
             point_of_sale=cashier_profile.point_of_sale,
             cashier=cashier_profile.user,
-            closed_by=cashier_profile.user,
+            closed_by=closed_by or cashier_profile.user,
             notes=notes,
             **values,
             **expected,

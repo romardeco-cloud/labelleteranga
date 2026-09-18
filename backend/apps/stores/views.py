@@ -5,6 +5,7 @@ from rest_framework.decorators import action
 from rest_framework.exceptions import ValidationError
 from rest_framework.parsers import MultiPartParser
 from rest_framework.response import Response
+from rest_framework.views import APIView
 
 from .inventory import (
     create_inventory,
@@ -273,3 +274,53 @@ class InventoryCountViewSet(viewsets.ModelViewSet):
         count.status = InventoryCount.Status.CANCELLED
         count.save(update_fields=["status"])
         return self._detail(count)
+
+
+def _site_payload(store, with_categories=False):
+    st = get_settings(store)
+    data = {
+        "id": store.id,
+        "name": store.name,
+        "slug": store.slug,
+        "description": store.description,
+        "address": store.address,
+        "phone": store.phone,
+        "email": st.email or "info@labelleteranga.com",
+        "payment_methods": st.payment_methods,
+    }
+    if with_categories:
+        counts = {
+            r["product__category_id"]: r["n"]
+            for r in Stock.objects.filter(point_of_sale=store, product__is_active=True, quantity__gt=0)
+            .values("product__category_id")
+            .annotate(n=Count("id"))
+        }
+        data["categories"] = [
+            {"id": l.category_id, "name": l.category.name, "order": l.order, "products_count": counts.get(l.category_id, 0)}
+            for l in StoreCategory.objects.filter(point_of_sale=store).select_related("category")
+            if counts.get(l.category_id, 0) > 0
+        ]
+    return data
+
+
+class SiteListView(APIView):
+    """GET /api/stores/sites/ : points de vente ayant un site web en ligne (public)."""
+
+    permission_classes = [permissions.AllowAny]
+
+    def get(self, request):
+        stores = PointOfSale.objects.filter(online_enabled=True, is_active=True, slug__isnull=False).order_by("name")
+        return Response([_site_payload(s) for s in stores])
+
+
+class SiteDetailView(APIView):
+    """GET /api/stores/sites/<slug>/ : fiche publique d'un site (nom, coordonnees, categories disponibles)."""
+
+    permission_classes = [permissions.AllowAny]
+
+    def get(self, request, slug):
+        try:
+            store = PointOfSale.objects.get(slug=slug, online_enabled=True, is_active=True)
+        except PointOfSale.DoesNotExist:
+            return Response({"detail": "Site introuvable."}, status=status.HTTP_404_NOT_FOUND)
+        return Response(_site_payload(store, with_categories=True))
