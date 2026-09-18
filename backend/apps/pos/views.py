@@ -22,7 +22,8 @@ class POSProductListView(APIView):
 
     def get(self, request):
         store = request.user.cashier_profile.point_of_sale
-        qs = Product.objects.filter(is_active=True).select_related("category")
+        # seuls les produits rattaches a ce point de vente (une ligne de stock, meme a 0)
+        qs = Product.objects.filter(is_active=True, stocks__point_of_sale=store).select_related("category")
         search = request.query_params.get("search", "").strip()
         if search:
             qs = qs.filter(Q(name__icontains=search) | Q(sku__icontains=search))

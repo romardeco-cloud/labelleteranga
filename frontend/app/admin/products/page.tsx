@@ -44,25 +44,37 @@ export default function AdminProductsPage() {
   const [editForm, setEditForm] = useState<EditableProduct | null>(null);
   const [editImage, setEditImage] = useState<File | null>(null);
   const fileInputRef = useRef<HTMLInputElement>(null);
+  const [storeId, setStoreId] = useState<number | null>(null);
+  const [search, setSearch] = useState("");
+  const store = stores.find((x) => x.id === storeId) ?? null;
+  const storeSlug = store ? store.name.toLowerCase().replace(/[^a-z0-9]+/g, "-").replace(/^-|-$/g, "") : "";
 
   function reload() {
-    api.get("/catalog/products/", { params: { page_size: 100 } }).then((res) =>
-      setProducts(res.data.results ?? res.data)
-    );
+    api
+      .get("/catalog/products/", {
+        params: { page_size: 500, ...(storeId ? { point_of_sale: storeId } : {}), ...(search ? { search } : {}) },
+      })
+      .then((res) => setProducts(res.data.results ?? res.data));
   }
 
   useEffect(() => {
-    reload();
-    fetchPointsOfSale().then(setStores);
+    fetchPointsOfSale().then((list) => setStores(list.filter((x) => x.is_active)));
     fetchCategories().then(setCategories);
   }, []);
+
+  useEffect(() => {
+    const t = setTimeout(reload, 250);
+    return () => clearTimeout(t);
+    // eslint-disable-next-line react-hooks/exhaustive-deps
+  }, [storeId, search]);
 
   async function handleCreate(e: React.FormEvent) {
     e.preventDefault();
     const data = new FormData();
     Object.entries(form).forEach(([k, v]) => v && data.append(k, v));
     if (newImage) data.append("image", newImage);
-    await api.post("/catalog/products/", data, { headers: { "Content-Type": "multipart/form-data" } });
+    const created = await api.post("/catalog/products/", data, { headers: { "Content-Type": "multipart/form-data" } });
+    if (storeId) await setStock(created.data.id, storeId, 0); // rattache le nouveau produit au point de vente choisi
     setForm(emptyForm);
     setNewImage(null);
     reload();
@@ -114,60 +126,122 @@ export default function AdminProductsPage() {
     reload();
   }
 
-  async function handleStockChange(productId: number, storeId: number, quantity: number) {
-    await setStock(productId, storeId, quantity);
+  async function handleStockChange(productId: number, forStoreId: number, quantity: number, current: number) {
+    if (quantity === current) return; // evite de rattacher un produit a un magasin sans le vouloir
+    await setStock(productId, forStoreId, quantity);
     reload();
   }
 
   async function handleExport() {
     const token = getAdminToken();
-    const res = await fetch(`${api.defaults.baseURL}/catalog/products/export_excel/`, {
+    const res = await fetch(`${api.defaults.baseURL}/catalog/products/export_excel/${storeId ? `?point_of_sale=${storeId}` : ""}`, {
       headers: { Authorization: `Bearer ${token}` },
     });
     const blob = await res.blob();
     const url = window.URL.createObjectURL(blob);
     const a = document.createElement("a");
     a.href = url;
-    a.download = "produits_labelleteranga.xlsx";
+    a.download = storeId ? `produits_${storeSlug}.xlsx` : "produits_labelleteranga.xlsx";
     a.click();
     window.URL.revokeObjectURL(url);
   }
 
   async function handleImport(e: React.ChangeEvent<HTMLInputElement>) {
     const file = e.target.files?.[0];
-    if (!file) return;
+    if (!file || !storeId) return;
     const formData = new FormData();
     formData.append("file", file);
-    const res = await api.post("/catalog/products/import_excel/", formData, {
-      headers: { "Content-Type": "multipart/form-data" },
-    });
-    setImportSummary(
-      `${res.data.created} produits crees, ${res.data.updated} mis a jour, ${res.data.errors.length} erreurs.`
-    );
+    formData.append("point_of_sale", String(storeId));
+    try {
+      const res = await api.post("/catalog/products/import_excel/", formData, {
+        headers: { "Content-Type": "multipart/form-data" },
+      });
+      const errs: string[] = res.data.errors;
+      setImportSummary(
+        `${store?.name} : ${res.data.created} produit(s) cree(s), ${res.data.updated} mis a jour, ${errs.length} erreur(s).` +
+          (errs.length ? ` ${errs.slice(0, 3).join(" | ")}` : "")
+      );
+    } catch {
+      setImportSummary("Import impossible : verifiez le fichier (.xlsx, colonnes sku, name, price).");
+    }
     if (fileInputRef.current) fileInputRef.current.value = "";
     reload();
   }
 
   return (
     <div className="space-y-8">
-      <div className="flex items-center justify-between">
-        <h1 className="text-2xl font-bold">Produits</h1>
-        <div className="flex gap-2">
+      <div className="flex flex-wrap items-center justify-between gap-3">
+        <div>
+          <h1 className="text-2xl font-bold">Produits</h1>
+          <p className="text-sm text-gray-500">
+            Chaque point de vente a son propre catalogue : choisissez-en un pour voir, importer ou exporter ses produits.
+          </p>
+        </div>
+        <div className="flex flex-wrap gap-2">
           <button
-            onClick={() => downloadFile("/catalog/products/import_template/", "modele_import_produits_labelleteranga.xlsx")}
-            className="border px-3 py-1.5 rounded text-sm"
+            disabled={!storeId}
+            onClick={() =>
+              downloadFile(`/catalog/products/import_template/?point_of_sale=${storeId}`, `modele_import_${storeSlug}.xlsx`)
+            }
+            className="border px-3 py-1.5 rounded text-sm disabled:opacity-40"
           >
             Telecharger le modele
           </button>
           <button onClick={handleExport} className="border px-3 py-1.5 rounded text-sm">
             Exporter Excel
           </button>
-          <label className="bg-brand text-white px-3 py-1.5 rounded text-sm cursor-pointer">
+          <label
+            className={`px-3 py-1.5 rounded text-sm ${
+              storeId ? "bg-brand text-white cursor-pointer" : "bg-gray-100 text-gray-500 cursor-not-allowed"
+            }`}
+            title={storeId ? "" : "Choisissez d'abord un point de vente"}
+          >
             Importer Excel
-            <input ref={fileInputRef} type="file" accept=".xlsx" onChange={handleImport} className="hidden" />
+            <input
+              ref={fileInputRef}
+              type="file"
+              accept=".xlsx"
+              disabled={!storeId}
+              onChange={handleImport}
+              className="hidden"
+            />
           </label>
         </div>
       </div>
+
+      <div className="flex flex-wrap items-center gap-3">
+        <div className="flex flex-wrap gap-1 border rounded-xl p-1 bg-white">
+          {[{ id: null as number | null, name: "Tous" }, ...stores].map((x) => (
+            <button
+              key={x.id ?? "all"}
+              onClick={() => setStoreId(x.id)}
+              className={`px-3 py-1.5 rounded-lg text-sm ${
+                storeId === x.id ? "bg-brand text-white" : "text-gray-500 hover:text-brand"
+              }`}
+            >
+              {x.name.replace(/ La Belle Teranga$/i, "")}
+            </button>
+          ))}
+        </div>
+        <input
+          type="search"
+          placeholder="Rechercher un produit ou une reference..."
+          value={search}
+          onChange={(e) => setSearch(e.target.value)}
+          className="border rounded-lg px-3 py-2 text-sm flex-1 min-w-[220px]"
+        />
+      </div>
+      {!storeId && (
+        <p className="text-sm text-gray-500 -mt-4">
+          Vue d&apos;ensemble de tous les produits. Pour importer un fichier Excel, choisissez d&apos;abord le point de vente concerne.
+        </p>
+      )}
+      {storeId && (
+        <p className="text-sm text-gray-500 -mt-4">
+          {products.length} produit(s) rattache(s) a {store?.name}. L&apos;import Excel de ce point de vente ajoute/met a jour ses produits et
+          leur stock ici uniquement.
+        </p>
+      )}
 
       {importSummary && <p className="text-sm text-brand-dark bg-brand-light p-2 rounded">{importSummary}</p>}
 
@@ -263,6 +337,11 @@ export default function AdminProductsPage() {
         Le stock se gere ensuite par point de vente, via le bouton &quot;Stock&quot; de chaque produit.
       </p>
 
+      {products.length === 0 && (
+        <p className="text-sm text-gray-500 py-6 text-center border rounded-lg bg-white">
+          {storeId ? "Aucun produit rattache a ce point de vente : importez son fichier Excel." : "Aucun produit."}
+        </p>
+      )}
       <table className="w-full text-sm bg-white border rounded-lg overflow-hidden">
         <thead className="bg-gray-50 text-left">
           <tr>
@@ -270,7 +349,7 @@ export default function AdminProductsPage() {
             <th className="p-2">Nom</th>
             <th className="p-2">Categorie</th>
             <th className="p-2">Prix</th>
-            <th className="p-2">Stock total</th>
+            <th className="p-2">{storeId ? "Stock" : "Stock total"}</th>
             <th className="p-2">Statut</th>
             <th className="p-2"></th>
           </tr>
@@ -381,7 +460,7 @@ export default function AdminProductsPage() {
                       formatXof(p.price)
                     )}
                   </td>
-                  <td className="p-2">{p.total_stock}</td>
+                  <td className="p-2">{storeId ? (p.stocks.find((st) => st.point_of_sale === storeId)?.quantity ?? 0) : p.total_stock}</td>
                   <td className="p-2">{p.is_active ? "Actif" : "Inactif"}</td>
                   <td className="p-2 text-right space-x-2">
                     <button
@@ -413,7 +492,7 @@ export default function AdminProductsPage() {
                               type="number"
                               min={0}
                               defaultValue={current}
-                              onBlur={(e) => handleStockChange(p.id, s.id, Number(e.target.value))}
+                              onBlur={(e) => handleStockChange(p.id, s.id, Number(e.target.value), current)}
                               className="w-20 border rounded px-2 py-1"
                             />
                           </label>

@@ -2,8 +2,11 @@ from django.http import HttpResponse
 from django_filters.rest_framework import DjangoFilterBackend
 from rest_framework import filters, permissions, status, viewsets
 from rest_framework.decorators import action
+from rest_framework.exceptions import ValidationError
 from rest_framework.parsers import MultiPartParser
 from rest_framework.response import Response
+
+from apps.stores.models import PointOfSale
 
 from .excel import build_import_template, export_products_to_excel, import_products_from_excel
 from .models import Category, Product, Promotion
@@ -36,11 +39,24 @@ class ProductViewSet(viewsets.ModelViewSet):
         qs = super().get_queryset()
         if not (self.request.user and self.request.user.is_staff):
             qs = qs.filter(is_active=True)
+        store = self.request.query_params.get("point_of_sale")
+        if store:  # produits rattaches a ce point de vente
+            qs = qs.filter(stocks__point_of_sale_id=store).distinct()
         return qs
+
+    @staticmethod
+    def _store_from(value):
+        if not value:
+            return None
+        try:
+            return PointOfSale.objects.get(pk=value)
+        except (PointOfSale.DoesNotExist, ValueError):
+            raise ValidationError({"point_of_sale": "Point de vente introuvable."})
 
     @action(detail=False, methods=["get"], permission_classes=[permissions.IsAdminUser])
     def export_excel(self, request):
-        buffer = export_products_to_excel()
+        store = self._store_from(request.query_params.get("point_of_sale"))
+        buffer = export_products_to_excel(store=store)
         response = HttpResponse(
             buffer.read(),
             content_type="application/vnd.openxmlformats-officedocument.spreadsheetml.sheet",
@@ -50,8 +66,9 @@ class ProductViewSet(viewsets.ModelViewSet):
 
     @action(detail=False, methods=["get"], permission_classes=[permissions.IsAdminUser])
     def import_template(self, request):
+        store = self._store_from(request.query_params.get("point_of_sale"))
         response = HttpResponse(
-            build_import_template().read(),
+            build_import_template(store=store).read(),
             content_type="application/vnd.openxmlformats-officedocument.spreadsheetml.sheet",
         )
         response["Content-Disposition"] = 'attachment; filename="modele_import_produits_labelleteranga.xlsx"'
@@ -67,7 +84,8 @@ class ProductViewSet(viewsets.ModelViewSet):
         file_obj = request.FILES.get("file")
         if not file_obj:
             return Response({"detail": "Aucun fichier fourni."}, status=status.HTTP_400_BAD_REQUEST)
-        summary = import_products_from_excel(file_obj)
+        store = self._store_from(request.data.get("point_of_sale"))
+        summary = import_products_from_excel(file_obj, store=store)
         return Response(summary, status=status.HTTP_200_OK)
 
 

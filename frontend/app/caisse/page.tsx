@@ -576,7 +576,7 @@ export default function CaissePage() {
                     })}
                   </div>
                   {visible.length === 0 && (
-                    <p className="text-gray-500 text-center py-16">{products.length === 0 ? "Aucun produit disponible." : "Aucun produit ne correspond."}</p>
+                    <p className="text-gray-500 text-center py-16">{products.length === 0 ? "Aucun produit n'est rattache a ce point de vente. Demandez a l'administrateur d'importer son catalogue." : "Aucun produit ne correspond."}</p>
                   )}
                 </div>
               </>

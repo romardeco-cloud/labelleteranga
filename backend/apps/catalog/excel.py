@@ -29,16 +29,22 @@ BASE_HEADERS = [
 STOCK_COLUMN_PREFIX = "stock:"
 
 
-def export_products_to_excel(queryset=None):
+def export_products_to_excel(queryset=None, store=None):
     """
-    Retourne un fichier .xlsx (bytes) listant les produits, avec une colonne
-    "stock:<Point de vente>" par point de vente actif.
+    Retourne un fichier .xlsx (bytes) listant les produits. Sans `store` : une colonne
+    "stock:<Point de vente>" par point de vente actif. Avec `store` : uniquement les produits
+    de ce point de vente, avec une seule colonne "stock" (le fichier se reimporte tel quel).
     """
     queryset = queryset if queryset is not None else Product.objects.select_related("category").prefetch_related(
         "stocks__point_of_sale"
     )
-    stores = list(PointOfSale.objects.filter(is_active=True).order_by("name"))
-    headers = BASE_HEADERS + [f"{STOCK_COLUMN_PREFIX}{store.name}" for store in stores]
+    if store:
+        queryset = queryset.filter(stocks__point_of_sale=store).distinct()
+        stores = [store]
+        headers = BASE_HEADERS + ["stock"]
+    else:
+        stores = list(PointOfSale.objects.filter(is_active=True).order_by("name"))
+        headers = BASE_HEADERS + [f"{STOCK_COLUMN_PREFIX}{s.name}" for s in stores]
 
     wb = openpyxl.Workbook()
     ws = wb.active
@@ -89,10 +95,17 @@ EXAMPLE_ROWS = [
 ]
 
 
-def build_import_template():
-    """Modele Excel d'import produits : feuille Produits (vide, a remplir) + Exemple + Instructions."""
-    stores = list(PointOfSale.objects.filter(is_active=True).order_by("name"))
-    headers = BASE_HEADERS + [f"{STOCK_COLUMN_PREFIX}{store.name}" for store in stores]
+def build_import_template(store=None):
+    """
+    Modele Excel d'import produits : feuille Produits (vide, a remplir) + Exemple + Instructions.
+    Avec `store` : modele propre a un point de vente (une seule colonne "stock").
+    """
+    if store:
+        stores = [store]
+        headers = BASE_HEADERS + ["stock"]
+    else:
+        stores = list(PointOfSale.objects.filter(is_active=True).order_by("name"))
+        headers = BASE_HEADERS + [f"{STOCK_COLUMN_PREFIX}{s.name}" for s in stores]
     red = PatternFill("solid", fgColor="8B1A1A")
     gold = PatternFill("solid", fgColor="D4A017")
     required = {"sku", "name", "price"}
@@ -106,7 +119,11 @@ def build_import_template():
         cell.font = Font(bold=True, color="FFFFFF")
         cell.fill = red if h in required else PatternFill("solid", fgColor="5B5B5B")
         cell.alignment = Alignment(horizontal="center", vertical="center", wrap_text=True)
-        help_text = HEADER_HELP.get(h) or f"Quantite en stock pour ce point de vente ({h[len(STOCK_COLUMN_PREFIX):]})."
+        help_text = HEADER_HELP.get(h) or (
+            f"Quantite en stock pour ce point de vente ({h[len(STOCK_COLUMN_PREFIX):]})."
+            if h.startswith(STOCK_COLUMN_PREFIX)
+            else f"Quantite en stock a {store.name if store else 'ce point de vente'}."
+        )
         cell.comment = Comment(help_text, "La Belle Teranga")
         ws.column_dimensions[get_column_letter(idx)].width = max(16, len(h) + 4)
     ws.row_dimensions[1].height = 32
@@ -143,11 +160,20 @@ def build_import_template():
         ("1. Remplissez la feuille 'Produits' : une ligne par produit (ne changez pas l'ordre ni le nom des colonnes).", False),
         ("2. Les colonnes en rouge sont obligatoires : sku, name, price. Les colonnes grises sont facultatives.", False),
         ("3. Le SKU est le code unique du produit : importer un SKU existant met le produit a jour au lieu de le dupliquer.", False),
-        ("4. Une colonne 'stock:<Point de vente>' existe pour chaque point de vente actif : saisissez la quantite disponible.", False),
-        ("   Le nom apres 'stock:' doit correspondre exactement au nom du point de vente dans l'application.", False),
+        *(
+            [
+                (f"4. Ce fichier est propre a : {store.name}. La colonne 'stock' est la quantite disponible dans CE point de vente.", False),
+                ("   Tous les produits de la feuille sont rattaches a ce point de vente (et seulement a lui).", False),
+            ]
+            if store
+            else [
+                ("4. Une colonne 'stock:<Point de vente>' existe pour chaque point de vente actif : saisissez la quantite disponible.", False),
+                ("   Le nom apres 'stock:' doit correspondre exactement au nom du point de vente dans l'application.", False),
+            ]
+        ),
         ("5. Une cellule de stock laissee vide ne modifie pas le stock ; 0 met le stock a zero.", False),
         ("6. Les photos : indiquez un lien https dans image_url ; l'image est telechargee a l'import.", False),
-        ("7. Importez le fichier depuis Admin > Produits > Importer Excel. Le resultat indique les lignes en erreur.", False),
+        ("7. Importez le fichier depuis Admin > Produits, apres avoir choisi le point de vente, puis Importer Excel.", False),
         ("8. La feuille 'Exemple' montre 3 produits remplis : ne l'importez pas, seule la premiere feuille est lue.", False),
         ("", False),
         ("Points de vente actifs : " + (", ".join(s.name for s in stores) if stores else "aucun"), False),
@@ -175,12 +201,15 @@ def _attach_image_from_url(product, url):
     product.image.save(filename, ContentFile(response.content), save=True)
 
 
-def import_products_from_excel(file_obj):
+def import_products_from_excel(file_obj, store=None):
     """
     Lit un fichier .xlsx et cree/met a jour les produits (upsert par sku).
     Les colonnes "stock:<Point de vente>" mettent a jour le stock de ce
     produit pour le point de vente correspondant (doit deja exister -
     utiliser /admin/stores pour creer un point de vente au prealable).
+    Avec `store` (import propre a un point de vente) : chaque produit du fichier est rattache a ce
+    point de vente (ligne de stock creee meme sans quantite) et la colonne "stock" (ou
+    "stock:<nom du point de vente>") fixe sa quantite ; les colonnes des autres magasins sont ignorees.
     Retourne un resume: {created, updated, errors: [...]}
     """
     wb = openpyxl.load_workbook(file_obj, data_only=True)
@@ -207,6 +236,12 @@ def import_products_from_excel(file_obj):
         if h.lower().startswith(STOCK_COLUMN_PREFIX)
     ]
     stores_by_name = {s.name.lower(): s for s in PointOfSale.objects.all()}
+    store_stock_idx = None
+    if store:
+        store_stock_idx = col_index.get("stock")
+        if store_stock_idx is None:
+            store_stock_idx = next((i for i, n in stock_columns if n.lower() == store.name.lower()), None)
+        stock_columns = []
 
     created, updated, errors = 0, 0, []
 
@@ -256,6 +291,11 @@ def import_products_from_excel(file_obj):
                     _attach_image_from_url(obj, image_url)
                 except Exception as exc:  # noqa: BLE001
                     errors.append(f"Ligne {row_number}: image non recuperee ({image_url}) - {exc}")
+
+            if store:
+                Stock.objects.get_or_create(product=obj, point_of_sale=store)
+                if store_stock_idx is not None and row[store_stock_idx] not in (None, ""):
+                    change_stock(obj, store, set_to=int(row[store_stock_idx]), reason=StockMovement.Reason.IMPORT)
 
             for idx, store_name in stock_columns:
                 if row[idx] is None or row[idx] == "":

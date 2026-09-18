@@ -18,12 +18,16 @@ def create_inventory(store, date, notes="", category=None, user=None):
     """Cree un inventaire et fige le stock theorique de tous les produits actifs."""
     from apps.documents.models import next_number  # import tardif : evite un cycle d'apps
 
+    products = Product.objects.filter(is_active=True, stocks__point_of_sale=store)
+    if category:
+        products = products.filter(category_id=category)
+    if not products.exists():
+        raise ValidationError(
+            "Aucun produit n'est rattache a ce point de vente : importez son catalogue (Admin > Produits) avant l'inventaire."
+        )
     count = InventoryCount.objects.create(
         number=next_number("inventory", "INV"), point_of_sale=store, date=date, notes=notes, created_by=user
     )
-    products = Product.objects.filter(is_active=True)
-    if category:
-        products = products.filter(category_id=category)
     stock = {s.product_id: s.quantity for s in Stock.objects.filter(point_of_sale=store)}
     InventoryCountLine.objects.bulk_create(
         [InventoryCountLine(count=count, product=p, theoretical_quantity=stock.get(p.id, 0)) for p in products]
