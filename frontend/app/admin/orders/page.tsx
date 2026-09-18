@@ -1,7 +1,7 @@
 "use client";
 
 import { useEffect, useState } from "react";
-import { Order, api, markOrderPaid } from "@/lib/api";
+import { Order, PointOfSale, api, fetchPointsOfSale, markOrderPaid, setOrderPointOfSale } from "@/lib/api";
 
 function formatXof(value: string | number) {
   return new Intl.NumberFormat("fr-SN", { maximumFractionDigits: 0 }).format(Number(value)) + " FCFA";
@@ -23,13 +23,22 @@ const paymentLabel: Record<string, string> = {
 
 export default function AdminOrdersPage() {
   const [orders, setOrders] = useState<Order[]>([]);
+  const [stores, setStores] = useState<PointOfSale[]>([]);
   const [busyRef, setBusyRef] = useState<string | null>(null);
 
   function reload() {
     api.get("/orders/", { params: { page_size: 100 } }).then((res) => setOrders(res.data.results ?? res.data));
   }
 
-  useEffect(reload, []);
+  useEffect(() => {
+    reload();
+    fetchPointsOfSale().then(setStores);
+  }, []);
+
+  async function handlePointOfSaleChange(reference: string, value: string) {
+    await setOrderPointOfSale(reference, value ? Number(value) : null);
+    reload();
+  }
 
   async function handleMarkPaid(reference: string) {
     if (!confirm("Confirmer la reception du paiement especes pour cette commande ?")) return;
@@ -55,6 +64,7 @@ export default function AdminOrdersPage() {
             <th className="p-2">Reference</th>
             <th className="p-2">Client</th>
             <th className="p-2">Adresse</th>
+            <th className="p-2">Point de vente</th>
             <th className="p-2">Paiement</th>
             <th className="p-2">Statut</th>
             <th className="p-2">Total</th>
@@ -80,6 +90,20 @@ export default function AdminOrdersPage() {
                     Voir sur la carte
                   </a>
                 )}
+              </td>
+              <td className="p-2">
+                <select
+                  value={o.point_of_sale ?? ""}
+                  onChange={(e) => handlePointOfSaleChange(o.reference, e.target.value)}
+                  className="border rounded px-1 py-0.5 text-xs"
+                >
+                  <option value="">En ligne</option>
+                  {stores.map((s) => (
+                    <option key={s.id} value={s.id}>
+                      {s.name}
+                    </option>
+                  ))}
+                </select>
               </td>
               <td className="p-2">{paymentLabel[o.payment_method] ?? o.payment_method}</td>
               <td className="p-2">{statusLabel[o.status] ?? o.status}</td>

@@ -5,6 +5,7 @@ from .models import DailyClosing
 
 class DailyClosingSerializer(serializers.ModelSerializer):
     closed_by_username = serializers.CharField(source="closed_by.username", read_only=True, default=None)
+    point_of_sale_name = serializers.CharField(source="point_of_sale.name", read_only=True, default=None)
     expected_total = serializers.DecimalField(max_digits=12, decimal_places=2, read_only=True)
     declared_total = serializers.DecimalField(max_digits=12, decimal_places=2, read_only=True)
     discrepancy_total = serializers.DecimalField(max_digits=12, decimal_places=2, read_only=True)
@@ -18,6 +19,8 @@ class DailyClosingSerializer(serializers.ModelSerializer):
         fields = [
             "id",
             "date",
+            "point_of_sale",
+            "point_of_sale_name",
             "closed_by_username",
             "closed_at",
             "updated_at",

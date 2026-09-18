@@ -20,6 +20,26 @@ export type Category = {
   slug: string;
 };
 
+export type PointOfSale = {
+  id: number;
+  name: string;
+  address: string;
+  phone: string;
+  is_active: boolean;
+  created_at: string;
+};
+
+export type Stock = {
+  id: number;
+  product: number;
+  product_name: string;
+  product_sku: string;
+  point_of_sale: number;
+  point_of_sale_name: string;
+  quantity: number;
+  updated_at: string;
+};
+
 export type Product = {
   id: number;
   sku: string;
@@ -29,12 +49,37 @@ export type Product = {
   category: Category | null;
   price: string;
   compare_at_price: string | null;
-  stock_quantity: number;
+  total_stock: number;
+  stocks: Stock[];
   unit: string;
   image: string | null;
   is_active: boolean;
   in_stock: boolean;
 };
+
+export async function fetchPointsOfSale() {
+  const { data } = await api.get("/stores/points-of-sale/", { params: { page_size: 100 } });
+  return (data.results ?? data) as PointOfSale[];
+}
+
+export async function createPointOfSale(input: { name: string; address?: string; phone?: string }) {
+  const { data } = await api.post<PointOfSale>("/stores/points-of-sale/", input);
+  return data;
+}
+
+export async function updatePointOfSale(id: number, input: Partial<PointOfSale>) {
+  const { data } = await api.patch<PointOfSale>(`/stores/points-of-sale/${id}/`, input);
+  return data;
+}
+
+export async function setStock(productId: number, pointOfSaleId: number, quantity: number) {
+  const { data } = await api.post<Stock>("/stores/stock/set/", {
+    product: productId,
+    point_of_sale: pointOfSaleId,
+    quantity,
+  });
+  return data;
+}
 
 export type CartItem = {
   id: number;
@@ -102,6 +147,8 @@ export type CustomerInfo = {
 export type Order = {
   id: number;
   reference: string;
+  point_of_sale: number | null;
+  point_of_sale_name: string | null;
   customer_name: string;
   customer_email: string;
   customer_phone: string;
@@ -152,20 +199,29 @@ export async function markOrderPaid(reference: string) {
   return data;
 }
 
+export async function setOrderPointOfSale(reference: string, pointOfSaleId: number | null) {
+  const { data } = await api.patch<Order>(`/orders/${reference}/`, { point_of_sale: pointOfSaleId });
+  return data;
+}
+
 export type PaymentBreakdownRow = {
   payment_method: PaymentMethod;
   revenue: number;
   orders_count: number;
 };
 
-export async function fetchPaymentBreakdown(period: "today" | "month" | "year") {
-  const { data } = await api.get<PaymentBreakdownRow[]>("/reports/by-payment-method/", { params: { period } });
+export async function fetchPaymentBreakdown(period: "today" | "month" | "year", pointOfSaleId?: number | null) {
+  const { data } = await api.get<PaymentBreakdownRow[]>("/reports/by-payment-method/", {
+    params: { period, ...(pointOfSaleId ? { point_of_sale: pointOfSaleId } : {}) },
+  });
   return data;
 }
 
 export type DailyClosing = {
   id: number;
   date: string;
+  point_of_sale: number | null;
+  point_of_sale_name: string | null;
   closed_by_username: string | null;
   closed_at: string;
   updated_at: string;
@@ -189,23 +245,29 @@ export type DailyClosing = {
 
 export type ClosingPreview = {
   date: string;
+  point_of_sale: string | null;
   expected: { card: number; wave: number; orange_money: number; cash: number };
   already_closed: boolean;
   closing: DailyClosing | null;
 };
 
-export async function fetchClosingPreview(date: string) {
-  const { data } = await api.get<ClosingPreview>("/reports/closings/preview/", { params: { date } });
+export async function fetchClosingPreview(date: string, pointOfSaleId?: number | null) {
+  const { data } = await api.get<ClosingPreview>("/reports/closings/preview/", {
+    params: { date, ...(pointOfSaleId ? { point_of_sale: pointOfSaleId } : {}) },
+  });
   return data;
 }
 
-export async function fetchClosings() {
-  const { data } = await api.get("/reports/closings/", { params: { page_size: 100 } });
+export async function fetchClosings(pointOfSaleId?: number | null) {
+  const { data } = await api.get("/reports/closings/", {
+    params: { page_size: 100, ...(pointOfSaleId ? { point_of_sale: pointOfSaleId } : {}) },
+  });
   return (data.results ?? data) as DailyClosing[];
 }
 
 export type ClosingInput = {
   date: string;
+  point_of_sale: number | null;
   declared_card: number;
   declared_wave: number;
   declared_orange_money: number;
@@ -213,9 +275,9 @@ export type ClosingInput = {
   notes: string;
 };
 
-export async function saveClosing(input: ClosingInput, isUpdate: boolean) {
-  const { data } = isUpdate
-    ? await api.patch<DailyClosing>(`/reports/closings/${input.date}/`, input)
+export async function saveClosing(input: ClosingInput, existingId: number | null) {
+  const { data } = existingId
+    ? await api.patch<DailyClosing>(`/reports/closings/${existingId}/`, input)
     : await api.post<DailyClosing>("/reports/closings/", input);
   return data;
 }

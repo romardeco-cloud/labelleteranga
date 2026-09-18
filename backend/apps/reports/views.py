@@ -16,21 +16,22 @@ from .models import DailyClosing
 from .serializers import DailyClosingSerializer
 
 
-def _paid_orders_qs(start=None, end=None):
+def _paid_orders_qs(start=None, end=None, point_of_sale=None):
     qs = Order.objects.filter(status=Order.Status.PAID)
     if start:
         qs = qs.filter(paid_at__gte=start)
     if end:
         qs = qs.filter(paid_at__lt=end)
+    if point_of_sale is not None:
+        qs = qs.filter(point_of_sale_id=point_of_sale)
     return qs
 
 
-def _compute_expected_totals(for_date):
+def _compute_expected_totals(for_date, point_of_sale=None):
     """Totaux payes ce jour-la, par moyen de paiement (utilise pour la cloture)."""
     totals = {key: 0 for key, _ in Order.PaymentMethod.choices}
-    qs = Order.objects.filter(status=Order.Status.PAID, paid_at__date=for_date).values("payment_method").annotate(
-        total=Sum("total_amount")
-    )
+    qs = Order.objects.filter(status=Order.Status.PAID, paid_at__date=for_date, point_of_sale_id=point_of_sale)
+    qs = qs.values("payment_method").annotate(total=Sum("total_amount"))
     for row in qs:
         totals[row["payment_method"]] = row["total"] or 0
     return totals
@@ -159,6 +160,7 @@ class PaymentMethodBreakdownView(APIView):
 
     def get(self, request):
         period = request.query_params.get("period", "month")
+        pos_param = request.query_params.get("point_of_sale")
         now = timezone.now()
         if period == "today":
             start = now.replace(hour=0, minute=0, second=0, microsecond=0)
@@ -167,32 +169,40 @@ class PaymentMethodBreakdownView(APIView):
         else:
             start = now.replace(day=1, hour=0, minute=0, second=0, microsecond=0)
 
-        qs = (
-            _paid_orders_qs(start=start)
-            .values("payment_method")
-            .annotate(revenue=Sum("total_amount"), orders_count=Count("id"))
-            .order_by("payment_method")
+        qs = _paid_orders_qs(start=start)
+        if pos_param:
+            qs = qs.filter(point_of_sale_id=pos_param)
+
+        qs = qs.values("payment_method").annotate(revenue=Sum("total_amount"), orders_count=Count("id")).order_by(
+            "payment_method"
         )
         return Response(list(qs))
 
 
 class DailyClosingViewSet(viewsets.ModelViewSet):
     """
-    Cloture de caisse journaliere.
+    Cloture de caisse journaliere, par point de vente (point_of_sale=null
+    correspond aux commandes en ligne non affectees a un magasin).
 
-    GET  /api/reports/closings/                 -> historique des clotures
-    GET  /api/reports/closings/preview/?date=... -> montants attendus pour une date, sans sauvegarder
-    POST /api/reports/closings/                  -> cloture une journee (body: date, declared_*, notes)
-    PATCH /api/reports/closings/<date>/           -> corrige une cloture existante
+    GET  /api/reports/closings/                                  -> historique des clotures
+    GET  /api/reports/closings/preview/?date=...&point_of_sale=... -> montants attendus, sans sauvegarder
+    POST /api/reports/closings/                                   -> cloture une journee (body: date, point_of_sale, declared_*, notes)
+    PATCH /api/reports/closings/<id>/                              -> corrige une cloture existante
     """
 
-    queryset = DailyClosing.objects.all()
+    queryset = DailyClosing.objects.select_related("point_of_sale", "closed_by").all()
     serializer_class = DailyClosingSerializer
     permission_classes = [IsAdminUser]
-    lookup_field = "date"
 
-    def _apply_expected_totals(self, serializer, for_date):
-        totals = _compute_expected_totals(for_date)
+    def get_queryset(self):
+        qs = super().get_queryset()
+        pos_param = self.request.query_params.get("point_of_sale")
+        if pos_param:
+            qs = qs.filter(point_of_sale_id=pos_param)
+        return qs
+
+    def _apply_expected_totals(self, serializer, for_date, point_of_sale):
+        totals = _compute_expected_totals(for_date, point_of_sale=point_of_sale)
         serializer.save(
             expected_card=totals.get(Order.PaymentMethod.CARD, 0),
             expected_wave=totals.get(Order.PaymentMethod.WAVE, 0),
@@ -202,16 +212,19 @@ class DailyClosingViewSet(viewsets.ModelViewSet):
 
     def perform_create(self, serializer):
         for_date = serializer.validated_data["date"]
+        point_of_sale = serializer.validated_data.get("point_of_sale")
         serializer.save(closed_by=self.request.user)
-        self._apply_expected_totals(serializer, for_date)
+        self._apply_expected_totals(serializer, for_date, point_of_sale.id if point_of_sale else None)
 
     def perform_update(self, serializer):
         for_date = serializer.instance.date
-        self._apply_expected_totals(serializer, for_date)
+        point_of_sale = serializer.instance.point_of_sale_id
+        self._apply_expected_totals(serializer, for_date, point_of_sale)
 
     @action(detail=False, methods=["get"])
     def preview(self, request):
         date_str = request.query_params.get("date")
+        pos_param = request.query_params.get("point_of_sale") or None
         if not date_str:
             return Response({"detail": "Parametre date requis (YYYY-MM-DD)."}, status=status.HTTP_400_BAD_REQUEST)
         try:
@@ -219,11 +232,12 @@ class DailyClosingViewSet(viewsets.ModelViewSet):
         except ValueError:
             return Response({"detail": "Date invalide."}, status=status.HTTP_400_BAD_REQUEST)
 
-        totals = _compute_expected_totals(for_date)
-        existing = DailyClosing.objects.filter(date=for_date).first()
+        totals = _compute_expected_totals(for_date, point_of_sale=pos_param)
+        existing = DailyClosing.objects.filter(date=for_date, point_of_sale_id=pos_param).first()
         return Response(
             {
                 "date": date_str,
+                "point_of_sale": pos_param,
                 "expected": {
                     "card": totals.get(Order.PaymentMethod.CARD, 0),
                     "wave": totals.get(Order.PaymentMethod.WAVE, 0),

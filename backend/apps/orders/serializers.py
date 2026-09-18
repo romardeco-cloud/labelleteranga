@@ -15,12 +15,15 @@ class OrderSerializer(serializers.ModelSerializer):
     items = OrderItemSerializer(many=True, read_only=True)
     customer_whatsapp_link = serializers.SerializerMethodField()
     shop_whatsapp_link = serializers.SerializerMethodField()
+    point_of_sale_name = serializers.CharField(source="point_of_sale.name", read_only=True, default=None)
 
     class Meta:
         model = Order
         fields = [
             "id",
             "reference",
+            "point_of_sale",
+            "point_of_sale_name",
             "customer_name",
             "customer_email",
             "customer_phone",

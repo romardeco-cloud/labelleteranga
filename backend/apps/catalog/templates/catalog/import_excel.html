@@ -1,7 +1,7 @@
 {% extends "admin/base_site.html" %}
 {% block content %}
   <h1>Importer des produits depuis un fichier Excel</h1>
-  <p>Colonnes attendues: sku, name, category, price, compare_at_price, stock_quantity, unit, description, is_active</p>
+  <p>Colonnes attendues: sku, name, category, price, compare_at_price, unit, description, is_active, puis une colonne "stock:Nom du point de vente" par point de vente (le point de vente doit deja exister).</p>
   <form method="post" enctype="multipart/form-data">
     {% csrf_token %}
     <input type="file" name="file" accept=".xlsx" required>

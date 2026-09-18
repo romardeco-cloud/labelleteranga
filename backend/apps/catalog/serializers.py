@@ -1,5 +1,7 @@
 from rest_framework import serializers
 
+from apps.stores.serializers import StockSerializer
+
 from .models import Category, Product
 
 
@@ -14,6 +16,8 @@ class ProductSerializer(serializers.ModelSerializer):
     category_id = serializers.PrimaryKeyRelatedField(
         source="category", queryset=Category.objects.all(), write_only=True, required=False, allow_null=True
     )
+    total_stock = serializers.IntegerField(read_only=True)
+    stocks = StockSerializer(many=True, read_only=True)
 
     class Meta:
         model = Product
@@ -27,7 +31,8 @@ class ProductSerializer(serializers.ModelSerializer):
             "category_id",
             "price",
             "compare_at_price",
-            "stock_quantity",
+            "total_stock",
+            "stocks",
             "unit",
             "image",
             "is_active",

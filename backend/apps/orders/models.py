@@ -23,6 +23,14 @@ class Order(models.Model):
         CASH = "cash", "Especes a la livraison"
 
     reference = models.CharField(max_length=40, unique=True, default=generate_order_reference)
+    point_of_sale = models.ForeignKey(
+        "stores.PointOfSale",
+        null=True,
+        blank=True,
+        on_delete=models.SET_NULL,
+        related_name="orders",
+        help_text="Magasin ayant traite la commande (optionnel, pour la cloture de caisse par magasin).",
+    )
     customer_name = models.CharField(max_length=150)
     customer_email = models.EmailField()
     customer_phone = models.CharField(max_length=30, blank=True)

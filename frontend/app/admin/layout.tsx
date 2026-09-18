@@ -25,7 +25,7 @@ export default function AdminLayout({ children }: { children: React.ReactNode })
   return (
     <div className="max-w-6xl mx-auto px-4 py-6">
       <div className="flex items-center justify-between mb-6">
-        <nav className="flex gap-6 text-sm font-medium">
+        <nav className="flex gap-6 text-sm font-medium flex-wrap">
           <Link href="/admin" className={pathname === "/admin" ? "text-brand" : "text-gray-500"}>
             Tableau de bord
           </Link>
@@ -37,6 +37,9 @@ export default function AdminLayout({ children }: { children: React.ReactNode })
           </Link>
           <Link href="/admin/closing" className={pathname?.startsWith("/admin/closing") ? "text-brand" : "text-gray-500"}>
             Cloture de caisse
+          </Link>
+          <Link href="/admin/stores" className={pathname?.startsWith("/admin/stores") ? "text-brand" : "text-gray-500"}>
+            Points de vente
           </Link>
         </nav>
         <button

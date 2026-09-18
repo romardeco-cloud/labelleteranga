@@ -1,7 +1,7 @@
 "use client";
 
 import { useEffect, useState } from "react";
-import { PaymentBreakdownRow, fetchPaymentBreakdown } from "@/lib/api";
+import { PaymentBreakdownRow, PointOfSale, fetchPaymentBreakdown, fetchPointsOfSale } from "@/lib/api";
 
 const METHOD_LABELS: Record<string, string> = {
   card: "Carte bancaire",
@@ -29,30 +29,52 @@ function formatXof(value: number) {
 
 export default function PaymentBreakdown() {
   const [period, setPeriod] = useState<"today" | "month" | "year">("today");
+  const [storeId, setStoreId] = useState<number | null>(null);
+  const [stores, setStores] = useState<PointOfSale[]>([]);
   const [rows, setRows] = useState<PaymentBreakdownRow[]>([]);
 
   useEffect(() => {
-    fetchPaymentBreakdown(period).then(setRows);
-  }, [period]);
+    fetchPointsOfSale().then(setStores);
+  }, []);
+
+  useEffect(() => {
+    fetchPaymentBreakdown(period, storeId).then(setRows);
+  }, [period, storeId]);
 
   const total = rows.reduce((sum, r) => sum + Number(r.revenue), 0);
 
   return (
     <div>
-      <div className="flex items-center justify-between mb-3">
+      <div className="flex flex-wrap items-center justify-between gap-2 mb-3">
         <h2 className="font-semibold">Repartition par moyen de paiement</h2>
-        <div className="flex gap-1 text-xs">
-          {PERIODS.map((p) => (
-            <button
-              key={p.value}
-              onClick={() => setPeriod(p.value)}
-              className={`px-2 py-1 rounded ${
-                period === p.value ? "bg-brand text-white" : "bg-gray-100 text-gray-600 hover:bg-gray-200"
-              }`}
+        <div className="flex flex-wrap items-center gap-2 text-xs">
+          {stores.length > 0 && (
+            <select
+              value={storeId ?? ""}
+              onChange={(e) => setStoreId(e.target.value ? Number(e.target.value) : null)}
+              className="border rounded px-2 py-1"
             >
-              {p.label}
-            </button>
-          ))}
+              <option value="">Tous les points de vente</option>
+              {stores.map((s) => (
+                <option key={s.id} value={s.id}>
+                  {s.name}
+                </option>
+              ))}
+            </select>
+          )}
+          <div className="flex gap-1">
+            {PERIODS.map((p) => (
+              <button
+                key={p.value}
+                onClick={() => setPeriod(p.value)}
+                className={`px-2 py-1 rounded ${
+                  period === p.value ? "bg-brand text-white" : "bg-gray-100 text-gray-600 hover:bg-gray-200"
+                }`}
+              >
+                {p.label}
+              </button>
+            ))}
+          </div>
         </div>
       </div>
 

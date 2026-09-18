@@ -12,7 +12,8 @@ labelleteranga/
 
 ## Fonctionnalites
 
-- Catalogue produits avec categories, stock, prix, recherche
+- Catalogue produits avec categories, prix, recherche
+- **Plusieurs points de vente**, chacun avec son propre stock par produit (`/admin/stores`) — le stock affiche cote boutique est le total tous magasins confondus
 - Panier (session anonyme via cle stockee cote navigateur)
 - 4 moyens de paiement au choix du client : **carte bancaire (Stripe)**, **Wave**, **Orange Money**, **especes a la livraison**
 - Geolocalisation optionnelle du client au checkout (bouton "Partager ma position GPS"), incluse dans l'adresse de livraison
@@ -20,9 +21,11 @@ labelleteranga/
 - Dashboard admin (JWT) :
   - Ventes du jour / mois / mois precedent / annee
   - Graphiques ventes journalieres (30j), mensuelles (annee), 6 derniers mois glissants, annuelles
-  - Gestion des produits (creation, suppression)
-  - **Import et export Excel des produits** (colonnes: sku, name, category, price, compare_at_price, stock_quantity, unit, description, is_active)
-  - Liste des commandes
+  - **Repartition du chiffre d'affaires par moyen de paiement**, filtrable par point de vente
+  - **Cloture de caisse journaliere par point de vente** (`/admin/closing`) : montant attendu (calcule par le systeme) vs montant compte/declare par l'admin, avec calcul automatique des ecarts et un champ notes pour en tracer la raison
+  - Gestion des produits (creation, suppression) et de leur stock par magasin
+  - **Import et export Excel des produits** (colonnes: sku, name, category, price, compare_at_price, unit, description, is_active, puis une colonne stock:NomDuMagasin par point de vente)
+  - Liste des commandes, avec affectation manuelle a un point de vente
 - Django admin natif egalement utilisable (`/admin/`), avec import/export Excel integre sur la page Produits.
 
 ## Demarrage local

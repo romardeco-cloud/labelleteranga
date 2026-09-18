@@ -12,7 +12,15 @@ class DailyClosing(models.Model):
     deux, utile pour reperer un manque ou un surplus de caisse.
     """
 
-    date = models.DateField(unique=True)
+    date = models.DateField()
+    point_of_sale = models.ForeignKey(
+        "stores.PointOfSale",
+        null=True,
+        blank=True,
+        on_delete=models.SET_NULL,
+        related_name="closings",
+        help_text="Vide = commandes en ligne non affectees a un magasin.",
+    )
     closed_by = models.ForeignKey(
         settings.AUTH_USER_MODEL, null=True, blank=True, on_delete=models.SET_NULL, related_name="daily_closings"
     )
@@ -33,6 +41,7 @@ class DailyClosing(models.Model):
 
     class Meta:
         ordering = ["-date"]
+        unique_together = ("date", "point_of_sale")
 
     @property
     def expected_total(self):

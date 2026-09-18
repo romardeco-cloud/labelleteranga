@@ -15,7 +15,7 @@ class CategoryAdmin(admin.ModelAdmin):
 
 @admin.register(Product)
 class ProductAdmin(admin.ModelAdmin):
-    list_display = ["name", "sku", "category", "price", "stock_quantity", "is_active"]
+    list_display = ["name", "sku", "category", "price", "total_stock", "is_active"]
     list_filter = ["category", "is_active"]
     search_fields = ["name", "sku"]
     change_list_template = "catalog/product_changelist.html"

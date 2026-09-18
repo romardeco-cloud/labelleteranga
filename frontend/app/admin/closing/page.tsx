@@ -4,8 +4,10 @@ import { useEffect, useState } from "react";
 import {
   ClosingPreview,
   DailyClosing,
+  PointOfSale,
   fetchClosingPreview,
   fetchClosings,
+  fetchPointsOfSale,
   saveClosing,
 } from "@/lib/api";
 
@@ -26,20 +28,26 @@ function todayIso() {
 
 export default function AdminClosingPage() {
   const [date, setDate] = useState(todayIso());
+  const [stores, setStores] = useState<PointOfSale[]>([]);
+  const [storeId, setStoreId] = useState<number | null>(null);
   const [preview, setPreview] = useState<ClosingPreview | null>(null);
   const [declared, setDeclared] = useState({ card: 0, wave: 0, orange_money: 0, cash: 0 });
   const [notes, setNotes] = useState("");
   const [saving, setSaving] = useState(false);
   const [history, setHistory] = useState<DailyClosing[]>([]);
 
+  useEffect(() => {
+    fetchPointsOfSale().then(setStores);
+  }, []);
+
   function loadHistory() {
-    fetchClosings().then(setHistory);
+    fetchClosings(storeId).then(setHistory);
   }
 
-  useEffect(loadHistory, []);
+  useEffect(loadHistory, [storeId]);
 
   useEffect(() => {
-    fetchClosingPreview(date).then((data) => {
+    fetchClosingPreview(date, storeId).then((data) => {
       setPreview(data);
       if (data.closing) {
         setDeclared({
@@ -55,7 +63,7 @@ export default function AdminClosingPage() {
         setNotes("");
       }
     });
-  }, [date]);
+  }, [date, storeId]);
 
   async function handleSave() {
     setSaving(true);
@@ -63,15 +71,16 @@ export default function AdminClosingPage() {
       await saveClosing(
         {
           date,
+          point_of_sale: storeId,
           declared_card: declared.card,
           declared_wave: declared.wave,
           declared_orange_money: declared.orange_money,
           declared_cash: declared.cash,
           notes,
         },
-        preview?.already_closed ?? false
+        preview?.closing?.id ?? null
       );
-      const refreshed = await fetchClosingPreview(date);
+      const refreshed = await fetchClosingPreview(date, storeId);
       setPreview(refreshed);
       loadHistory();
     } finally {
@@ -89,7 +98,7 @@ export default function AdminClosingPage() {
       <h1 className="text-2xl font-bold">Cloture de caisse</h1>
 
       <div className="border rounded-lg bg-white p-4 space-y-4">
-        <div className="flex items-center gap-3">
+        <div className="flex flex-wrap items-center gap-3">
           <label className="text-sm font-medium">Journee du</label>
           <input
             type="date"
@@ -98,6 +107,19 @@ export default function AdminClosingPage() {
             onChange={(e) => setDate(e.target.value)}
             className="border rounded px-2 py-1"
           />
+          <label className="text-sm font-medium ml-2">Point de vente</label>
+          <select
+            value={storeId ?? ""}
+            onChange={(e) => setStoreId(e.target.value ? Number(e.target.value) : null)}
+            className="border rounded px-2 py-1"
+          >
+            <option value="">En ligne (non affecte)</option>
+            {stores.map((s) => (
+              <option key={s.id} value={s.id}>
+                {s.name}
+              </option>
+            ))}
+          </select>
           {preview?.already_closed && (
             <span className="text-xs bg-brand-light text-brand-dark px-2 py-1 rounded">
               Deja cloturee {preview.closing?.closed_by_username ? `par ${preview.closing.closed_by_username}` : ""}
@@ -168,7 +190,9 @@ export default function AdminClosingPage() {
       </div>
 
       <div>
-        <h2 className="font-semibold mb-2">Historique des clotures</h2>
+        <h2 className="font-semibold mb-2">
+          Historique des clotures {storeId ? `- ${stores.find((s) => s.id === storeId)?.name}` : "- En ligne"}
+        </h2>
         <table className="w-full text-sm bg-white border rounded-lg overflow-hidden">
           <thead className="bg-gray-50 text-left">
             <tr>

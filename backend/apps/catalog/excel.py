@@ -3,46 +3,56 @@ import io
 import openpyxl
 from openpyxl.utils import get_column_letter
 
+from apps.stores.models import PointOfSale, Stock
+
 from .models import Category, Product
 
-EXPORT_HEADERS = [
+BASE_HEADERS = [
     "sku",
     "name",
     "category",
     "price",
     "compare_at_price",
-    "stock_quantity",
     "unit",
     "description",
     "is_active",
 ]
 
+STOCK_COLUMN_PREFIX = "stock:"
+
 
 def export_products_to_excel(queryset=None):
-    """Retourne un fichier .xlsx (bytes) listant les produits."""
-    queryset = queryset if queryset is not None else Product.objects.select_related("category").all()
+    """
+    Retourne un fichier .xlsx (bytes) listant les produits, avec une colonne
+    "stock:<Point de vente>" par point de vente actif.
+    """
+    queryset = queryset if queryset is not None else Product.objects.select_related("category").prefetch_related(
+        "stocks__point_of_sale"
+    )
+    stores = list(PointOfSale.objects.filter(is_active=True).order_by("name"))
+    headers = BASE_HEADERS + [f"{STOCK_COLUMN_PREFIX}{store.name}" for store in stores]
 
     wb = openpyxl.Workbook()
     ws = wb.active
     ws.title = "Produits"
-    ws.append(EXPORT_HEADERS)
+    ws.append(headers)
 
     for product in queryset:
-        ws.append(
-            [
-                product.sku,
-                product.name,
-                product.category.name if product.category else "",
-                float(product.price),
-                float(product.compare_at_price) if product.compare_at_price else None,
-                product.stock_quantity,
-                product.unit,
-                product.description,
-                "oui" if product.is_active else "non",
-            ]
-        )
+        stock_by_store = {s.point_of_sale_id: s.quantity for s in product.stocks.all()}
+        row = [
+            product.sku,
+            product.name,
+            product.category.name if product.category else "",
+            float(product.price),
+            float(product.compare_at_price) if product.compare_at_price else None,
+            product.unit,
+            product.description,
+            "oui" if product.is_active else "non",
+        ]
+        row += [stock_by_store.get(store.id, 0) for store in stores]
+        ws.append(row)
 
-    for i, header in enumerate(EXPORT_HEADERS, start=1):
+    for i, header in enumerate(headers, start=1):
         ws.column_dimensions[get_column_letter(i)].width = max(14, len(header) + 4)
 
     buffer = io.BytesIO()
@@ -54,6 +64,9 @@ def export_products_to_excel(queryset=None):
 def import_products_from_excel(file_obj):
     """
     Lit un fichier .xlsx et cree/met a jour les produits (upsert par sku).
+    Les colonnes "stock:<Point de vente>" mettent a jour le stock de ce
+    produit pour le point de vente correspondant (doit deja exister -
+    utiliser /admin/stores pour creer un point de vente au prealable).
     Retourne un resume: {created, updated, errors: [...]}
     """
     wb = openpyxl.load_workbook(file_obj, data_only=True)
@@ -63,16 +76,24 @@ def import_products_from_excel(file_obj):
     if not rows:
         return {"created": 0, "updated": 0, "errors": ["Fichier vide."]}
 
-    header = [str(h).strip().lower() if h else "" for h in rows[0]]
+    header = [str(h).strip() if h else "" for h in rows[0]]
+    header_lower = [h.lower() for h in header]
     required = {"sku", "name", "price"}
-    if not required.issubset(set(header)):
+    if not required.issubset(set(header_lower)):
         return {
             "created": 0,
             "updated": 0,
-            "errors": [f"Colonnes obligatoires manquantes: {required - set(header)}"],
+            "errors": [f"Colonnes obligatoires manquantes: {required - set(header_lower)}"],
         }
 
-    col_index = {name: idx for idx, name in enumerate(header)}
+    col_index = {name: idx for idx, name in enumerate(header_lower)}
+    stock_columns = [
+        (idx, h[len(STOCK_COLUMN_PREFIX):].strip())
+        for idx, h in enumerate(header)
+        if h.lower().startswith(STOCK_COLUMN_PREFIX)
+    ]
+    stores_by_name = {s.name.lower(): s for s in PointOfSale.objects.all()}
+
     created, updated, errors = 0, 0, []
 
     for row_number, row in enumerate(rows[1:], start=2):
@@ -101,8 +122,6 @@ def import_products_from_excel(file_obj):
             }
             if "compare_at_price" in col_index and row[col_index["compare_at_price"]] not in (None, ""):
                 defaults["compare_at_price"] = row[col_index["compare_at_price"]]
-            if "stock_quantity" in col_index and row[col_index["stock_quantity"]] is not None:
-                defaults["stock_quantity"] = int(row[col_index["stock_quantity"]])
             if "unit" in col_index and row[col_index["unit"]]:
                 defaults["unit"] = str(row[col_index["unit"]]).strip()
             if "description" in col_index and row[col_index["description"]]:
@@ -116,6 +135,20 @@ def import_products_from_excel(file_obj):
                 created += 1
             else:
                 updated += 1
+
+            for idx, store_name in stock_columns:
+                if row[idx] is None or row[idx] == "":
+                    continue
+                store = stores_by_name.get(store_name.lower())
+                if not store:
+                    errors.append(
+                        f"Ligne {row_number}: point de vente '{store_name}' introuvable, stock ignore "
+                        f"(creez-le d'abord dans Points de vente)."
+                    )
+                    continue
+                Stock.objects.update_or_create(
+                    product=obj, point_of_sale=store, defaults={"quantity": int(row[idx])}
+                )
         except Exception as exc:  # noqa: BLE001
             errors.append(f"Ligne {row_number}: {exc}")
 

@@ -31,7 +31,6 @@ class Product(models.Model):
     compare_at_price = models.DecimalField(
         "Prix barre (XOF)", max_digits=12, decimal_places=2, null=True, blank=True
     )
-    stock_quantity = models.PositiveIntegerField(default=0)
     unit = models.CharField(max_length=32, default="unite", help_text="unite, kg, sac, etc.")
     image = models.ImageField(upload_to="products/", null=True, blank=True)
     is_active = models.BooleanField(default=True)
@@ -53,8 +52,12 @@ class Product(models.Model):
         super().save(*args, **kwargs)
 
     @property
+    def total_stock(self):
+        return self.stocks.aggregate(total=models.Sum("quantity"))["total"] or 0
+
+    @property
     def in_stock(self):
-        return self.stock_quantity > 0
+        return self.total_stock > 0
 
     def __str__(self):
         return f"{self.name} ({self.sku})"
