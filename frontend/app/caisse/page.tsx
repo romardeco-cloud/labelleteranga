@@ -4,7 +4,7 @@ import { useCallback, useEffect, useMemo, useRef, useState } from "react";
 import Image from "next/image";
 import Icon from "@/components/admin/Icon";
 import ProductVisual from "@/components/ProductVisual";
-import { PAYMENT_QR, storeImage } from "@/lib/branding";
+import { PAYMENT_QR, categoryEmoji, storeImage } from "@/lib/branding";
 import {
   CashierClosingState,
   fetchCashierClosing,
@@ -516,7 +516,7 @@ export default function CaissePage() {
             {showCatalog && (
               <>
                 {/* Categories */}
-                <div className="flex gap-2 overflow-x-auto px-4 py-3 border-b shrink-0 [scrollbar-width:none] [&::-webkit-scrollbar]:hidden">
+                <div className="flex flex-wrap gap-2 px-4 py-3 border-b shrink-0">
                   {[["all", "Tout", products.length] as const, ...categories.map(([n, c]) => [n, n, c] as const)].map(([key, label, count]) => (
                     <button
                       key={key}
@@ -525,6 +525,7 @@ export default function CaissePage() {
                         category === key ? "bg-[#f5b942] text-[#241010] border-[#f5b942]" : "text-gray-300 hover:border-[#f5b942]/60"
                       }`}
                     >
+                      <span className="mr-1.5">{key === "all" ? "▦" : categoryEmoji(label)}</span>
                       {label} <span className="opacity-60 text-xs">{count}</span>
                     </button>
                   ))}
@@ -569,7 +570,7 @@ export default function CaissePage() {
                               {xof(p.effective_price)}
                               {p.promotion && <span className="ml-1.5 text-xs font-normal line-through text-gray-500">{xof(p.price)}</span>}
                             </p>
-                            <p className="text-[11px] text-gray-500 mt-0.5">{out ? "Rupture" : `Stock : ${p.stock}`}</p>
+                            {!out && p.stock <= 5 && <p className="text-[11px] text-amber-400 mt-0.5">Plus que {p.stock} en stock</p>}
                           </div>
                         </button>
                       );

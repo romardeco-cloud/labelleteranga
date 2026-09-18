@@ -132,3 +132,26 @@ export function productEmoji(name: string, category?: string | null): string {
   const c = norm(category ?? "");
   return CATEGORY_EMOJI.find(([k]) => c.includes(k))?.[1] ?? "🛒";
 }
+
+const EXTRA_CATEGORY_EMOJI: [string, string][] = [
+  ["boisson", "🥤"],
+  ["boucherie", "🥩"],
+  ["poisson", "🐟"],
+  ["surgel", "🧊"],
+  ["textile", "👕"],
+  ["electromenager", "🔌"],
+  ["quincaillerie", "🔧"],
+  ["animaux", "🐾"],
+  ["halal", "🕌"],
+  ["entretien", "🧽"],
+  ["cereales", "🌾"],
+  ["epicerie", "🥫"],
+];
+
+/** Petite icone pour une puce de categorie (caisse). */
+export function categoryEmoji(name: string): string {
+  const c = norm(name);
+  return (
+    CATEGORY_EMOJI.find(([k]) => c.includes(k))?.[1] ?? EXTRA_CATEGORY_EMOJI.find(([k]) => c.includes(k))?.[1] ?? "🛒"
+  );
+}
