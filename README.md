@@ -12,6 +12,7 @@ labelleteranga/
 
 ## Fonctionnalites
 
+- **Application installable (PWA)** : sur iOS (Safari > Partager > Sur l'ecran d'accueil), Android et ordinateur (Chrome/Edge proposent automatiquement "Installer l'application"), une fois le site servi en HTTPS. Aucun compte App Store / Play Store requis. Voir [Application mobile](#application-mobile-pwa) ci-dessous.
 - Catalogue produits avec categories, prix, recherche
 - **Plusieurs points de vente**, chacun avec son propre stock par produit (`/admin/stores`) — le stock affiche cote boutique est le total tous magasins confondus
 - Panier (session anonyme via cle stockee cote navigateur)
@@ -89,6 +90,23 @@ Endpoints (reserves admin, JWT requis) :
 - `GET /api/reports/previous-months/?count=6`
 
 Tous se basent sur les commandes au statut `paid`.
+
+## Application mobile (PWA)
+
+Le site est une Progressive Web App : installable directement depuis le navigateur, sans passer par l'App Store ni le Play Store (donc sans compte developpeur Apple/Google a payer).
+
+- **iOS (Safari)** : ouvrir le site → bouton Partager → "Sur l'ecran d'accueil".
+- **Android (Chrome)** : ouvrir le site → menu ⋮ → "Installer l'application" (ou banniere automatique).
+- **Ordinateur (Chrome/Edge)** : icone d'installation dans la barre d'adresse.
+
+Details techniques :
+- `frontend/app/manifest.ts` genere `/manifest.webmanifest` (nom, icones, couleurs).
+- `frontend/public/icons/` contient les icones generees a partir du logo (192px, 512px, maskable, apple-touch-icon).
+- `frontend/public/sw.js` est un service worker minimal (installabilite + cache des seuls fichiers statiques) enregistre par `components/ServiceWorkerRegister.tsx`. Il ne met volontairement pas en cache les pages ni les appels API, pour ne jamais afficher un prix ou un stock perime hors-ligne.
+
+**Important** : l'installation ne fonctionne que sur un site servi en HTTPS (ou en localhost). Elle n'a pas pu etre testee dans l'apercu de developpement de cette session (l'enregistrement du service worker y est bloque, probablement une restriction du bac a sable du navigateur d'apercu) — a verifier une fois le site deploye sur son domaine HTTPS final.
+
+Pour une vraie application native publiee sur l'App Store / Play Store (icone telechargeable depuis les stores plutot que via le navigateur), il faudrait un compte Apple Developer Program (99 $/an) et Google Play Console (25 $ une fois), plus un empaquetage (ex. Capacitor) — un chantier separe, a lancer seulement si la PWA ne suffit pas.
 
 ## Confirmation WhatsApp
 
