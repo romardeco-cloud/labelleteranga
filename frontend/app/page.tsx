@@ -9,13 +9,19 @@ export default function HomePage() {
   const [products, setProducts] = useState<Product[]>([]);
   const [search, setSearch] = useState("");
   const [loading, setLoading] = useState(true);
+  const [page, setPage] = useState(1);
+  const [hasMore, setHasMore] = useState(false);
 
   useEffect(() => {
     setLoading(true);
-    fetchProducts(search ? { search } : {})
-      .then((data) => setProducts(data.results ?? data))
+    fetchProducts({ page: String(page), ...(search ? { search } : {}) })
+      .then((data) => {
+        const rows: Product[] = data.results ?? data;
+        setProducts((prev) => (page === 1 ? rows : [...prev, ...rows]));
+        setHasMore(Boolean(data.next));
+      })
       .finally(() => setLoading(false));
-  }, [search]);
+  }, [search, page]);
 
   return (
     <div>
@@ -43,11 +49,14 @@ export default function HomePage() {
           type="search"
           placeholder="Rechercher un produit..."
           value={search}
-          onChange={(e) => setSearch(e.target.value)}
+          onChange={(e) => {
+            setPage(1);
+            setSearch(e.target.value);
+          }}
           className="w-full border border-brand/30 rounded-lg px-4 py-2 mb-6 focus:outline-none focus:ring-2 focus:ring-brand-accent"
         />
 
-        {loading ? (
+        {loading && page === 1 ? (
           <p className="text-gray-500">Chargement...</p>
         ) : products.length === 0 ? (
           <p className="text-gray-500">Aucun produit trouve.</p>
@@ -56,6 +65,17 @@ export default function HomePage() {
             {products.map((p) => (
               <ProductCard key={p.id} product={p} />
             ))}
+          </div>
+        )}
+        {hasMore && (
+          <div className="text-center mt-6">
+            <button
+              onClick={() => setPage((n) => n + 1)}
+              disabled={loading}
+              className="border border-brand text-brand px-5 py-2 rounded-lg hover:bg-brand-light disabled:opacity-50"
+            >
+              {loading ? "Chargement..." : "Voir plus de produits"}
+            </button>
           </div>
         )}
       </div>

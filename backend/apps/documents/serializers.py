@@ -3,7 +3,8 @@ from decimal import Decimal
 from django.db import transaction
 from rest_framework import serializers
 
-from apps.stores.models import Stock
+from apps.stores.models import Stock, StockMovement
+from apps.stores.services import change_stock
 
 from .models import (
     Customer,
@@ -191,7 +192,7 @@ class InvoiceSerializer(TotalsMixin, serializers.ModelSerializer):
         invoice = Invoice.objects.create(number=next_number("invoice", "FAC"), **validated_data)
         _replace_items(invoice, InvoiceItem, "invoice", items)
         if deduct:
-            deduct_invoice_stock(invoice)
+            deduct_invoice_stock(invoice, user=validated_data.get("created_by"))
         return invoice
 
     @transaction.atomic
@@ -254,7 +255,7 @@ class PurchaseOrderSerializer(TotalsMixin, serializers.ModelSerializer):
         return instance
 
 
-def deduct_invoice_stock(invoice):
+def deduct_invoice_stock(invoice, user=None):
     """Sortie de stock du point de vente de la facture (tout ou rien)."""
     if not invoice.point_of_sale_id:
         raise serializers.ValidationError({"point_of_sale": "Choisissez un point de vente pour sortir le stock."})
@@ -268,24 +269,27 @@ def deduct_invoice_stock(invoice):
             raise serializers.ValidationError(
                 {"items": f"Stock insuffisant pour '{item.product.name}' (disponible : {available})."}
             )
-        stock.quantity -= qty
-        stock.save(update_fields=["quantity", "updated_at"])
+        change_stock(
+            item.product, invoice.point_of_sale, delta=-qty,
+            reason=StockMovement.Reason.INVOICE, reference=invoice.number, user=user,
+        )
     invoice.stock_deducted = True
     invoice.save(update_fields=["stock_deducted"])
 
 
-def restore_invoice_stock(invoice):
+def restore_invoice_stock(invoice, user=None):
     for item in invoice.items.select_related("product"):
         if not item.product_id:
             continue
-        stock, _ = Stock.objects.select_for_update().get_or_create(product=item.product, point_of_sale=invoice.point_of_sale)
-        stock.quantity += _int_quantity(item)
-        stock.save(update_fields=["quantity", "updated_at"])
+        change_stock(
+            item.product, invoice.point_of_sale, delta=_int_quantity(item),
+            reason=StockMovement.Reason.INVOICE_CANCEL, reference=invoice.number, user=user,
+        )
     invoice.stock_deducted = False
     invoice.save(update_fields=["stock_deducted"])
 
 
-def receive_purchase_order(po, lines):
+def receive_purchase_order(po, lines, user=None):
     """
     Reception fournisseur : lines = [{id, quantity}]. Augmente le stock du point de vente
     de destination pour les lignes liees a un produit.
@@ -311,9 +315,10 @@ def receive_purchase_order(po, lines):
                 )
             if qty != qty.to_integral_value():
                 raise serializers.ValidationError(f"Quantite non entiere pour '{item.description}'.")
-            stock, _ = Stock.objects.select_for_update().get_or_create(product=item.product, point_of_sale=po.point_of_sale)
-            stock.quantity += int(qty)
-            stock.save(update_fields=["quantity", "updated_at"])
+            change_stock(
+                item.product, po.point_of_sale, delta=int(qty),
+                reason=StockMovement.Reason.PURCHASE_RECEIPT, reference=po.number, user=user,
+            )
         item.received_quantity += qty
         item.save(update_fields=["received_quantity"])
 

@@ -31,6 +31,9 @@ labelleteranga/
   - **Import et export Excel des produits** (colonnes: sku, name, category, price, compare_at_price, unit, description, is_active, puis une colonne stock:NomDuMagasin par point de vente)
   - Liste des commandes, avec affectation manuelle a un point de vente
 - Django admin natif egalement utilisable (`/admin/`), avec import/export Excel integre sur la page Produits.
+- **Comptabilite (admin)** : un onglet regroupe tous les documents financiers — vue d'ensemble (ventes, factures, creances, dettes, devis, ecarts de caisse), Devis, Factures, Bons de commande, Clotures de caisse, Clients / Fournisseurs et Rapports.
+- **Inventaire (admin)** : inventaires physiques par point de vente (stock theorique fige, saisie du comptage ou feuille Excel a exporter/reimporter, ecarts en unites et en valeur, validation qui ajuste le stock). Chaque variation de stock (vente en caisse, facture, annulation, reception fournisseur, correction, inventaire, import) est journalisee dans **Mouvements de stock** (filtrable, exportee dans les rapports Excel).
+- **Modele d'import Excel** : bouton "Telecharger le modele" dans Admin > Produits (feuille a remplir, exemple, instructions, une colonne de stock par point de vente).
 
 ## Demarrage local
 
@@ -77,8 +80,10 @@ Copier le `whsec_...` affiche dans `STRIPE_WEBHOOK_SECRET` du fichier `.env` bac
 
 Format attendu (`.xlsx`), premiere ligne = en-tetes :
 
-| sku | name | category | price | compare_at_price | stock_quantity | unit | description | is_active |
-|-----|------|----------|-------|-------------------|-----------------|------|--------------|-----------|
+| sku | name | category | price | compare_at_price | unit | description | is_active | image_url | stock:&lt;Point de vente&gt; ... |
+|-----|------|----------|-------|-------------------|------|--------------|-----------|-----------|------|
+
+Obligatoires : `sku`, `name`, `price`. Une colonne `stock:<nom du point de vente>` par magasin. Le plus simple : telecharger le modele pre-rempli (`GET /api/catalog/products/import_template/` ou bouton "Telecharger le modele").
 
 `sku` sert de cle : une ligne avec un sku existant met a jour le produit, sinon il est cree. La categorie est creee automatiquement si elle n'existe pas.
 

@@ -15,7 +15,7 @@ from rest_framework.views import APIView
 
 from apps.documents.models import Invoice, InvoicePayment, PaymentMethod, PurchaseOrder, PurchaseOrderPayment, Quote
 from apps.orders.models import Order
-from apps.stores.models import PointOfSale, Stock
+from apps.stores.models import PointOfSale, Stock, StockMovement
 
 from .models import DailyClosing
 
@@ -419,6 +419,30 @@ class ExportView(APIView):
             [
                 [s.point_of_sale.name, s.product.sku, s.product.name, s.quantity, _f(s.product.price), _f(s.quantity * s.product.price)]
                 for s in Stock.objects.select_related("product", "point_of_sale").order_by("point_of_sale__name", "product__name")
+            ],
+        )
+
+        movements = StockMovement.objects.filter(created_at__date__gte=start, created_at__date__lte=end).select_related(
+            "product", "point_of_sale", "user"
+        )
+        if store:
+            movements = movements.filter(point_of_sale=store)
+        sheet(
+            "Mouvements de stock",
+            ["Date", "Point de vente", "Reference", "Produit", "Motif", "Variation", "Stock apres", "Piece", "Utilisateur"],
+            [
+                [
+                    timezone.localtime(m.created_at).strftime("%Y-%m-%d %H:%M"),
+                    m.point_of_sale.name,
+                    m.product.sku,
+                    m.product.name,
+                    m.get_reason_display(),
+                    m.delta,
+                    m.quantity_after,
+                    m.reference,
+                    m.user.username if m.user else "",
+                ]
+                for m in movements
             ],
         )
 

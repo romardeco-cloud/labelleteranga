@@ -266,3 +266,104 @@ export async function fetchPayables() {
 export async function fetchDiscrepancies(start: string, end: string, storeId?: number | null) {
   return (await api.get<DiscrepancyReport>("/reports/cash-discrepancies/", { params: rp(start, end, storeId) })).data;
 }
+
+/* ---------- Inventaire ---------- */
+
+export type InventoryLine = {
+  id: number;
+  product: number;
+  product_name: string;
+  product_sku: string;
+  category: string | null;
+  unit_price: string;
+  theoretical_quantity: number;
+  counted_quantity: number | null;
+  variance: number | null;
+};
+
+export type InventoryCount = {
+  id: number;
+  number: string;
+  point_of_sale: number;
+  point_of_sale_name: string;
+  date: string;
+  status: "draft" | "validated" | "cancelled";
+  status_label: string;
+  notes: string;
+  created_by_username: string | null;
+  validated_at: string | null;
+  lines_count: number;
+  counted_count: number;
+  variance_units: number;
+  variance_value: number;
+  lines?: InventoryLine[];
+  moved_since_snapshot?: number;
+  import_result?: { updated: number; errors: string[] };
+};
+
+export type StockMovement = {
+  id: number;
+  product_name: string;
+  product_sku: string;
+  point_of_sale_name: string;
+  delta: number;
+  quantity_after: number;
+  reason: string;
+  reason_label: string;
+  reference: string;
+  user_username: string | null;
+  created_at: string;
+};
+
+export const MOVEMENT_REASONS = [
+  { value: "sale_pos", label: "Vente en caisse" },
+  { value: "invoice", label: "Facture client" },
+  { value: "invoice_cancel", label: "Annulation de facture" },
+  { value: "purchase_receipt", label: "Reception fournisseur" },
+  { value: "manual", label: "Correction manuelle" },
+  { value: "inventory", label: "Ajustement d'inventaire" },
+  { value: "import", label: "Import Excel" },
+];
+
+export async function listInventories() {
+  const { data } = await api.get("/stores/inventories/", { params: { page_size: 200 } });
+  return (data.results ?? data) as InventoryCount[];
+}
+export async function getInventory(id: number | string) {
+  return (await api.get<InventoryCount>(`/stores/inventories/${id}/`)).data;
+}
+export async function createInventory(payload: { point_of_sale: number; date: string; notes?: string; category?: number | null }) {
+  return (await api.post<InventoryCount>("/stores/inventories/", payload)).data;
+}
+export async function saveInventoryCounts(id: number, counts: { product: number; counted_quantity: number | null }[]) {
+  return (await api.post<InventoryCount>(`/stores/inventories/${id}/set-counts/`, { counts })).data;
+}
+export async function inventoryAction(id: number, action: "validate" | "cancel") {
+  return (await api.post<InventoryCount>(`/stores/inventories/${id}/${action}/`)).data;
+}
+export async function deleteInventory(id: number) {
+  await api.delete(`/stores/inventories/${id}/`);
+}
+export async function importInventoryCounts(id: number, file: File) {
+  const form = new FormData();
+  form.append("file", file);
+  return (await api.post<InventoryCount>(`/stores/inventories/${id}/import-counts/`, form, { headers: { "Content-Type": "multipart/form-data" } })).data;
+}
+export async function listMovements(params: Record<string, string | number>) {
+  const { data } = await api.get("/stores/movements/", { params });
+  return data as { count: number; next: string | null; results: StockMovement[] };
+}
+
+export async function downloadFile(path: string, filename: string) {
+  const res = await fetch(`${api.defaults.baseURL}${path}`, {
+    headers: { Authorization: `Bearer ${getAdminToken()}` },
+  });
+  if (!res.ok) throw new Error("download");
+  const blob = await res.blob();
+  const url = window.URL.createObjectURL(blob);
+  const a = document.createElement("a");
+  a.href = url;
+  a.download = filename;
+  a.click();
+  window.URL.revokeObjectURL(url);
+}

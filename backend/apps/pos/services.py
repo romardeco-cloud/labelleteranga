@@ -7,7 +7,8 @@ from rest_framework.exceptions import ValidationError
 from apps.catalog.models import Product
 from apps.orders.models import Order, OrderItem
 from apps.reports.models import DailyClosing
-from apps.stores.models import Stock
+from apps.stores.models import Stock, StockMovement
+from apps.stores.services import change_stock
 
 POS_PAYMENT_METHODS = {m for m, _ in Order.PaymentMethod.choices}
 
@@ -69,8 +70,14 @@ def create_pos_sale(cashier_profile, items, payment_method, customer_name="", am
             unit_price=unit_price,
             quantity=qty,
         )
-        stock.quantity -= qty
-        stock.save(update_fields=["quantity", "updated_at"])
+        change_stock(
+            product,
+            store,
+            delta=-qty,
+            reason=StockMovement.Reason.SALE_POS,
+            reference=order.reference[:8].upper(),
+            user=cashier_profile.user,
+        )
 
     order.recompute_total()
     order.save(update_fields=["total_amount"])

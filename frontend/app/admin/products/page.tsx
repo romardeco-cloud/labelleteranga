@@ -13,6 +13,7 @@ import {
   updateProduct,
 } from "@/lib/api";
 import { getAdminToken } from "@/lib/auth";
+import { downloadFile } from "@/lib/documents";
 
 function formatXof(value: string | number) {
   return new Intl.NumberFormat("fr-SN", { maximumFractionDigits: 0 }).format(Number(value)) + " FCFA";
@@ -152,6 +153,12 @@ export default function AdminProductsPage() {
       <div className="flex items-center justify-between">
         <h1 className="text-2xl font-bold">Produits</h1>
         <div className="flex gap-2">
+          <button
+            onClick={() => downloadFile("/catalog/products/import_template/", "modele_import_produits_labelleteranga.xlsx")}
+            className="border px-3 py-1.5 rounded text-sm"
+          >
+            Telecharger le modele
+          </button>
           <button onClick={handleExport} className="border px-3 py-1.5 rounded text-sm">
             Exporter Excel
           </button>

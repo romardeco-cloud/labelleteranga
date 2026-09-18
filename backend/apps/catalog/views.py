@@ -5,7 +5,7 @@ from rest_framework.decorators import action
 from rest_framework.parsers import MultiPartParser
 from rest_framework.response import Response
 
-from .excel import export_products_to_excel, import_products_from_excel
+from .excel import build_import_template, export_products_to_excel, import_products_from_excel
 from .models import Category, Product, Promotion
 from .serializers import CategorySerializer, ProductSerializer, PromotionSerializer
 
@@ -46,6 +46,15 @@ class ProductViewSet(viewsets.ModelViewSet):
             content_type="application/vnd.openxmlformats-officedocument.spreadsheetml.sheet",
         )
         response["Content-Disposition"] = 'attachment; filename="produits_labelleteranga.xlsx"'
+        return response
+
+    @action(detail=False, methods=["get"], permission_classes=[permissions.IsAdminUser])
+    def import_template(self, request):
+        response = HttpResponse(
+            build_import_template().read(),
+            content_type="application/vnd.openxmlformats-officedocument.spreadsheetml.sheet",
+        )
+        response["Content-Disposition"] = 'attachment; filename="modele_import_produits_labelleteranga.xlsx"'
         return response
 
     @action(

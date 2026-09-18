@@ -127,7 +127,7 @@ class QuoteViewSet(DocumentViewSet):
             ]
         )
         if request.data.get("deduct_stock"):
-            deduct_invoice_stock(invoice)
+            deduct_invoice_stock(invoice, user=request.user)
         quote.status = Quote.Status.ACCEPTED
         quote.save(update_fields=["status"])
         return Response(InvoiceSerializer(invoice).data, status=status.HTTP_201_CREATED)
@@ -185,7 +185,7 @@ class InvoiceViewSet(DocumentViewSet):
         if invoice.payments.exists():
             raise ValidationError("Supprimez d'abord les paiements enregistres avant d'annuler cette facture.")
         if invoice.stock_deducted:
-            restore_invoice_stock(invoice)
+            restore_invoice_stock(invoice, user=request.user)
         invoice.status = Invoice.Status.CANCELLED
         invoice.save(update_fields=["status"])
         return Response(InvoiceSerializer(invoice).data)
@@ -214,7 +214,7 @@ class PurchaseOrderViewSet(DocumentViewSet):
     @transaction.atomic
     def receive(self, request, pk=None):
         po = self.get_object()
-        po = receive_purchase_order(po, request.data.get("items", []))
+        po = receive_purchase_order(po, request.data.get("items", []), user=request.user)
         return Response(PurchaseOrderSerializer(self.get_object()).data)
 
     @action(detail=True, methods=["post"])
