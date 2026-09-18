@@ -47,7 +47,7 @@ const MODULES: { key: keyof StoreConfig; label: string; hint: string }[] = [
   { key: "module_customer_orders", label: "Commandes client", hint: "Voir les commandes du site rattachees a ce point de vente." },
   { key: "module_qr", label: "QR Wave / Orange Money", hint: "Afficher le QR code de paiement a l'encaissement." },
   { key: "module_drawer", label: "Tiroir-caisse", hint: "Journal des ouvertures du tiroir hors vente." },
-  { key: "module_xreport", label: "Rapport X", hint: "Reimpression du rapport du jour apres la fermeture de caisse." },
+  { key: "module_xreport", label: "Rapport X", hint: "Impression du rapport de caisse du jour (totaux, ecarts)." },
 ];
 
 const EDITABLE: (keyof StoreConfig)[] = [

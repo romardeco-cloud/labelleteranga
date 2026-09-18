@@ -1,6 +1,7 @@
 "use client";
 
 import Link from "next/link";
+import MonthlyReports from "@/components/admin/MonthlyReports";
 import { useEffect, useState } from "react";
 import {
   DiscrepancyReport,
@@ -152,6 +153,8 @@ export default function AccountingHome() {
           </div>
         </section>
       )}
+
+      <MonthlyReports storeId={null} months={3} compact />
 
       <section>
         <h2 className="font-semibold mb-3">Acces rapide</h2>

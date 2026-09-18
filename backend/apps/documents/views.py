@@ -62,6 +62,15 @@ class DocumentViewSet(AdminOnly):
     """Filtres communs : ?start=&end=&status=&point_of_sale=&search=&party=<id>"""
 
     party_field = "customer"
+    pdf_kind = "Document"
+
+    @action(detail=True, methods=["get"], url_path="pdf")
+    def pdf(self, request, pk=None):
+        """GET /api/documents/<type>/<id>/pdf/ : le document au format PDF (impression / envoi au client)."""
+        from apps.reports.pdf import document_pdf
+
+        obj = self.get_object()
+        return document_pdf(self.pdf_kind, obj, self.get_serializer(obj).data)
 
     def get_queryset(self):
         qs = super().get_queryset().select_related(self.party_field, "point_of_sale").prefetch_related("items")
@@ -85,6 +94,7 @@ class DocumentViewSet(AdminOnly):
 
 
 class QuoteViewSet(DocumentViewSet):
+    pdf_kind = "Devis"
     queryset = Quote.objects.all()
     serializer_class = QuoteSerializer
 
@@ -146,6 +156,7 @@ def _add_payment(document, serializer_cls, model_cls, fk_name, request):
 
 
 class InvoiceViewSet(DocumentViewSet):
+    pdf_kind = "Facture"
     queryset = Invoice.objects.all()
     serializer_class = InvoiceSerializer
 
@@ -192,6 +203,7 @@ class InvoiceViewSet(DocumentViewSet):
 
 
 class PurchaseOrderViewSet(DocumentViewSet):
+    pdf_kind = "Bon de commande"
     queryset = PurchaseOrder.objects.all()
     serializer_class = PurchaseOrderSerializer
     party_field = "supplier"

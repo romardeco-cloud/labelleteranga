@@ -1,5 +1,6 @@
 "use client";
 
+import MonthlyReports from "@/components/admin/MonthlyReports";
 import Link from "next/link";
 import { useEffect, useState } from "react";
 import { PointOfSale, ProductSalesRow, fetchPointsOfSale, fetchProductSales } from "@/lib/api";
@@ -9,6 +10,7 @@ import {
   OpenDocs,
   Overview,
   downloadExport,
+  openPdf,
   fetchDiscrepancies,
   fetchInventory,
   fetchOverview,
@@ -179,6 +181,17 @@ export default function ReportsPage() {
     <div className="space-y-6">
       <div className="flex flex-wrap items-center justify-between gap-2">
         <h1 className="text-2xl font-bold">Rapports</h1>
+        <div className="flex flex-wrap gap-2">
+        <button
+          onClick={() =>
+            openPdf("/reports/pdf/", { start: range.start, end: range.end, ...(storeId ? { point_of_sale: storeId } : {}) }).catch(() =>
+              alert("PDF impossible.")
+            )
+          }
+          className="border border-brand text-brand rounded px-4 py-2 text-sm"
+        >
+          Rapport PDF de la periode
+        </button>
         <button
           disabled={exporting}
           onClick={async () => {
@@ -195,6 +208,7 @@ export default function ReportsPage() {
         >
           {exporting ? "Export..." : "Exporter tout en Excel"}
         </button>
+        </div>
       </div>
 
       <div className="flex flex-wrap items-center gap-2 bg-white border rounded-lg p-3">
@@ -220,6 +234,8 @@ export default function ReportsPage() {
           ))}
         </select>
       </div>
+
+      <MonthlyReports storeId={storeId} />
 
       <div className="flex flex-wrap gap-1 border-b">
         {TABS.map(([key, label]) => (

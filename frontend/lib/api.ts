@@ -521,6 +521,7 @@ export type CashierClosingState = {
   point_of_sale: string;
   closed: boolean;
   sales_count: number;
+  expected: { cash: number; wave: number; orange_money: number; card: number };
   closing: DailyClosing | null;
 };
 

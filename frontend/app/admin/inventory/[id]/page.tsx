@@ -12,6 +12,7 @@ import {
   formatXof,
   getInventory,
   importInventoryCounts,
+  openPdf,
   inventoryAction,
   saveInventoryCounts,
 } from "@/lib/documents";
@@ -195,6 +196,9 @@ export default function InventoryDetailPage() {
               <input ref={fileRef} type="file" accept=".xlsx" onChange={onImport} className="hidden" />
             </label>
           )}
+          <button onClick={() => openPdf(`/stores/inventories/${inv.id}/pdf/`).catch(() => alert("PDF impossible."))} className="bg-brand text-white px-3 py-1.5 rounded text-sm">
+            PDF
+          </button>
           <button onClick={() => window.print()} className="border px-3 py-1.5 rounded text-sm">
             Imprimer
           </button>

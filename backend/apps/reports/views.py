@@ -270,6 +270,12 @@ class DailyClosingViewSet(viewsets.ModelViewSet):
         point_of_sale = serializer.instance.point_of_sale_id
         self._apply_expected_totals(serializer, for_date, point_of_sale)
 
+    @action(detail=True, methods=["get"], url_path="pdf")
+    def pdf(self, request, pk=None):
+        from .pdf import closing_pdf
+
+        return closing_pdf(self.get_object())
+
     # ---- Caisses des caissiers, pilotees par l'administrateur -----------------------------------------
     @staticmethod
     def _date_param(value):
@@ -397,3 +403,36 @@ class DailyClosingViewSet(viewsets.ModelViewSet):
                 "closing": DailyClosingSerializer(existing).data if existing else None,
             }
         )
+
+
+class SalesReportPdfView(APIView):
+    """
+    GET /api/reports/pdf/?start=&end=&point_of_sale=   ou   ?month=YYYY-MM   ou   ?year=YYYY
+    Rapport de ventes en PDF, avec les totaux mensuels de l'annee en fin de document.
+    """
+
+    permission_classes = [IsAdminUser]
+
+    def get(self, request):
+        import calendar
+
+        from .pdf import sales_report_pdf
+
+        p = request.query_params
+        store = p.get("point_of_sale") or None
+        try:
+            if p.get("month"):
+                y, m = (int(x) for x in p["month"].split("-"))
+                start, end = date_cls(y, m, 1), date_cls(y, m, calendar.monthrange(y, m)[1])
+            elif p.get("year"):
+                y = int(p["year"])
+                start, end = date_cls(y, 1, 1), date_cls(y, 12, 31)
+            else:
+                today = timezone.localdate()
+                start = date_cls.fromisoformat(p["start"]) if p.get("start") else today.replace(day=1)
+                end = date_cls.fromisoformat(p["end"]) if p.get("end") else today
+        except (ValueError, TypeError):
+            raise ValidationError("Periode invalide.")
+        if end < start:
+            raise ValidationError("La date de fin precede la date de debut.")
+        return sales_report_pdf(start, end, store)

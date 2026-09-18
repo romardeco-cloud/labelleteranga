@@ -37,6 +37,8 @@ labelleteranga/
 - **Un site par point de vente** : Supermarche, Restaurant, Quincaillerie et Depot ont chacun leur site (`/s/supermarche`, `/s/resto`, `/s/quincaillerie`, `/s/depot`), leur catalogue, leurs categories, leur panier, leurs commandes (rattachees au point de vente, visibles dans « Commandes client » a la caisse, stock decremente au paiement) et leur application installable (manifeste PWA par site). Livraison ou retrait a emporter. Adresse de contact unique : info@labelleteranga.com. Sous-domaines : voir « Sites dedies par sous-domaine ».
 - **Securite des ventes** : un caissier ne peut jamais supprimer une vente. Seul l'administrateur peut l'annuler (Admin > Commandes), avec son code secret a 4 chiffres (Parametres > Securite) ; motif et auteur sont conserves et le stock est remis en rayon.
 - **Fermeture de caisse depuis l'admin** : Admin > Comptabilite > Clotures de caisse permet de fermer ou corriger la caisse de chaque caissier pour n'importe quel jour.
+- **Documents PDF** : devis, factures, bons de commande, clotures de caisse, inventaires et rapports de ventes (periode, mois, annee) se telechargent en PDF (bouton « PDF »), avec l'en-tete du point de vente. Chaque rapport se termine par les totaux mensuels de ventes de l'annee ; Admin > Rapports (et Comptabilite) propose le rapport de chaque mois en un clic.
+- **Fermeture de caisse** : le caissier voit le montant attendu et son ecart en direct pendant le comptage.
 
 ## Demarrage local
 

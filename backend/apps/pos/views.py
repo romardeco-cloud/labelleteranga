@@ -155,13 +155,20 @@ class POSClosingView(APIView):
     def get(self, request):
         profile = request.user.cashier_profile
         closing = self._closing_today(profile)
-        _, sales_count = cashier_sales_totals(profile, timezone.localdate())
+        totals, sales_count = cashier_sales_totals(profile, timezone.localdate())
         return Response(
             {
                 "date": timezone.localdate(),
                 "point_of_sale": profile.point_of_sale.name,
                 "closed": closing is not None,
                 "sales_count": sales_count,
+                # le caissier voit l'attendu et son ecart des la fermeture (comptage en direct)
+                "expected": {
+                    "cash": totals["cash"],
+                    "wave": totals["wave"],
+                    "orange_money": totals["orange_money"],
+                    "card": totals["card"],
+                },
                 "closing": DailyClosingSerializer(closing).data if closing else None,
             }
         )

@@ -505,9 +505,8 @@ export default function CaissePage() {
             {settings.modules.xreport && (
               <button
                 onClick={() => setShowX(true)}
-                disabled={!closed}
-                title={closed ? "Reimprimer le rapport du jour" : "Disponible apres la fermeture de caisse"}
-                className="flex items-center gap-2 border rounded-xl px-3 py-2 text-sm text-gray-300 hover:bg-white/5 disabled:opacity-40 disabled:hover:bg-transparent"
+                title="Imprimer le rapport du jour"
+                className="flex items-center gap-2 border rounded-xl px-3 py-2 text-sm text-gray-300 hover:bg-white/5"
               >
                 <Icon name="fileText" className="w-4 h-4" /> Reimpr. X
               </button>
@@ -539,89 +538,83 @@ export default function CaissePage() {
             {closingMode && (
               <div className="p-4 lg:overflow-y-auto">
                 <div className="max-w-xl mx-auto bg-[#1c1514] border rounded-2xl p-5">
-                  <h2 className="text-lg font-bold mb-1">
-                    {closed ? "Corriger ma fermeture de caisse" : "Fermeture de caisse"}
-                  </h2>
-                  {closed && closingState?.closing ? (
-                    <p className="text-sm text-gray-500 mb-3">
-                      Verifiez l&apos;ecart ci-dessous, recomptez, puis corrigez vos montants si necessaire.
-                    </p>
-                  ) : (
-                    <p className="text-sm text-gray-500 mb-3">
-                      Comptez ce que vous avez encaisse aujourd&apos;hui pour chaque moyen de paiement ({closingState?.sales_count ?? 0}{" "}
-                      vente(s) enregistree(s)). Le total attendu vous sera montre apres validation.
-                    </p>
-                  )}
+                  <h2 className="text-lg font-bold mb-1">{closed ? "Corriger ma fermeture de caisse" : "Fermeture de caisse"}</h2>
+                  <p className="text-sm text-gray-500 mb-4">
+                    {closingState?.sales_count ?? 0} vente(s) aujourd&apos;hui. Comptez ce que vous avez encaisse pour chaque moyen de paiement :
+                    l&apos;ecart avec le montant attendu s&apos;affiche tout de suite.
+                  </p>
 
-                  {closingState?.closing && (
-                    <table className="w-full text-sm mb-4">
+                  <form onSubmit={submitClosing} className="space-y-4">
+                    <table className="w-full text-sm">
                       <thead>
                         <tr className="text-left text-gray-500">
-                          <th>Moyen</th>
-                          <th>Attendu</th>
-                          <th>Compte</th>
-                          <th>Ecart</th>
+                          <th className="pb-2 font-normal">Moyen</th>
+                          <th className="pb-2 font-normal">Attendu</th>
+                          <th className="pb-2 font-normal">Compte</th>
+                          <th className="pb-2 font-normal text-right">Ecart</th>
                         </tr>
                       </thead>
                       <tbody>
-                        {[
-                          ["Especes", closingState.closing.expected_cash, closingState.closing.declared_cash, closingState.closing.discrepancy_cash],
-                          ["Wave", closingState.closing.expected_wave, closingState.closing.declared_wave, closingState.closing.discrepancy_wave],
-                          ["Orange Money", closingState.closing.expected_orange_money, closingState.closing.declared_orange_money, closingState.closing.discrepancy_orange_money],
-                          ["Carte", closingState.closing.expected_card, closingState.closing.declared_card, closingState.closing.discrepancy_card],
-                        ].map(([label, exp, dec, gap]) => (
-                          <tr key={label} className="border-t">
-                            <td className="py-1">{label}</td>
-                            <td>{xof(exp)}</td>
-                            <td>{xof(dec)}</td>
-                            <td className={Number(gap) === 0 ? "text-green-600" : "text-red-600 font-medium"}>
-                              {Number(gap) > 0 ? "+" : ""}
-                              {xof(gap)}
-                            </td>
-                          </tr>
-                        ))}
-                        <tr className="border-t font-semibold">
-                          <td className="py-1">Total</td>
-                          <td>{xof(closingState.closing.expected_total)}</td>
-                          <td>{xof(closingState.closing.declared_total)}</td>
-                          <td className={Number(closingState.closing.discrepancy_total) === 0 ? "text-green-600" : "text-red-600"}>
-                            {Number(closingState.closing.discrepancy_total) > 0 ? "+" : ""}
-                            {xof(closingState.closing.discrepancy_total)}
-                          </td>
-                        </tr>
+                        {(
+                          [
+                            ["cash", "Especes"],
+                            ["wave", "Wave"],
+                            ["orange_money", "Orange Money"],
+                            ["card", "Carte (terminal)"],
+                          ] as const
+                        ).map(([key, label]) => {
+                          const expected = Number(closingState?.expected?.[key] ?? 0);
+                          const gap = Number(counted[key] || 0) - expected;
+                          return (
+                            <tr key={key} className="border-t">
+                              <td className="py-2">{label}</td>
+                              <td className="py-2">{xof(expected)}</td>
+                              <td className="py-2">
+                                <input
+                                  type="number"
+                                  min={0}
+                                  value={counted[key]}
+                                  onChange={(e) => setCounted({ ...counted, [key]: e.target.value })}
+                                  placeholder="0"
+                                  className="w-28 border rounded-lg px-2 py-1.5"
+                                />
+                              </td>
+                              <td
+                                className={`py-2 text-right font-medium ${
+                                  counted[key] === "" ? "text-gray-500" : gap === 0 ? "text-green-500" : "text-red-400"
+                                }`}
+                              >
+                                {counted[key] === "" ? "-" : `${gap > 0 ? "+" : ""}${xof(gap)}`}
+                              </td>
+                            </tr>
+                          );
+                        })}
+                        {(() => {
+                          const exp = Object.values(closingState?.expected ?? {}).reduce((n, v) => n + Number(v), 0);
+                          const cnt = Object.values(counted).reduce((n, v) => n + Number(v || 0), 0);
+                          const gap = cnt - exp;
+                          return (
+                            <tr className="border-t font-semibold">
+                              <td className="py-2">Total</td>
+                              <td className="py-2">{xof(exp)}</td>
+                              <td className="py-2">{xof(cnt)}</td>
+                              <td className={`py-2 text-right ${gap === 0 ? "text-green-500" : "text-red-400"}`}>
+                                {gap > 0 ? "+" : ""}
+                                {xof(gap)}
+                              </td>
+                            </tr>
+                          );
+                        })()}
                       </tbody>
                     </table>
-                  )}
-                  {closingState?.closing && closingState.closing.revision_count > 0 && (
-                    <p className="text-xs text-gray-500 mb-3">
-                      Ecart initial : {xof(closingState.closing.initial_discrepancy_total)} — {closingState.closing.revision_count}{" "}
-                      correction(s) enregistree(s) (visibles par l&apos;administrateur).
-                    </p>
-                  )}
 
-                  <form onSubmit={submitClosing} className="space-y-3">
-                    <div className="grid grid-cols-2 gap-3">
-                      {(
-                        [
-                          ["cash", "Especes comptees"],
-                          ["wave", "Wave recu"],
-                          ["orange_money", "Orange Money recu"],
-                          ["card", "Carte (total terminal)"],
-                        ] as const
-                      ).map(([key, label]) => (
-                        <label key={key} className="text-sm">
-                          {label}
-                          <input
-                            type="number"
-                            min={0}
-                            value={counted[key]}
-                            onChange={(e) => setCounted({ ...counted, [key]: e.target.value })}
-                            placeholder="0"
-                            className="w-full border rounded-lg px-3 py-2 mt-1"
-                          />
-                        </label>
-                      ))}
-                    </div>
+                    {closingState?.closing && closingState.closing.revision_count > 0 && (
+                      <p className="text-xs text-gray-500">
+                        Ecart initial : {xof(closingState.closing.initial_discrepancy_total)} — {closingState.closing.revision_count} correction(s)
+                        enregistree(s) (visibles par l&apos;administrateur).
+                      </p>
+                    )}
+
                     <label className="text-sm block">
                       Remarque (facultatif)
                       <textarea
@@ -1032,8 +1025,8 @@ export default function CaissePage() {
         </div>
       )}
 
-      {/* Rapport X : totaux du jour, disponible apres la fermeture de caisse */}
-      {showX && closingState?.closing && (
+      {/* Rapport X : totaux du jour du caissier */}
+      {showX && closingState && (
         <div className="fixed inset-0 bg-black/60 flex items-center justify-center p-4 z-50 print:static print:bg-transparent print:p-0">
           <div className="rounded-xl p-5 w-full max-w-sm print:shadow-none print:max-w-none" style={{ background: "#fff", color: "#111" }}>
             <div className="font-mono text-sm">
@@ -1047,36 +1040,47 @@ export default function CaissePage() {
               <p className="mb-1">Ventes du jour : {closingState.sales_count}</p>
               {(
                 [
-                  ["Especes", closingState.closing.expected_cash, closingState.closing.declared_cash],
-                  ["Wave", closingState.closing.expected_wave, closingState.closing.declared_wave],
-                  ["Orange Money", closingState.closing.expected_orange_money, closingState.closing.declared_orange_money],
-                  ["Carte", closingState.closing.expected_card, closingState.closing.declared_card],
+                  ["Especes", "cash"],
+                  ["Wave", "wave"],
+                  ["Orange Money", "orange_money"],
+                  ["Carte", "card"],
                 ] as const
-              ).map(([label, exp, dec]) => (
-                <div key={label} className="mb-1">
-                  <div className="flex justify-between">
-                    <span>{label}</span>
-                    <span>{xof(exp)}</span>
+              ).map(([label, key]) => {
+                const c = closingState.closing;
+                const declared = c ? Number(c[`declared_${key}` as keyof typeof c] as string) : null;
+                const expected = Number(closingState.expected?.[key] ?? 0);
+                return (
+                  <div key={key} className="mb-1">
+                    <div className="flex justify-between">
+                      <span>{label}</span>
+                      <span>{xof(expected)}</span>
+                    </div>
+                    {declared !== null && (
+                      <div className="flex justify-between text-xs">
+                        <span>compte : {xof(declared)}</span>
+                        <span>ecart : {xof(declared - expected)}</span>
+                      </div>
+                    )}
                   </div>
-                  <div className="flex justify-between text-xs">
-                    <span>compte : {xof(dec)}</span>
-                    <span>ecart : {xof(Number(dec) - Number(exp))}</span>
-                  </div>
-                </div>
-              ))}
+                );
+              })}
               <hr className="my-2 border-dashed" />
               <div className="flex justify-between font-bold">
                 <span>TOTAL ATTENDU</span>
-                <span>{xof(closingState.closing.expected_total)}</span>
+                <span>{xof(Object.values(closingState.expected ?? {}).reduce((n, v) => n + Number(v), 0))}</span>
               </div>
-              <div className="flex justify-between">
-                <span>Total compte</span>
-                <span>{xof(closingState.closing.declared_total)}</span>
-              </div>
-              <div className="flex justify-between font-bold">
-                <span>Ecart</span>
-                <span>{xof(closingState.closing.discrepancy_total)}</span>
-              </div>
+              {closingState.closing && (
+                <>
+                  <div className="flex justify-between">
+                    <span>Total compte</span>
+                    <span>{xof(closingState.closing.declared_total)}</span>
+                  </div>
+                  <div className="flex justify-between font-bold">
+                    <span>Ecart</span>
+                    <span>{xof(closingState.closing.discrepancy_total)}</span>
+                  </div>
+                </>
+              )}
             </div>
             <div className="flex gap-2 mt-4 print:hidden">
               <button onClick={() => window.print()} className="flex-1 border border-gray-300 rounded-lg py-2">

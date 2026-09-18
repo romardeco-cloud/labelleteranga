@@ -243,6 +243,12 @@ class InventoryCountViewSet(viewsets.ModelViewSet):
         set_counts(count, request.data.get("counts", []))
         return self._detail(count)
 
+    @action(detail=True, methods=["get"], url_path="pdf")
+    def pdf(self, request, pk=None):
+        from apps.reports.pdf import inventory_pdf
+
+        return inventory_pdf(self.get_object())
+
     @action(detail=True, methods=["get"])
     def export(self, request, pk=None):
         count = self.get_object()

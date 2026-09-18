@@ -2,6 +2,7 @@
 
 import { useEffect, useState } from "react";
 import CashierTills from "@/components/admin/CashierTills";
+import { openPdf } from "@/lib/documents";
 import {
   ClosingPreview,
   DailyClosing,
@@ -247,7 +248,10 @@ export default function AdminClosingPage() {
                 <td className="p-2 max-w-[220px] truncate" title={c.notes}>
                   {c.notes || "-"}
                 </td>
-                <td className="p-2 text-right">
+                <td className="p-2 text-right space-x-2 whitespace-nowrap">
+                  <button onClick={() => openPdf(`/reports/closings/${c.id}/pdf/`).catch(() => alert("PDF impossible."))} className="text-xs text-brand underline">
+                    PDF
+                  </button>
                   {c.cashier_username && (
                     <button
                       onClick={async () => {

@@ -157,6 +157,24 @@ export function formatDate(iso: string | null | undefined) {
   return `${d}/${m}/${y}`;
 }
 
+/** Ouvre un PDF du serveur dans un nouvel onglet (impression, enregistrement, envoi). */
+export async function openPdf(path: string, params: Record<string, string | number> = {}) {
+  const win = window.open("", "_blank"); // ouvert tout de suite pour ne pas etre bloque par le navigateur
+  try {
+    const qs = new URLSearchParams(Object.entries(params).map(([k, v]) => [k, String(v)])).toString();
+    const res = await fetch(`${api.defaults.baseURL}${path}${qs ? `?${qs}` : ""}`, {
+      headers: { Authorization: `Bearer ${getAdminToken()}` },
+    });
+    if (!res.ok) throw new Error("pdf");
+    const url = window.URL.createObjectURL(await res.blob());
+    if (win) win.location.href = url;
+    else window.location.href = url;
+  } catch (err) {
+    win?.close();
+    throw err;
+  }
+}
+
 export async function downloadExport(start: string, end: string, storeId?: number | null) {
   const params = new URLSearchParams({ start, end });
   if (storeId) params.set("point_of_sale", String(storeId));

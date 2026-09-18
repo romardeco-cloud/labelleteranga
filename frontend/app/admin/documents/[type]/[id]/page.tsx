@@ -16,6 +16,7 @@ import {
   formatXof,
   getDocument,
   saveDocument,
+  openPdf,
 } from "@/lib/documents";
 
 const today = () => new Date().toISOString().slice(0, 10);
@@ -75,8 +76,14 @@ export default function DocumentDetailPage() {
           ← {cfg.label}
         </Link>
         <div className="flex flex-wrap gap-2">
+          <button
+            onClick={() => openPdf(`/documents/${type}/${doc.id}/pdf/`).catch(() => alert("PDF impossible."))}
+            className="bg-brand text-white rounded px-3 py-1.5 text-sm"
+          >
+            PDF
+          </button>
           <button onClick={() => window.print()} className={btn}>
-            Imprimer / PDF
+            Imprimer
           </button>
           {!cancelled && (
             <Link href={`/admin/documents/${type}/${doc.id}/edit`} className={btn}>
