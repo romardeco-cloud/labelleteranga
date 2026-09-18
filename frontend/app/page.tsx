@@ -93,7 +93,7 @@ export default function HomePage() {
             <div className="grid sm:grid-cols-2 lg:grid-cols-3 gap-4">
               {stores.map((store) => (
                 <article key={store.id} className="border rounded-xl bg-white overflow-hidden flex flex-col">
-                  <div className="bg-white h-44 flex items-center justify-center p-3 border-b">
+                  <div className="relative bg-white h-44 flex items-center justify-center p-3 border-b">
                     <Image
                       src={storeImage(store.name)}
                       alt={store.name}
@@ -101,6 +101,10 @@ export default function HomePage() {
                       height={260}
                       className="max-h-full w-auto object-contain"
                     />
+                    <span className="absolute bottom-2 right-2 flex items-center gap-1.5 bg-white border border-brand/20 rounded-full pl-1 pr-3 py-1 shadow text-xs font-medium text-brand-dark">
+                      <Image src="/livraison/livreur.jpg" alt="" width={28} height={28} className="rounded-full object-cover w-7 h-7" />
+                      Livraison
+                    </span>
                   </div>
                   <div className="p-4">
                     <h3 className="font-semibold text-brand-dark">{store.name}</h3>
