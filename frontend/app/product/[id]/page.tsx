@@ -1,0 +1,51 @@
+"use client";
+
+import { useEffect, useState } from "react";
+import { useParams } from "next/navigation";
+import { Product, api, addToCart } from "@/lib/api";
+
+function formatXof(value: string | number) {
+  return new Intl.NumberFormat("fr-SN", { maximumFractionDigits: 0 }).format(Number(value)) + " FCFA";
+}
+
+export default function ProductDetailPage() {
+  const params = useParams();
+  const [product, setProduct] = useState<Product | null>(null);
+  const [added, setAdded] = useState(false);
+
+  useEffect(() => {
+    api.get(`/catalog/products/${params.id}/`).then((res) => setProduct(res.data));
+  }, [params.id]);
+
+  if (!product) return <p className="p-8">Chargement...</p>;
+
+  return (
+    <div className="max-w-3xl mx-auto px-4 py-8 grid sm:grid-cols-2 gap-8">
+      <div className="aspect-square bg-brand-light rounded-lg flex items-center justify-center overflow-hidden">
+        {product.image ? (
+          // eslint-disable-next-line @next/next/no-img-element
+          <img src={product.image} alt={product.name} className="object-cover w-full h-full" />
+        ) : (
+          <span className="text-brand">{product.name}</span>
+        )}
+      </div>
+      <div>
+        <span className="text-xs text-gray-400">{product.category?.name}</span>
+        <h1 className="text-2xl font-bold mb-2">{product.name}</h1>
+        <p className="text-gray-600 mb-4">{product.description}</p>
+        <p className="text-2xl font-bold text-brand-dark mb-4">{formatXof(product.price)}</p>
+        <button
+          onClick={async () => {
+            await addToCart(product.id, 1);
+            setAdded(true);
+            setTimeout(() => setAdded(false), 1500);
+          }}
+          disabled={!product.in_stock}
+          className="bg-brand text-white px-6 py-3 rounded-lg font-medium hover:bg-brand-dark transition disabled:opacity-40"
+        >
+          {!product.in_stock ? "Rupture de stock" : added ? "Ajoute au panier" : "Ajouter au panier"}
+        </button>
+      </div>
+    </div>
+  );
+}

@@ -1,0 +1,10 @@
+{% extends "admin/base_site.html" %}
+{% block content %}
+  <h1>Importer des produits depuis un fichier Excel</h1>
+  <p>Colonnes attendues: sku, name, category, price, compare_at_price, stock_quantity, unit, description, is_active</p>
+  <form method="post" enctype="multipart/form-data">
+    {% csrf_token %}
+    <input type="file" name="file" accept=".xlsx" required>
+    <button type="submit" class="button">Importer</button>
+  </form>
+{% endblock %}
