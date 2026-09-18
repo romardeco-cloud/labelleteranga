@@ -2,6 +2,8 @@
 
 import { useCallback, useEffect, useMemo, useState } from "react";
 import Image from "next/image";
+import ProductVisual from "@/components/ProductVisual";
+import { PAYMENT_QR, storeImage } from "@/lib/branding";
 import {
   CashierClosingState,
   fetchCashierClosing,
@@ -252,9 +254,18 @@ export default function CaissePage() {
   return (
     <div className="max-w-7xl mx-auto px-3 py-4">
       <div className="flex items-center justify-between mb-3 print:hidden">
-        <div>
-          <h1 className="text-xl font-bold">Caisse — {session.store}</h1>
-          <p className="text-xs text-gray-500">Caissier : {session.username}</p>
+        <div className="flex items-center gap-3">
+          <Image
+            src={storeImage(session.store)}
+            alt={session.store}
+            width={72}
+            height={48}
+            className="h-12 w-auto object-contain"
+          />
+          <div>
+            <h1 className="text-xl font-bold">Caisse — {session.store}</h1>
+            <p className="text-xs text-gray-500">Caissier : {session.username}</p>
+          </div>
         </div>
         <div className="flex items-center gap-4">
           {!closingMode && (
@@ -412,8 +423,15 @@ export default function CaissePage() {
                 onClick={() => addProduct(p)}
                 className="text-left border rounded-lg bg-white p-3 hover:border-brand disabled:opacity-40 transition"
               >
-                <span className="block font-medium leading-tight">{p.name}</span>
-                <span className="block text-xs text-gray-400">{p.sku}</span>
+                <span className="flex items-start gap-2">
+                  <span className="w-11 h-11 shrink-0 rounded overflow-hidden">
+                    <ProductVisual image={p.image} name={p.name} category={p.category} size="tile" />
+                  </span>
+                  <span>
+                    <span className="block font-medium leading-tight">{p.name}</span>
+                    <span className="block text-xs text-gray-400">{p.sku}</span>
+                  </span>
+                </span>
                 {p.promotion && (
                   <span className="inline-block text-xs bg-brand-accent text-brand-dark px-1.5 rounded mt-1">
                     {p.promotion}
@@ -476,6 +494,20 @@ export default function CaissePage() {
               </button>
             ))}
           </div>
+
+          {PAYMENT_QR[method] && (
+            <div className="mb-3 text-center">
+              <p className="text-xs text-gray-500 mb-1">Le client scanne ce code pour payer {xof(total)}</p>
+              <Image
+                src={PAYMENT_QR[method].src}
+                alt={PAYMENT_QR[method].alt}
+                width={PAYMENT_QR[method].width}
+                height={PAYMENT_QR[method].height}
+                className="mx-auto max-h-72 w-auto rounded-lg border"
+              />
+              <p className="text-xs text-gray-500 mt-1">Validez la vente seulement apres reception du paiement.</p>
+            </div>
+          )}
 
           {method === "cash" && (
             <div className="mb-3">

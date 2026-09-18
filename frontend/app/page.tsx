@@ -2,7 +2,8 @@
 
 import Image from "next/image";
 import { useEffect, useState } from "react";
-import { Product, fetchProducts } from "@/lib/api";
+import { PointOfSale, Product, fetchPointsOfSale, fetchProducts } from "@/lib/api";
+import { storeImage } from "@/lib/branding";
 import ProductCard from "@/components/ProductCard";
 
 export default function HomePage() {
@@ -11,6 +12,13 @@ export default function HomePage() {
   const [loading, setLoading] = useState(true);
   const [page, setPage] = useState(1);
   const [hasMore, setHasMore] = useState(false);
+  const [stores, setStores] = useState<PointOfSale[]>([]);
+
+  useEffect(() => {
+    fetchPointsOfSale()
+      .then((list) => setStores(list.filter((s) => s.is_active)))
+      .catch(() => setStores([]));
+  }, []);
 
   useEffect(() => {
     setLoading(true);
@@ -77,6 +85,36 @@ export default function HomePage() {
               {loading ? "Chargement..." : "Voir plus de produits"}
             </button>
           </div>
+        )}
+        {stores.length > 0 && (
+          <section className="mt-14">
+            <h2 className="text-2xl font-bold text-brand-dark mb-1">Nos points de vente</h2>
+            <p className="text-gray-500 mb-5">Un seul nom, plusieurs metiers : retrouvez-nous partout ou nous servons.</p>
+            <div className="grid sm:grid-cols-2 lg:grid-cols-3 gap-4">
+              {stores.map((store) => (
+                <article key={store.id} className="border rounded-xl bg-white overflow-hidden flex flex-col">
+                  <div className="bg-white h-44 flex items-center justify-center p-3 border-b">
+                    <Image
+                      src={storeImage(store.name)}
+                      alt={store.name}
+                      width={400}
+                      height={260}
+                      className="max-h-full w-auto object-contain"
+                    />
+                  </div>
+                  <div className="p-4">
+                    <h3 className="font-semibold text-brand-dark">{store.name}</h3>
+                    {store.address && <p className="text-sm text-gray-600 mt-1">{store.address}</p>}
+                    {store.phone && (
+                      <a href={`tel:${store.phone.replace(/\s+/g, "")}`} className="text-sm text-brand mt-1 inline-block">
+                        {store.phone}
+                      </a>
+                    )}
+                  </div>
+                </article>
+              ))}
+            </div>
+          </section>
         )}
       </div>
     </div>

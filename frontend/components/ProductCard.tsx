@@ -2,6 +2,7 @@
 
 import { Product, addToCart } from "@/lib/api";
 import { useState } from "react";
+import ProductVisual from "@/components/ProductVisual";
 
 function formatXof(value: string | number) {
   return new Intl.NumberFormat("fr-SN", { maximumFractionDigits: 0 }).format(Number(value)) + " FCFA";
@@ -25,12 +26,7 @@ export default function ProductCard({ product }: { product: Product }) {
   return (
     <div className="border rounded-lg bg-white overflow-hidden flex flex-col">
       <div className="aspect-square bg-brand-light flex items-center justify-center overflow-hidden">
-        {product.image ? (
-          // eslint-disable-next-line @next/next/no-img-element
-          <img src={product.image} alt={product.name} className="object-cover w-full h-full" />
-        ) : (
-          <span className="text-brand text-sm">{product.name}</span>
-        )}
+        <ProductVisual image={product.image} name={product.name} category={product.category?.name} />
       </div>
       <div className="p-3 flex flex-col gap-1 flex-1">
         <span className="text-xs text-gray-400">{product.category?.name}</span>
