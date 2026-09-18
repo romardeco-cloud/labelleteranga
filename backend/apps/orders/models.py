@@ -22,7 +22,15 @@ class Order(models.Model):
         ORANGE_MONEY = "orange_money", "Orange Money"
         CASH = "cash", "Especes a la livraison"
 
+    class Channel(models.TextChoices):
+        ONLINE = "online", "En ligne"
+        POS = "pos", "Caisse (magasin)"
+
     reference = models.CharField(max_length=40, unique=True, default=generate_order_reference)
+    channel = models.CharField(max_length=10, choices=Channel.choices, default=Channel.ONLINE)
+    cashier = models.ForeignKey(
+        "auth.User", null=True, blank=True, on_delete=models.SET_NULL, related_name="pos_sales"
+    )
     point_of_sale = models.ForeignKey(
         "stores.PointOfSale",
         null=True,

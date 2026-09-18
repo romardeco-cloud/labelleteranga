@@ -13,6 +13,7 @@ labelleteranga/
 ## Fonctionnalites
 
 - **Application installable (PWA)** : sur iOS (Safari > Partager > Sur l'ecran d'accueil), Android et ordinateur (Chrome/Edge proposent automatiquement "Installer l'application"), une fois le site servi en HTTPS. Aucun compte App Store / Play Store requis. Voir [Application mobile](#application-mobile-pwa) ci-dessous.
+- **Ecran de caisse (POS) `/caisse`** pour les caissiers : comptes limites rattaches a un point de vente (crees dans `/admin/cashiers`), recherche/selection des produits, paiement (especes avec calcul du rendu, Wave, Orange Money, carte), ticket imprimable. Chaque vente est enregistree deja payee, decremente le stock du point de vente du caissier, applique les promotions en cours et alimente la cloture de caisse du jour. Un caissier n'a acces ni aux rapports, ni aux prix, ni aux clotures.
 - Catalogue produits avec categories, prix, recherche
 - **Plusieurs points de vente**, chacun avec son propre stock par produit (`/admin/stores`) — le stock affiche cote boutique est le total tous magasins confondus
 - Panier (session anonyme via cle stockee cote navigateur)

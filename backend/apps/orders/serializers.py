@@ -22,6 +22,7 @@ class OrderSerializer(serializers.ModelSerializer):
         fields = [
             "id",
             "reference",
+            "channel",
             "point_of_sale",
             "point_of_sale_name",
             "customer_name",
@@ -41,7 +42,7 @@ class OrderSerializer(serializers.ModelSerializer):
             "customer_whatsapp_link",
             "shop_whatsapp_link",
         ]
-        read_only_fields = ["reference", "status", "total_amount", "created_at", "paid_at"]
+        read_only_fields = ["reference", "channel", "status", "total_amount", "created_at", "paid_at"]
 
     def _whatsapp_message(self, order):
         from apps.notifications.whatsapp import build_confirmation_message

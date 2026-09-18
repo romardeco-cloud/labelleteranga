@@ -6,3 +6,13 @@ body {
   background-color: #fdf8ee;
   color: #241010;
 }
+
+@media print {
+  header,
+  footer {
+    display: none !important;
+  }
+  body {
+    background: #fff;
+  }
+}

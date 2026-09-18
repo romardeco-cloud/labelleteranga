@@ -6,7 +6,8 @@ export const api = axios.create({ baseURL: API_URL });
 
 api.interceptors.request.use((config) => {
   if (typeof window !== "undefined") {
-    const token = localStorage.getItem("lbt_admin_token");
+    const isPos = (config.url ?? "").startsWith("/pos/");
+    const token = localStorage.getItem(isPos ? "lbt_cashier_token" : "lbt_admin_token");
     if (token && config.headers) {
       config.headers.Authorization = `Bearer ${token}`;
     }
@@ -365,4 +366,79 @@ export function getBrowserLocation(): Promise<{ lat: number; lng: number } | nul
       { timeout: 8000 }
     );
   });
+}
+
+export type POSProduct = {
+  id: number;
+  sku: string;
+  name: string;
+  category: string | null;
+  unit: string;
+  price: string;
+  effective_price: string;
+  promotion: string | null;
+  stock: number;
+  image: string | null;
+};
+
+export type POSReceipt = {
+  reference: string;
+  receipt_number: string;
+  created_at: string;
+  point_of_sale: string;
+  cashier: string;
+  customer_name: string;
+  payment_method: PaymentMethod;
+  payment_method_label: string;
+  items: { name: string; quantity: number; unit_price: string; subtotal: string }[];
+  total: string;
+  amount_received: string | null;
+  change: string | null;
+};
+
+export async function cashierLogin(username: string, password: string) {
+  const { data } = await api.post("/accounts/cashier-login/", { username, password });
+  localStorage.setItem("lbt_cashier_token", data.access);
+  localStorage.setItem("lbt_cashier_info", JSON.stringify({ username: data.username, store: data.point_of_sale_name }));
+  return data as { username: string; point_of_sale_name: string };
+}
+
+export async function fetchPOSProducts(search: string) {
+  const { data } = await api.get<{ point_of_sale: string; results: POSProduct[] }>("/pos/products/", {
+    params: search ? { search } : {},
+  });
+  return data;
+}
+
+export async function createPOSSale(input: {
+  items: { product: number; quantity: number }[];
+  payment_method: PaymentMethod;
+  customer_name?: string;
+  amount_received?: number | null;
+}) {
+  const { data } = await api.post<POSReceipt>("/pos/sales/", input);
+  return data;
+}
+
+export type Cashier = {
+  id: number;
+  username: string;
+  point_of_sale: number;
+  point_of_sale_name: string;
+  is_active: boolean;
+};
+
+export async function fetchCashiers() {
+  const { data } = await api.get("/accounts/cashiers/", { params: { page_size: 100 } });
+  return (data.results ?? data) as Cashier[];
+}
+
+export async function createCashier(input: { username: string; password: string; point_of_sale: number }) {
+  const { data } = await api.post<Cashier>("/accounts/cashiers/", input);
+  return data;
+}
+
+export async function updateCashier(id: number, input: Record<string, unknown>) {
+  const { data } = await api.patch<Cashier>(`/accounts/cashiers/${id}/`, input);
+  return data;
 }

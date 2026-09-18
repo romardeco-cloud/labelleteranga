@@ -41,6 +41,9 @@ export default function AdminLayout({ children }: { children: React.ReactNode })
           <Link href="/admin/closing" className={pathname?.startsWith("/admin/closing") ? "text-brand" : "text-gray-500"}>
             Cloture de caisse
           </Link>
+          <Link href="/admin/cashiers" className={pathname?.startsWith("/admin/cashiers") ? "text-brand" : "text-gray-500"}>
+            Caissiers
+          </Link>
           <Link href="/admin/stores" className={pathname?.startsWith("/admin/stores") ? "text-brand" : "text-gray-500"}>
             Points de vente
           </Link>
