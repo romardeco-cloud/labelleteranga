@@ -15,7 +15,7 @@ import {
 import ProductVisual from "@/components/ProductVisual";
 import { getAdminToken } from "@/lib/auth";
 import { matchKey, prepareImage } from "@/lib/images";
-import { downloadFile } from "@/lib/documents";
+import { apiErrorMessage, downloadFile } from "@/lib/documents";
 
 function formatXof(value: string | number) {
   return new Intl.NumberFormat("fr-SN", { maximumFractionDigits: 0 }).format(Number(value)) + " FCFA";
@@ -50,7 +50,9 @@ export default function AdminProductsPage() {
   const [search, setSearch] = useState("");
   const [uploadingId, setUploadingId] = useState<number | null>(null);
   const [photoMsg, setPhotoMsg] = useState("");
+  const [photoErr, setPhotoErr] = useState("");
   const bulkRef = useRef<HTMLInputElement>(null);
+  const [imgStatus, setImgStatus] = useState<{ backend: string; ok: boolean; detail: string } | null>(null);
   const store = stores.find((x) => x.id === storeId) ?? null;
   const storeSlug = store ? store.name.toLowerCase().replace(/[^a-z0-9]+/g, "-").replace(/^-|-$/g, "") : "";
 
@@ -65,6 +67,10 @@ export default function AdminProductsPage() {
   useEffect(() => {
     fetchPointsOfSale().then((list) => setStores(list.filter((x) => x.is_active)));
     fetchCategories().then(setCategories);
+    api
+      .get("/catalog/products/image-storage/")
+      .then((res) => setImgStatus(res.data))
+      .catch(() => setImgStatus(null));
   }, []);
 
   useEffect(() => {
@@ -78,11 +84,17 @@ export default function AdminProductsPage() {
     const data = new FormData();
     Object.entries(form).forEach(([k, v]) => v && data.append(k, v));
     if (newImage) data.append("image", await prepareImage(newImage));
-    const created = await api.post("/catalog/products/", data, { headers: { "Content-Type": "multipart/form-data" } });
-    if (storeId) await setStock(created.data.id, storeId, 0); // rattache le nouveau produit au point de vente choisi
-    setForm(emptyForm);
-    setNewImage(null);
-    reload();
+    try {
+      const created = await api.post("/catalog/products/", data, { headers: { "Content-Type": "multipart/form-data" } });
+      if (storeId) await setStock(created.data.id, storeId, 0); // rattache le nouveau produit au point de vente choisi
+      setForm(emptyForm);
+      setNewImage(null);
+      setPhotoMsg("");
+      setPhotoErr("");
+      reload();
+    } catch (err) {
+      setPhotoErr(apiErrorMessage(err, "Le produit n'a pas pu etre enregistre."));
+    }
   }
 
   async function handleAddCategory() {
@@ -119,23 +131,30 @@ export default function AdminProductsPage() {
       }
     });
     if (editImage) data.append("image", await prepareImage(editImage));
-    await updateProduct(id, data);
-    setEditingId(null);
-    setEditForm(null);
-    reload();
+    try {
+      await updateProduct(id, data);
+      setEditingId(null);
+      setEditForm(null);
+      setPhotoMsg("");
+      setPhotoErr("");
+      reload();
+    } catch (err) {
+      setPhotoErr(apiErrorMessage(err, "Modification non enregistree."));
+    }
   }
 
   async function uploadPhoto(p: Product, file: File | undefined) {
     if (!file) return;
     setUploadingId(p.id);
     setPhotoMsg("");
+      setPhotoErr("");
     try {
       const data = new FormData();
       data.append("image", await prepareImage(file));
       await updateProduct(p.id, data);
       reload();
-    } catch {
-      setPhotoMsg(`Photo de "${p.name}" non enregistree (fichier trop lourd ou stockage d'images indisponible).`);
+    } catch (err) {
+      setPhotoErr(`Photo de "${p.name}" : ${apiErrorMessage(err, "envoi impossible.")}`);
     } finally {
       setUploadingId(null);
     }
@@ -145,8 +164,12 @@ export default function AdminProductsPage() {
     if (!confirm(`Retirer la photo de "${p.name}" ?`)) return;
     const data = new FormData();
     data.append("image", "");
-    await updateProduct(p.id, data);
-    reload();
+    try {
+      await updateProduct(p.id, data);
+      reload();
+    } catch (err) {
+      setPhotoErr(apiErrorMessage(err, "Impossible de retirer la photo."));
+    }
   }
 
   // Plusieurs photos d'un coup : le nom de chaque fichier doit etre la reference (SKU) ou le nom du produit.
@@ -172,8 +195,8 @@ export default function AdminProductsPage() {
         data.append("image", await prepareImage(f));
         await updateProduct(target.id, data);
         done++;
-      } catch {
-        unmatched.push(`${f.name} (echec de l'envoi)`);
+      } catch (err) {
+        unmatched.push(`${f.name} (${apiErrorMessage(err, "echec de l'envoi").slice(0, 80)})`);
       }
     }
     setPhotoMsg(
@@ -313,6 +336,14 @@ export default function AdminProductsPage() {
         </p>
       )}
 
+      {imgStatus && !imgStatus.ok && (
+        <p className="text-sm bg-red-50 text-red-700 border border-red-200 p-3 rounded">
+          <strong>Stockage des photos : </strong>
+          {imgStatus.detail}
+        </p>
+      )}
+      {imgStatus?.ok && <p className="text-xs text-green-700">Stockage des photos : {imgStatus.detail}</p>}
+      {photoErr && <p className="text-sm bg-red-50 text-red-700 border border-red-200 p-3 rounded">{photoErr}</p>}
       {photoMsg && <p className="text-sm text-brand-dark bg-brand-light p-2 rounded">{photoMsg}</p>}
       {importSummary && <p className="text-sm text-brand-dark bg-brand-light p-2 rounded">{importSummary}</p>}
 

@@ -1,3 +1,5 @@
+import os
+
 from django.http import HttpResponse
 from django_filters.rest_framework import DjangoFilterBackend
 from rest_framework import filters, permissions, status, viewsets
@@ -43,6 +45,58 @@ class ProductViewSet(viewsets.ModelViewSet):
         if store:  # produits rattaches a ce point de vente
             qs = qs.filter(stocks__point_of_sale_id=store).distinct()
         return qs
+
+    # --- photos : erreurs de stockage lisibles + diagnostic ---------------------------------
+    def _save_with_photo_guard(self, serializer, **extra):
+        try:
+            return serializer.save(**extra)
+        except ValidationError:
+            raise
+        except Exception as exc:  # noqa: BLE001 - erreur du stockage d'images (Cloudinary, disque...)
+            if "image" not in self.request.FILES:
+                raise
+            raise ValidationError(
+                {
+                    "image": "La photo n'a pas pu etre enregistree : "
+                    f"{str(exc)[:200] or exc.__class__.__name__}. "
+                    "Verifiez la variable CLOUDINARY_URL sur Render (Admin > Produits affiche l'etat du stockage)."
+                }
+            )
+
+    def perform_create(self, serializer):
+        self._save_with_photo_guard(serializer)
+
+    def perform_update(self, serializer):
+        self._save_with_photo_guard(serializer)
+
+    @action(detail=False, methods=["get"], permission_classes=[permissions.IsAdminUser], url_path="image-storage")
+    def image_storage(self, request):
+        """Etat du stockage des photos : disque local (temporaire) ou Cloudinary (permanent)."""
+        if not os.environ.get("CLOUDINARY_URL"):
+            return Response(
+                {
+                    "backend": "local",
+                    "ok": False,
+                    "detail": "CLOUDINARY_URL n'est pas defini sur le serveur : les photos sont stockees sur le disque "
+                    "de Render et seront perdues au prochain deploiement.",
+                }
+            )
+        try:
+            import cloudinary
+            import cloudinary.api
+
+            cloud = cloudinary.config().cloud_name
+            cloudinary.api.ping()
+            return Response({"backend": "cloudinary", "ok": True, "cloud_name": cloud, "detail": f"Cloudinary connecte ({cloud})."})
+        except Exception as exc:  # noqa: BLE001
+            return Response(
+                {
+                    "backend": "cloudinary",
+                    "ok": False,
+                    "detail": f"Cloudinary refuse la connexion : {str(exc)[:200]}. Verifiez la valeur de CLOUDINARY_URL "
+                    "(cloudinary://CLE:SECRET@NOM_DU_COMPTE, sans espaces ni chevrons).",
+                }
+            )
 
     @staticmethod
     def _store_from(value):
