@@ -26,3 +26,5 @@ Thumbs.db
 
 # Photos originales du client (sauvegarde locale, non publiees)
 images-originales/
+db.sqlite3
+*.log
