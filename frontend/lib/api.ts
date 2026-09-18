@@ -279,6 +279,9 @@ export type DailyClosing = {
   date: string;
   point_of_sale: number | null;
   point_of_sale_name: string | null;
+  cashier_username: string | null;
+  initial_discrepancy_total: string;
+  revision_count: number;
   closed_by_username: string | null;
   closed_at: string;
   updated_at: string;
@@ -441,4 +444,32 @@ export async function createCashier(input: { username: string; password: string;
 export async function updateCashier(id: number, input: Record<string, unknown>) {
   const { data } = await api.patch<Cashier>(`/accounts/cashiers/${id}/`, input);
   return data;
+}
+
+export type CashierClosingState = {
+  date: string;
+  point_of_sale: string;
+  closed: boolean;
+  sales_count: number;
+  closing: DailyClosing | null;
+};
+
+export async function fetchCashierClosing() {
+  const { data } = await api.get<CashierClosingState>("/pos/closing/");
+  return data;
+}
+
+export async function submitCashierClosing(input: {
+  declared_cash: number;
+  declared_wave: number;
+  declared_orange_money: number;
+  declared_card: number;
+  notes: string;
+}) {
+  const { data } = await api.post<DailyClosing>("/pos/closing/", input);
+  return data;
+}
+
+export async function deleteClosing(id: number) {
+  await api.delete(`/reports/closings/${id}/`);
 }

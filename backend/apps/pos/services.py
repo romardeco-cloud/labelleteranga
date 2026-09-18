@@ -6,6 +6,7 @@ from rest_framework.exceptions import ValidationError
 
 from apps.catalog.models import Product
 from apps.orders.models import Order, OrderItem
+from apps.reports.models import DailyClosing
 from apps.stores.models import Stock
 
 POS_PAYMENT_METHODS = {m for m, _ in Order.PaymentMethod.choices}
@@ -24,6 +25,11 @@ def create_pos_sale(cashier_profile, items, payment_method, customer_name="", am
         raise ValidationError({"items": "Le panier est vide."})
 
     store = cashier_profile.point_of_sale
+    if DailyClosing.objects.filter(
+        date=timezone.localdate(), point_of_sale=store, cashier=cashier_profile.user
+    ).exists():
+        raise ValidationError({"detail": "Votre caisse est fermee pour aujourd'hui."})
+
     order = Order.objects.create(
         channel=Order.Channel.POS,
         cashier=cashier_profile.user,
@@ -74,3 +80,81 @@ def create_pos_sale(cashier_profile, items, payment_method, customer_name="", am
         raise ValidationError({"amount_received": "Montant recu inferieur au total."})
 
     return order, received
+
+
+def cashier_sales_totals(cashier_profile, for_date):
+    """Totaux attendus par moyen de paiement pour les ventes de CE caissier, ce jour-la."""
+    from django.db.models import Count, Sum
+
+    totals = {key: Decimal("0") for key, _ in Order.PaymentMethod.choices}
+    qs = Order.objects.filter(
+        status=Order.Status.PAID,
+        channel=Order.Channel.POS,
+        cashier=cashier_profile.user,
+        point_of_sale=cashier_profile.point_of_sale,
+        paid_at__date=for_date,
+    )
+    for row in qs.values("payment_method").annotate(total=Sum("total_amount")):
+        totals[row["payment_method"]] = row["total"] or Decimal("0")
+    return totals, qs.aggregate(n=Count("id"))["n"]
+
+
+@transaction.atomic
+def close_cashier_day(cashier_profile, declared, notes=""):
+    """
+    Fermeture de caisse du caissier. Un premier appel cree la fermeture (comptage a l'aveugle) ;
+    les appels suivants, le meme jour, corrigent le comptage apres que le caissier a vu son ecart.
+    L'ecart initial et le nombre de corrections restent enregistres pour l'administrateur.
+    Retourne (fermeture, creee).
+    """
+    today = timezone.localdate()
+
+    def amount(key):
+        try:
+            value = Decimal(str(declared.get(key, 0) or 0))
+        except Exception:
+            raise ValidationError({key: "Montant invalide."})
+        if value < 0:
+            raise ValidationError({key: "Montant invalide."})
+        return value
+
+    values = {
+        "declared_card": amount("card"),
+        "declared_wave": amount("wave"),
+        "declared_orange_money": amount("orange_money"),
+        "declared_cash": amount("cash"),
+    }
+    totals, _ = cashier_sales_totals(cashier_profile, today)
+    expected = {
+        "expected_card": totals["card"],
+        "expected_wave": totals["wave"],
+        "expected_orange_money": totals["orange_money"],
+        "expected_cash": totals["cash"],
+    }
+    notes = (notes or "")[:1000]
+
+    closing = DailyClosing.objects.select_for_update().filter(
+        date=today, point_of_sale=cashier_profile.point_of_sale, cashier=cashier_profile.user
+    ).first()
+
+    if closing is None:
+        closing = DailyClosing(
+            date=today,
+            point_of_sale=cashier_profile.point_of_sale,
+            cashier=cashier_profile.user,
+            closed_by=cashier_profile.user,
+            notes=notes,
+            **values,
+            **expected,
+        )
+        closing.initial_discrepancy_total = closing.discrepancy_total
+        closing.save()
+        return closing, True
+
+    for field, value in {**values, **expected}.items():
+        setattr(closing, field, value)
+    if notes:
+        closing.notes = notes
+    closing.revision_count += 1
+    closing.save()
+    return closing, False

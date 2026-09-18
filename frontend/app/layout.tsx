@@ -1,7 +1,7 @@
 import type { Metadata, Viewport } from "next";
 import "./globals.css";
 import Navbar from "@/components/Navbar";
-import SocialLinks from "@/components/SocialLinks";
+import SiteFooter from "@/components/SiteFooter";
 import ServiceWorkerRegister from "@/components/ServiceWorkerRegister";
 
 export const metadata: Metadata = {
@@ -30,17 +30,7 @@ export default function RootLayout({ children }: { children: React.ReactNode }) 
         <ServiceWorkerRegister />
         <Navbar />
         <main className="min-h-screen">{children}</main>
-        <footer className="border-t-2 border-brand-accent/40 mt-16 py-8 text-center text-sm text-gray-500 space-y-1 bg-brand-light">
-          <p className="text-brand-dark font-medium italic">L&apos;art du service</p>
-          <p>© {new Date().getFullYear()} La Belle Teranga — Labelleteranga.com</p>
-          <p>
-            Contact :{" "}
-            <a href="mailto:info@labelleteranga.com" className="text-brand hover:underline">
-              info@labelleteranga.com
-            </a>
-          </p>
-          <SocialLinks />
-        </footer>
+        <SiteFooter />
       </body>
     </html>
   );

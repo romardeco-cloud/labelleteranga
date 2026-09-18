@@ -6,6 +6,7 @@ from django.db.models.functions import TruncDate, TruncMonth, TruncYear
 from django.utils import timezone
 from rest_framework import status, viewsets
 from rest_framework.decorators import action
+from rest_framework.exceptions import ValidationError
 from rest_framework.permissions import IsAdminUser
 from rest_framework.response import Response
 from rest_framework.views import APIView
@@ -257,6 +258,10 @@ class DailyClosingViewSet(viewsets.ModelViewSet):
     def perform_create(self, serializer):
         for_date = serializer.validated_data["date"]
         point_of_sale = serializer.validated_data.get("point_of_sale")
+        if DailyClosing.objects.filter(
+            date=for_date, point_of_sale=point_of_sale, cashier__isnull=True
+        ).exists():
+            raise ValidationError({"date": "Une cloture existe deja pour ce jour et ce point de vente."})
         serializer.save(closed_by=self.request.user)
         self._apply_expected_totals(serializer, for_date, point_of_sale.id if point_of_sale else None)
 
@@ -277,7 +282,7 @@ class DailyClosingViewSet(viewsets.ModelViewSet):
             return Response({"detail": "Date invalide."}, status=status.HTTP_400_BAD_REQUEST)
 
         totals = _compute_expected_totals(for_date, point_of_sale=pos_param)
-        existing = DailyClosing.objects.filter(date=for_date, point_of_sale_id=pos_param).first()
+        existing = DailyClosing.objects.filter(date=for_date, point_of_sale_id=pos_param, cashier__isnull=True).first()
         return Response(
             {
                 "date": date_str,

@@ -6,7 +6,12 @@ from apps.accounts.permissions import IsCashier
 from apps.catalog.models import Product
 from apps.stores.models import Stock
 
-from .services import create_pos_sale
+from django.utils import timezone
+
+from apps.reports.models import DailyClosing
+from apps.reports.serializers import DailyClosingSerializer
+
+from .services import cashier_sales_totals, close_cashier_day, create_pos_sale
 
 
 class POSProductListView(APIView):
@@ -94,3 +99,51 @@ class POSSaleView(APIView):
             },
             status=201,
         )
+
+
+class POSClosingView(APIView):
+    """
+    Fermeture de caisse du caissier connecte, pour aujourd'hui.
+
+    GET  /api/pos/closing/ -> etat du jour. Le comptage se fait "a l'aveugle" : tant que la caisse n'est
+                              pas fermee, les montants attendus ne sont PAS communiques au caissier.
+                              Une fois fermee, le caissier voit son ecart et peut corriger son comptage
+                              (POST a nouveau) ; l'ecart initial et le nombre de corrections sont conserves.
+    POST /api/pos/closing/ -> body {declared_cash, declared_wave, declared_orange_money, declared_card, notes}
+    """
+
+    permission_classes = [IsCashier]
+
+    def _closing_today(self, profile):
+        return DailyClosing.objects.filter(
+            date=timezone.localdate(), point_of_sale=profile.point_of_sale, cashier=profile.user
+        ).first()
+
+    def get(self, request):
+        profile = request.user.cashier_profile
+        closing = self._closing_today(profile)
+        _, sales_count = cashier_sales_totals(profile, timezone.localdate())
+        return Response(
+            {
+                "date": timezone.localdate(),
+                "point_of_sale": profile.point_of_sale.name,
+                "closed": closing is not None,
+                "sales_count": sales_count,
+                "closing": DailyClosingSerializer(closing).data if closing else None,
+            }
+        )
+
+    def post(self, request):
+        profile = request.user.cashier_profile
+        data = request.data
+        closing, created = close_cashier_day(
+            profile,
+            {
+                "cash": data.get("declared_cash"),
+                "wave": data.get("declared_wave"),
+                "orange_money": data.get("declared_orange_money"),
+                "card": data.get("declared_card"),
+            },
+            data.get("notes", ""),
+        )
+        return Response(DailyClosingSerializer(closing).data, status=201 if created else 200)

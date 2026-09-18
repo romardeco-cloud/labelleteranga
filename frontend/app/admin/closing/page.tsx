@@ -6,6 +6,7 @@ import {
   DailyClosing,
   PointOfSale,
   fetchClosingPreview,
+  deleteClosing,
   fetchClosings,
   fetchPointsOfSale,
   saveClosing,
@@ -200,8 +201,10 @@ export default function AdminClosingPage() {
               <th className="p-2">Attendu</th>
               <th className="p-2">Declare</th>
               <th className="p-2">Ecart</th>
-              <th className="p-2">Cloturee par</th>
+              <th className="p-2">Caissier</th>
+              <th className="p-2">Corrections</th>
               <th className="p-2">Notes</th>
+              <th className="p-2"></th>
             </tr>
           </thead>
           <tbody>
@@ -214,9 +217,37 @@ export default function AdminClosingPage() {
                   {Number(c.discrepancy_total) > 0 ? "+" : ""}
                   {formatXof(c.discrepancy_total)}
                 </td>
-                <td className="p-2">{c.closed_by_username ?? "-"}</td>
+                <td className="p-2">
+                  {c.cashier_username ?? (c.closed_by_username ? `${c.closed_by_username} (admin)` : "-")}
+                </td>
+                <td className="p-2 text-xs">
+                  {c.cashier_username
+                    ? c.revision_count > 0
+                      ? `${c.revision_count} (ecart initial ${formatXof(c.initial_discrepancy_total)})`
+                      : "0"
+                    : "-"}
+                </td>
                 <td className="p-2 max-w-[220px] truncate" title={c.notes}>
                   {c.notes || "-"}
+                </td>
+                <td className="p-2 text-right">
+                  {c.cashier_username && (
+                    <button
+                      onClick={async () => {
+                        if (
+                          !confirm(
+                            "Rouvrir la caisse de ce caissier ? Sa fermeture sera supprimee et il pourra vendre a nouveau aujourd'hui."
+                          )
+                        )
+                          return;
+                        await deleteClosing(c.id);
+                        loadHistory();
+                      }}
+                      className="text-xs text-red-500 underline"
+                    >
+                      Rouvrir
+                    </button>
+                  )}
                 </td>
               </tr>
             ))}

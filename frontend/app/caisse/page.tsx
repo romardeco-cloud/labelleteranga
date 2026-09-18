@@ -3,6 +3,9 @@
 import { useCallback, useEffect, useMemo, useState } from "react";
 import Image from "next/image";
 import {
+  CashierClosingState,
+  fetchCashierClosing,
+  submitCashierClosing,
   POSProduct,
   POSReceipt,
   PaymentMethod,
@@ -38,6 +41,12 @@ export default function CaissePage() {
   const [error, setError] = useState("");
   const [busy, setBusy] = useState(false);
   const [receipt, setReceipt] = useState<POSReceipt | null>(null);
+  const [closingState, setClosingState] = useState<CashierClosingState | null>(null);
+  const [closingMode, setClosingMode] = useState(false);
+  const [counted, setCounted] = useState({ cash: "", wave: "", orange_money: "", card: "" });
+  const [closingNotes, setClosingNotes] = useState("");
+  const [closingError, setClosingError] = useState("");
+  const [closingBusy, setClosingBusy] = useState(false);
 
   useEffect(() => {
     try {
@@ -56,6 +65,55 @@ export default function CaissePage() {
     }
   }, []);
 
+  const loadClosing = useCallback(async () => {
+    try {
+      setClosingState(await fetchCashierClosing());
+    } catch {}
+  }, []);
+
+  useEffect(() => {
+    if (session) loadClosing();
+  }, [session, loadClosing]);
+
+  function startClosing() {
+    const c = closingState?.closing;
+    setCounted(
+      c
+        ? {
+            cash: String(Number(c.declared_cash)),
+            wave: String(Number(c.declared_wave)),
+            orange_money: String(Number(c.declared_orange_money)),
+            card: String(Number(c.declared_card)),
+          }
+        : { cash: "", wave: "", orange_money: "", card: "" }
+    );
+    setClosingNotes(c?.notes ?? "");
+    setClosingError("");
+    setClosingMode(true);
+  }
+
+  async function submitClosing(e: React.FormEvent) {
+    e.preventDefault();
+    setClosingBusy(true);
+    setClosingError("");
+    try {
+      await submitCashierClosing({
+        declared_cash: Number(counted.cash || 0),
+        declared_wave: Number(counted.wave || 0),
+        declared_orange_money: Number(counted.orange_money || 0),
+        declared_card: Number(counted.card || 0),
+        notes: closingNotes,
+      });
+      await loadClosing();
+      setClosingMode(false);
+    } catch (err: any) {
+      const d = err?.response?.data;
+      setClosingError(d?.detail ?? "Impossible d'enregistrer la fermeture.");
+    } finally {
+      setClosingBusy(false);
+    }
+  }
+
   useEffect(() => {
     if (!session) return;
     const t = setTimeout(() => loadProducts(search), 250);
@@ -67,6 +125,8 @@ export default function CaissePage() {
     localStorage.removeItem("lbt_cashier_info");
     setSession(null);
     setLines([]);
+    setClosingState(null);
+    setClosingMode(false);
   }
 
   async function handleLogin(e: React.FormEvent) {
@@ -196,12 +256,144 @@ export default function CaissePage() {
           <h1 className="text-xl font-bold">Caisse — {session.store}</h1>
           <p className="text-xs text-gray-500">Caissier : {session.username}</p>
         </div>
-        <button onClick={logout} className="text-sm text-red-500">
-          Fermer la session
-        </button>
+        <div className="flex items-center gap-4">
+          {!closingMode && (
+            <button onClick={startClosing} className="text-sm border border-brand text-brand rounded px-3 py-1.5">
+              {closingState?.closed ? "Voir / corriger ma fermeture" : "Fermer ma caisse"}
+            </button>
+          )}
+          <button onClick={logout} className="text-sm text-red-500">
+            Se deconnecter
+          </button>
+        </div>
       </div>
 
-      <div className="grid lg:grid-cols-3 gap-4 print:hidden">
+      {closingMode && (
+        <div className="max-w-xl mx-auto bg-white border rounded-lg p-5 print:hidden">
+          <h2 className="text-lg font-bold mb-1">
+            {closingState?.closed ? "Corriger ma fermeture de caisse" : "Fermeture de caisse"}
+          </h2>
+          {closingState?.closed && closingState.closing ? (
+            <p className="text-sm text-gray-500 mb-3">
+              Verifiez l&apos;ecart ci-dessous, recomptez, puis corrigez vos montants si necessaire.
+            </p>
+          ) : (
+            <p className="text-sm text-gray-500 mb-3">
+              Comptez ce que vous avez encaisse aujourd&apos;hui pour chaque moyen de paiement (
+              {closingState?.sales_count ?? 0} vente(s) enregistree(s)). Le total attendu vous sera montre apres
+              validation.
+            </p>
+          )}
+
+          {closingState?.closing && (
+            <table className="w-full text-sm mb-4">
+              <thead>
+                <tr className="text-left text-gray-500">
+                  <th>Moyen</th>
+                  <th>Attendu</th>
+                  <th>Compte</th>
+                  <th>Ecart</th>
+                </tr>
+              </thead>
+              <tbody>
+                {[
+                  ["Especes", closingState.closing.expected_cash, closingState.closing.declared_cash, closingState.closing.discrepancy_cash],
+                  ["Wave", closingState.closing.expected_wave, closingState.closing.declared_wave, closingState.closing.discrepancy_wave],
+                  ["Orange Money", closingState.closing.expected_orange_money, closingState.closing.declared_orange_money, closingState.closing.discrepancy_orange_money],
+                  ["Carte", closingState.closing.expected_card, closingState.closing.declared_card, closingState.closing.discrepancy_card],
+                ].map(([label, exp, dec, gap]) => (
+                  <tr key={label} className="border-t">
+                    <td className="py-1">{label}</td>
+                    <td>{xof(exp)}</td>
+                    <td>{xof(dec)}</td>
+                    <td className={Number(gap) === 0 ? "text-green-600" : "text-red-600 font-medium"}>
+                      {Number(gap) > 0 ? "+" : ""}
+                      {xof(gap)}
+                    </td>
+                  </tr>
+                ))}
+                <tr className="border-t font-semibold">
+                  <td className="py-1">Total</td>
+                  <td>{xof(closingState.closing.expected_total)}</td>
+                  <td>{xof(closingState.closing.declared_total)}</td>
+                  <td className={Number(closingState.closing.discrepancy_total) === 0 ? "text-green-600" : "text-red-600"}>
+                    {Number(closingState.closing.discrepancy_total) > 0 ? "+" : ""}
+                    {xof(closingState.closing.discrepancy_total)}
+                  </td>
+                </tr>
+              </tbody>
+            </table>
+          )}
+          {closingState?.closing && closingState.closing.revision_count > 0 && (
+            <p className="text-xs text-gray-500 mb-3">
+              Ecart initial : {xof(closingState.closing.initial_discrepancy_total)} —{" "}
+              {closingState.closing.revision_count} correction(s) enregistree(s) (visibles par l&apos;administrateur).
+            </p>
+          )}
+
+          <form onSubmit={submitClosing} className="space-y-3">
+            <div className="grid grid-cols-2 gap-3">
+              {(
+                [
+                  ["cash", "Especes comptees"],
+                  ["wave", "Wave recu"],
+                  ["orange_money", "Orange Money recu"],
+                  ["card", "Carte (total terminal)"],
+                ] as const
+              ).map(([key, label]) => (
+                <label key={key} className="text-sm">
+                  {label}
+                  <input
+                    type="number"
+                    min={0}
+                    value={counted[key]}
+                    onChange={(e) => setCounted({ ...counted, [key]: e.target.value })}
+                    placeholder="0"
+                    className="w-full border rounded px-3 py-2 mt-1"
+                  />
+                </label>
+              ))}
+            </div>
+            <label className="text-sm block">
+              Remarque (facultatif)
+              <textarea
+                value={closingNotes}
+                onChange={(e) => setClosingNotes(e.target.value)}
+                rows={2}
+                className="w-full border rounded px-3 py-2 mt-1"
+              />
+            </label>
+            {closingError && <p className="text-red-600 text-sm">{closingError}</p>}
+            <div className="flex gap-2">
+              <button
+                disabled={closingBusy}
+                className="flex-1 bg-brand text-white py-2.5 rounded-lg font-medium disabled:opacity-50"
+              >
+                {closingBusy
+                  ? "Enregistrement..."
+                  : closingState?.closed
+                    ? "Enregistrer la correction"
+                    : "Valider la fermeture"}
+              </button>
+              <button type="button" onClick={() => setClosingMode(false)} className="border rounded-lg px-4">
+                Retour
+              </button>
+            </div>
+          </form>
+        </div>
+      )}
+
+      {!closingMode && closingState?.closed && (
+        <div className="max-w-xl mx-auto bg-brand-light border border-brand-accent/50 rounded-lg p-5 text-center mb-4 print:hidden">
+          <p className="font-semibold text-brand-dark">Caisse fermee pour aujourd&apos;hui</p>
+          <p className="text-sm text-gray-600 mt-1">
+            Ecart : {xof(closingState.closing?.discrepancy_total ?? 0)}. Les ventes sont bloquees jusqu&apos;a demain.
+            Touchez &laquo; Voir / corriger ma fermeture &raquo; pour recompter.
+          </p>
+        </div>
+      )}
+
+      <div className={`grid lg:grid-cols-3 gap-4 print:hidden ${closingMode || closingState?.closed ? "hidden" : ""}`}>
         <div className="lg:col-span-2">
           <input
             autoFocus

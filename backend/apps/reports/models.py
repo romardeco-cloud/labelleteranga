@@ -21,6 +21,14 @@ class DailyClosing(models.Model):
         related_name="closings",
         help_text="Vide = commandes en ligne non affectees a un magasin.",
     )
+    cashier = models.ForeignKey(
+        settings.AUTH_USER_MODEL,
+        null=True,
+        blank=True,
+        on_delete=models.SET_NULL,
+        related_name="cashier_closings",
+        help_text="Renseigne pour la fermeture de caisse d'un caissier ; vide pour la cloture globale d'un point de vente.",
+    )
     closed_by = models.ForeignKey(
         settings.AUTH_USER_MODEL, null=True, blank=True, on_delete=models.SET_NULL, related_name="daily_closings"
     )
@@ -38,10 +46,13 @@ class DailyClosing(models.Model):
     declared_cash = models.DecimalField(max_digits=12, decimal_places=2, default=0)
 
     notes = models.TextField(blank=True)
+    # Suivi des corrections faites par un caissier apres avoir vu son ecart
+    initial_discrepancy_total = models.DecimalField(max_digits=12, decimal_places=2, default=0)
+    revision_count = models.PositiveIntegerField(default=0)
 
     class Meta:
         ordering = ["-date"]
-        unique_together = ("date", "point_of_sale")
+        unique_together = ("date", "point_of_sale", "cashier")
 
     @property
     def expected_total(self):
