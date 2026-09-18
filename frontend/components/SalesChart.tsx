@@ -12,7 +12,7 @@ export default function SalesChart({ data }: { data: SalesPoint[] }) {
         <XAxis dataKey="label" fontSize={12} />
         <YAxis fontSize={12} />
         <Tooltip formatter={(value: number) => `${value.toLocaleString("fr-SN")} FCFA`} />
-        <Bar dataKey="revenue" fill="#1f7a3f" radius={[4, 4, 0, 0]} />
+        <Bar dataKey="revenue" fill="#9c1c1c" radius={[4, 4, 0, 0]} />
       </BarChart>
     </ResponsiveContainer>
   );

@@ -5,6 +5,7 @@ import Navbar from "@/components/Navbar";
 export const metadata: Metadata = {
   title: "La Belle Teranga | Supermarche en ligne",
   description: "Faites vos courses en ligne avec La Belle Teranga, livraison partout au Senegal.",
+  icons: { icon: "/logo.jpg" },
 };
 
 export default function RootLayout({ children }: { children: React.ReactNode }) {
@@ -13,7 +14,8 @@ export default function RootLayout({ children }: { children: React.ReactNode }) 
       <body>
         <Navbar />
         <main className="min-h-screen">{children}</main>
-        <footer className="border-t mt-16 py-8 text-center text-sm text-gray-500 space-y-1">
+        <footer className="border-t-2 border-brand-accent/40 mt-16 py-8 text-center text-sm text-gray-500 space-y-1 bg-brand-light">
+          <p className="text-brand-dark font-medium italic">L&apos;art du service</p>
           <p>© {new Date().getFullYear()} La Belle Teranga — Labelleteranga.com</p>
           <p>
             Contact :{" "}
