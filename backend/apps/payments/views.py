@@ -1,16 +1,19 @@
 from django.conf import settings
 from django.http import JsonResponse
 from django.shortcuts import get_object_or_404
-from django.utils import timezone
-from django.views.decorators.csrf import csrf_exempt
 from rest_framework import status
+from rest_framework.permissions import IsAdminUser
 from rest_framework.response import Response
 from rest_framework.views import APIView
+from django.views.decorators.csrf import csrf_exempt
 
 import stripe
 
-from apps.cart.models import Cart
-from apps.orders.models import Order, OrderItem
+from apps.orders.models import Order
+from apps.orders.serializers import OrderSerializer
+from apps.orders.services import create_order_from_cart, mark_order_paid
+
+from . import orange_money, wave
 
 stripe.api_key = settings.STRIPE_SECRET_KEY
 
@@ -18,49 +21,29 @@ stripe.api_key = settings.STRIPE_SECRET_KEY
 class CreateCheckoutSessionView(APIView):
     """
     POST /api/payments/create-checkout-session/
-    body: {session_key, customer_name, customer_email, customer_phone, delivery_address}
+    body: {session_key, customer_name, customer_email, customer_phone,
+           delivery_address, delivery_latitude, delivery_longitude}
 
-    Cree une Commande a partir du panier puis une session Stripe Checkout.
+    Cree une Commande a partir du panier puis une session Stripe Checkout
+    (paiement par carte bancaire).
     """
 
     def post(self, request):
-        data = request.data
-        cart = get_object_or_404(Cart, session_key=data.get("session_key"))
-        items = list(cart.items.select_related("product").all())
-
-        if not items:
+        order = create_order_from_cart(request.data.get("session_key"), request.data, Order.PaymentMethod.CARD)
+        if order is None:
             return Response({"detail": "Le panier est vide."}, status=status.HTTP_400_BAD_REQUEST)
 
-        order = Order.objects.create(
-            customer_name=data.get("customer_name", ""),
-            customer_email=data.get("customer_email", ""),
-            customer_phone=data.get("customer_phone", ""),
-            delivery_address=data.get("delivery_address", ""),
-        )
-
-        line_items = []
-        for cart_item in items:
-            OrderItem.objects.create(
-                order=order,
-                product=cart_item.product,
-                product_name=cart_item.product.name,
-                unit_price=cart_item.product.price,
-                quantity=cart_item.quantity,
-            )
-            line_items.append(
-                {
-                    "price_data": {
-                        "currency": settings.STRIPE_CURRENCY,
-                        "product_data": {"name": cart_item.product.name},
-                        # Stripe attend le plus petit montant (pas de decimales pour XOF)
-                        "unit_amount": int(cart_item.product.price),
-                    },
-                    "quantity": cart_item.quantity,
-                }
-            )
-
-        order.recompute_total()
-        order.save()
+        line_items = [
+            {
+                "price_data": {
+                    "currency": settings.STRIPE_CURRENCY,
+                    "product_data": {"name": item.product_name},
+                    "unit_amount": int(item.unit_price),
+                },
+                "quantity": item.quantity,
+            }
+            for item in order.items.all()
+        ]
 
         checkout_session = stripe.checkout.Session.create(
             mode="payment",
@@ -73,9 +56,6 @@ class CreateCheckoutSessionView(APIView):
 
         order.stripe_checkout_session_id = checkout_session.id
         order.save(update_fields=["stripe_checkout_session_id"])
-
-        # panier vide une fois la commande creee
-        cart.items.all().delete()
 
         return Response(
             {"checkout_url": checkout_session.url, "order_reference": order.reference},
@@ -96,16 +76,150 @@ def stripe_webhook(request):
     if event["type"] == "checkout.session.completed":
         session = event["data"]["object"]
         order_reference = session.get("metadata", {}).get("order_reference")
-        if order_reference:
-            Order.objects.filter(reference=order_reference).update(
-                status=Order.Status.PAID,
-                paid_at=timezone.now(),
-                stripe_payment_intent_id=session.get("payment_intent", ""),
-            )
-    elif event["type"] in ("checkout.session.expired",):
+        order = Order.objects.filter(reference=order_reference).first()
+        if order:
+            mark_order_paid(order, stripe_payment_intent_id=session.get("payment_intent", ""))
+    elif event["type"] == "checkout.session.expired":
         session = event["data"]["object"]
         order_reference = session.get("metadata", {}).get("order_reference")
-        if order_reference:
-            Order.objects.filter(reference=order_reference).update(status=Order.Status.FAILED)
+        Order.objects.filter(reference=order_reference).update(status=Order.Status.FAILED)
 
     return JsonResponse({"received": True}, status=200)
+
+
+class CreateWaveCheckoutView(APIView):
+    """
+    POST /api/payments/wave/create-checkout/
+    Meme body que Stripe. Cree la commande puis une session Wave Checkout.
+    """
+
+    def post(self, request):
+        order = create_order_from_cart(request.data.get("session_key"), request.data, Order.PaymentMethod.WAVE)
+        if order is None:
+            return Response({"detail": "Le panier est vide."}, status=status.HTTP_400_BAD_REQUEST)
+
+        try:
+            session = wave.create_checkout_session(order)
+        except Exception:
+            order.status = Order.Status.FAILED
+            order.save(update_fields=["status"])
+            return Response(
+                {"detail": "Impossible de contacter Wave pour le moment. Reessayez ou choisissez un autre moyen de paiement."},
+                status=status.HTTP_502_BAD_GATEWAY,
+            )
+
+        order.wave_checkout_id = session.get("id", "")
+        order.save(update_fields=["wave_checkout_id"])
+
+        return Response(
+            {"checkout_url": session.get("wave_launch_url"), "order_reference": order.reference},
+            status=status.HTTP_201_CREATED,
+        )
+
+
+@csrf_exempt
+def wave_webhook(request):
+    import json
+
+    if not wave.verify_webhook_signature(request):
+        return JsonResponse({"detail": "invalid signature"}, status=400)
+
+    try:
+        event = json.loads(request.body)
+    except ValueError:
+        return JsonResponse({"detail": "invalid payload"}, status=400)
+
+    if event.get("type") == "checkout.session.completed":
+        session_data = event.get("data", {})
+        order_reference = session_data.get("client_reference")
+        order = Order.objects.filter(reference=order_reference).first()
+        if order:
+            mark_order_paid(order)
+
+    return JsonResponse({"received": True}, status=200)
+
+
+class CreateOrangeMoneyCheckoutView(APIView):
+    """
+    POST /api/payments/orange-money/create-checkout/
+    Meme body que Stripe. Cree la commande puis initialise un paiement web
+    Orange Money.
+    """
+
+    def post(self, request):
+        order = create_order_from_cart(
+            request.data.get("session_key"), request.data, Order.PaymentMethod.ORANGE_MONEY
+        )
+        if order is None:
+            return Response({"detail": "Le panier est vide."}, status=status.HTTP_400_BAD_REQUEST)
+
+        try:
+            payment = orange_money.create_web_payment(order)
+        except Exception:
+            order.status = Order.Status.FAILED
+            order.save(update_fields=["status"])
+            return Response(
+                {
+                    "detail": "Impossible de contacter Orange Money pour le moment. "
+                    "Reessayez ou choisissez un autre moyen de paiement."
+                },
+                status=status.HTTP_502_BAD_GATEWAY,
+            )
+
+        order.orange_money_order_id = payment.get("pay_token", "")
+        order.save(update_fields=["orange_money_order_id"])
+
+        return Response(
+            {"checkout_url": payment.get("payment_url"), "order_reference": order.reference},
+            status=status.HTTP_201_CREATED,
+        )
+
+
+@csrf_exempt
+def orange_money_webhook(request):
+    import json
+
+    try:
+        payload = json.loads(request.body)
+    except ValueError:
+        return JsonResponse({"detail": "invalid payload"}, status=400)
+
+    if payload.get("status") == "SUCCESS":
+        order_reference = payload.get("order_id")
+        order = Order.objects.filter(reference=order_reference).first()
+        if order:
+            mark_order_paid(order)
+
+    return JsonResponse({"received": True}, status=200)
+
+
+class CreateCashOrderView(APIView):
+    """
+    POST /api/payments/cash-order/
+    Cree une commande "paiement a la livraison" : aucun paiement en ligne,
+    la commande reste PENDING jusqu'a ce qu'un admin la marque payee
+    (voir MarkOrderPaidView) au moment de la livraison.
+    """
+
+    def post(self, request):
+        order = create_order_from_cart(request.data.get("session_key"), request.data, Order.PaymentMethod.CASH)
+        if order is None:
+            return Response({"detail": "Le panier est vide."}, status=status.HTTP_400_BAD_REQUEST)
+
+        return Response(OrderSerializer(order).data, status=status.HTTP_201_CREATED)
+
+
+class MarkOrderPaidView(APIView):
+    """
+    POST /api/payments/orders/<reference>/mark-paid/
+    Reserve a l'admin : confirme manuellement le paiement d'une commande
+    especes (a la livraison), ce qui declenche l'envoi de la confirmation
+    WhatsApp comme pour les autres moyens de paiement.
+    """
+
+    permission_classes = [IsAdminUser]
+
+    def post(self, request, reference):
+        order = get_object_or_404(Order, reference=reference)
+        order = mark_order_paid(order)
+        return Response(OrderSerializer(order).data)

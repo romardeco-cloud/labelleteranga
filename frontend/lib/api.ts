@@ -88,15 +88,80 @@ export async function removeCartItem(itemId: number) {
   return data;
 }
 
-export async function createCheckoutSession(customer: {
+export type PaymentMethod = "card" | "wave" | "orange_money" | "cash";
+
+export type CustomerInfo = {
   customer_name: string;
   customer_email: string;
-  customer_phone?: string;
-  delivery_address?: string;
-}) {
-  const { data } = await api.post("/payments/create-checkout-session/", {
+  customer_phone: string;
+  delivery_address: string;
+  delivery_latitude?: number | null;
+  delivery_longitude?: number | null;
+};
+
+export type Order = {
+  id: number;
+  reference: string;
+  customer_name: string;
+  customer_email: string;
+  customer_phone: string;
+  delivery_address: string;
+  delivery_latitude: string | null;
+  delivery_longitude: string | null;
+  location_maps_url: string | null;
+  status: "pending" | "paid" | "failed" | "cancelled";
+  payment_method: PaymentMethod;
+  total_amount: string;
+  items: CartItem[];
+  created_at: string;
+  paid_at: string | null;
+  whatsapp_confirmation_sent_at: string | null;
+  customer_whatsapp_link: string | null;
+  shop_whatsapp_link: string | null;
+};
+
+const CHECKOUT_ENDPOINTS: Record<Exclude<PaymentMethod, "cash">, string> = {
+  card: "/payments/create-checkout-session/",
+  wave: "/payments/wave/create-checkout/",
+  orange_money: "/payments/orange-money/create-checkout/",
+};
+
+export async function createCheckoutSession(method: Exclude<PaymentMethod, "cash">, customer: CustomerInfo) {
+  const { data } = await api.post(CHECKOUT_ENDPOINTS[method], {
     session_key: getSessionKey(),
     ...customer,
   });
   return data as { checkout_url: string; order_reference: string };
+}
+
+export async function createCashOrder(customer: CustomerInfo) {
+  const { data } = await api.post("/payments/cash-order/", {
+    session_key: getSessionKey(),
+    ...customer,
+  });
+  return data as Order;
+}
+
+export async function fetchOrder(reference: string) {
+  const { data } = await api.get<Order>(`/orders/${reference}/`);
+  return data;
+}
+
+export async function markOrderPaid(reference: string) {
+  const { data } = await api.post<Order>(`/payments/orders/${reference}/mark-paid/`);
+  return data;
+}
+
+export function getBrowserLocation(): Promise<{ lat: number; lng: number } | null> {
+  return new Promise((resolve) => {
+    if (typeof navigator === "undefined" || !navigator.geolocation) {
+      resolve(null);
+      return;
+    }
+    navigator.geolocation.getCurrentPosition(
+      (pos) => resolve({ lat: pos.coords.latitude, lng: pos.coords.longitude }),
+      () => resolve(null),
+      { timeout: 8000 }
+    );
+  });
 }

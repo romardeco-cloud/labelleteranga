@@ -37,6 +37,7 @@ INSTALLED_APPS = [
     "apps.payments",
     "apps.reports",
     "apps.accounts",
+    "apps.notifications",
 ]
 
 MIDDLEWARE = [
@@ -134,6 +135,26 @@ STRIPE_WEBHOOK_SECRET = os.environ.get("STRIPE_WEBHOOK_SECRET", "")
 STRIPE_CURRENCY = os.environ.get("STRIPE_CURRENCY", "xof")
 
 FRONTEND_URL = os.environ.get("FRONTEND_URL", "http://localhost:3000")
+BACKEND_URL = os.environ.get("BACKEND_URL", "http://localhost:8000")
+
+# Wave (Wave for Business Checkout)
+WAVE_API_KEY = os.environ.get("WAVE_API_KEY", "")
+WAVE_CURRENCY = os.environ.get("WAVE_CURRENCY", "XOF")
+
+# Orange Money (Orange Money Web Payment)
+ORANGE_MONEY_CLIENT_ID = os.environ.get("ORANGE_MONEY_CLIENT_ID", "")
+ORANGE_MONEY_CLIENT_SECRET = os.environ.get("ORANGE_MONEY_CLIENT_SECRET", "")
+ORANGE_MONEY_MERCHANT_KEY = os.environ.get("ORANGE_MONEY_MERCHANT_KEY", "")
+# Le code devise attendu par le sandbox Orange peut differer de l'ISO "XOF"
+# (ex. "OUV" observe sur certains environnements de test) - a verifier avec
+# votre contrat marchand Orange Money avant mise en production.
+ORANGE_MONEY_CURRENCY = os.environ.get("ORANGE_MONEY_CURRENCY", "XOF")
+
+# WhatsApp (Meta WhatsApp Cloud API - optionnel, voir apps/notifications/whatsapp.py)
+WHATSAPP_ACCESS_TOKEN = os.environ.get("WHATSAPP_ACCESS_TOKEN", "")
+WHATSAPP_PHONE_NUMBER_ID = os.environ.get("WHATSAPP_PHONE_NUMBER_ID", "")
+# Numero WhatsApp de la boutique (format international sans "+", ex: 221771234567)
+WHATSAPP_SHOP_NUMBER = os.environ.get("WHATSAPP_SHOP_NUMBER", "")
 
 if not DEBUG:
     SECURE_SSL_REDIRECT = True

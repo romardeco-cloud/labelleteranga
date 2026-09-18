@@ -13,6 +13,8 @@ class OrderItemSerializer(serializers.ModelSerializer):
 
 class OrderSerializer(serializers.ModelSerializer):
     items = OrderItemSerializer(many=True, read_only=True)
+    customer_whatsapp_link = serializers.SerializerMethodField()
+    shop_whatsapp_link = serializers.SerializerMethodField()
 
     class Meta:
         model = Order
@@ -23,10 +25,38 @@ class OrderSerializer(serializers.ModelSerializer):
             "customer_email",
             "customer_phone",
             "delivery_address",
+            "delivery_latitude",
+            "delivery_longitude",
+            "location_maps_url",
             "status",
+            "payment_method",
             "total_amount",
             "items",
             "created_at",
             "paid_at",
+            "whatsapp_confirmation_sent_at",
+            "customer_whatsapp_link",
+            "shop_whatsapp_link",
         ]
         read_only_fields = ["reference", "status", "total_amount", "created_at", "paid_at"]
+
+    def _whatsapp_message(self, order):
+        from apps.notifications.whatsapp import build_confirmation_message
+
+        return build_confirmation_message(order)
+
+    def get_customer_whatsapp_link(self, order):
+        if order.status != Order.Status.PAID:
+            return None
+        from apps.notifications.whatsapp import whatsapp_deep_link
+
+        return whatsapp_deep_link(order.customer_phone, self._whatsapp_message(order))
+
+    def get_shop_whatsapp_link(self, order):
+        if order.status != Order.Status.PAID:
+            return None
+        from django.conf import settings
+
+        from apps.notifications.whatsapp import whatsapp_deep_link
+
+        return whatsapp_deep_link(settings.WHATSAPP_SHOP_NUMBER, self._whatsapp_message(order))
