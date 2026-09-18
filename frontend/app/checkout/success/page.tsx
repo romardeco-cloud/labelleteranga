@@ -70,19 +70,11 @@ function SuccessContent() {
 
       {isPaid && (
         <div className="bg-brand-light border border-brand-accent/50 rounded-lg p-4 mb-6">
-          <p className="text-brand-dark font-medium mb-3">Paiement confirme !</p>
-          {order?.shop_whatsapp_link && (
-            <a
-              href={order.shop_whatsapp_link}
-              target="_blank"
-              rel="noopener noreferrer"
-              className="inline-block bg-green-600 text-white px-4 py-2 rounded-lg font-medium hover:bg-green-700 transition"
-            >
-              Confirmer par WhatsApp
-            </a>
-          )}
-          <p className="text-xs text-gray-500 mt-2">
-            Ouvre WhatsApp avec un message pre-rempli (recapitulatif + adresse de livraison) a envoyer a la boutique.
+          <p className="text-brand-dark font-medium mb-1">Paiement confirme !</p>
+          <p className="text-sm text-gray-600">
+            Vous allez recevoir la confirmation de votre commande par WhatsApp au{" "}
+            <span className="font-medium">{order?.customer_phone}</span>, avec le recapitulatif et votre adresse de
+            livraison.
           </p>
         </div>
       )}

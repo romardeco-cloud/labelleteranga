@@ -35,8 +35,12 @@ export default function AdminOrdersPage() {
     if (!confirm("Confirmer la reception du paiement especes pour cette commande ?")) return;
     setBusyRef(reference);
     try {
-      await markOrderPaid(reference);
+      const order = await markOrderPaid(reference);
       reload();
+      // ouvre directement WhatsApp vers le client avec la confirmation pre-remplie
+      if (order.customer_whatsapp_link) {
+        window.open(order.customer_whatsapp_link, "_blank", "noopener,noreferrer");
+      }
     } finally {
       setBusyRef(null);
     }
@@ -97,8 +101,9 @@ export default function AdminOrdersPage() {
                     target="_blank"
                     rel="noopener noreferrer"
                     className="block text-xs bg-green-600 text-white px-2 py-1 rounded text-center"
+                    title="Ouvre WhatsApp pour envoyer la confirmation au client"
                   >
-                    Confirmer WhatsApp
+                    Envoyer au client
                   </a>
                 )}
               </td>
