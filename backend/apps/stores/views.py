@@ -73,14 +73,21 @@ class StoreCategoryViewSet(viewsets.ModelViewSet):
     def _annotate(self, links):
         stats = {}
         stores = {l.point_of_sale_id for l in links}
+        # actifs = visibles en caisse ; masques (is_active = non) = comptes dans la categorie mais absents de la caisse
         for row in (
             Stock.objects.filter(point_of_sale_id__in=stores)
-            .values("point_of_sale_id", "product__category_id")
+            .values("point_of_sale_id", "product__category_id", "product__is_active")
             .annotate(n=Count("id"), qty=Sum("quantity"))
         ):
-            stats[(row["point_of_sale_id"], row["product__category_id"])] = (row["n"], row["qty"] or 0)
+            key = (row["point_of_sale_id"], row["product__category_id"])
+            active, hidden, qty = stats.get(key, (0, 0, 0))
+            if row["product__is_active"]:
+                active, qty = active + row["n"], qty + (row["qty"] or 0)
+            else:
+                hidden += row["n"]
+            stats[key] = (active, hidden, qty)
         for l in links:
-            l.products_count, l.stock_total = stats.get((l.point_of_sale_id, l.category_id), (0, 0))
+            l.products_count, l.hidden_count, l.stock_total = stats.get((l.point_of_sale_id, l.category_id), (0, 0, 0))
         return links
 
     def get_queryset(self):

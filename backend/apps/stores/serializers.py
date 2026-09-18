@@ -171,10 +171,11 @@ def pos_settings(store):
 
 class StoreCategorySerializer(serializers.ModelSerializer):
     name = serializers.CharField(source="category.name", read_only=True)
-    products_count = serializers.IntegerField(read_only=True, default=0)
+    products_count = serializers.IntegerField(read_only=True, default=0)  # produits actifs (visibles en caisse)
+    hidden_count = serializers.IntegerField(read_only=True, default=0)  # produits masques (non actifs)
     stock_total = serializers.IntegerField(read_only=True, default=0)
 
     class Meta:
         model = StoreCategory
-        fields = ["id", "point_of_sale", "category", "name", "order", "products_count", "stock_total"]
+        fields = ["id", "point_of_sale", "category", "name", "order", "products_count", "hidden_count", "stock_total"]
         read_only_fields = ["category"]

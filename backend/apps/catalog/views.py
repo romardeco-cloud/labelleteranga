@@ -108,6 +108,17 @@ class ProductViewSet(viewsets.ModelViewSet):
                 }
             )
 
+    @action(detail=False, methods=["post"], permission_classes=[permissions.IsAdminUser], url_path="bulk-activate")
+    def bulk_activate(self, request):
+        """POST {point_of_sale} : active les produits masques de ce point de vente qui ont un prix superieur a 0."""
+        store = self._store_from(request.data.get("point_of_sale"))
+        if not store:
+            raise ValidationError({"point_of_sale": "Choisissez un point de vente."})
+        qs = Product.objects.filter(is_active=False, price__gt=0, stocks__point_of_sale=store)
+        updated = Product.objects.filter(pk__in=list(qs.values_list("pk", flat=True))).update(is_active=True)
+        skipped = Product.objects.filter(is_active=False, price__lte=0, stocks__point_of_sale=store).distinct().count()
+        return Response({"activated": updated, "still_hidden_without_price": skipped})
+
     @staticmethod
     def _store_from(value):
         if not value:

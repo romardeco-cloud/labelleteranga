@@ -48,6 +48,7 @@ export default function AdminProductsPage() {
   const fileInputRef = useRef<HTMLInputElement>(null);
   const [storeId, setStoreId] = useState<number | null>(null);
   const [search, setSearch] = useState("");
+  const [statusFilter, setStatusFilter] = useState<"all" | "active" | "hidden">("all");
   const [uploadingId, setUploadingId] = useState<number | null>(null);
   const [photoMsg, setPhotoMsg] = useState("");
   const [photoErr, setPhotoErr] = useState("");
@@ -59,7 +60,12 @@ export default function AdminProductsPage() {
   function reload() {
     api
       .get("/catalog/products/", {
-        params: { page_size: 500, ...(storeId ? { point_of_sale: storeId } : {}), ...(search ? { search } : {}) },
+        params: {
+          page_size: 500,
+          ...(storeId ? { point_of_sale: storeId } : {}),
+          ...(search ? { search } : {}),
+          ...(statusFilter !== "all" ? { is_active: statusFilter === "active" ? "true" : "false" } : {}),
+        },
       })
       .then((res) => setProducts(res.data.results ?? res.data));
   }
@@ -77,7 +83,7 @@ export default function AdminProductsPage() {
     const t = setTimeout(reload, 250);
     return () => clearTimeout(t);
     // eslint-disable-next-line react-hooks/exhaustive-deps
-  }, [storeId, search]);
+  }, [storeId, search, statusFilter]);
 
   async function handleCreate(e: React.FormEvent) {
     e.preventDefault();
@@ -316,6 +322,39 @@ export default function AdminProductsPage() {
             </button>
           ))}
         </div>
+        <div className="flex gap-1 border rounded-xl p-1 bg-white">
+          {(
+            [
+              ["all", "Tous"],
+              ["active", "En caisse"],
+              ["hidden", "Masques"],
+            ] as const
+          ).map(([key, label]) => (
+            <button
+              key={key}
+              onClick={() => setStatusFilter(key)}
+              className={`px-3 py-1.5 rounded-lg text-sm ${statusFilter === key ? "bg-brand text-white" : "text-gray-500 hover:text-brand"}`}
+            >
+              {label}
+            </button>
+          ))}
+        </div>
+        {storeId && statusFilter === "hidden" && products.length > 0 && (
+          <button
+            onClick={async () => {
+              if (!confirm("Activer tous les produits masques de ce point de vente qui ont un prix ?")) return;
+              const res = await api.post("/catalog/products/bulk-activate/", { point_of_sale: storeId });
+              setPhotoMsg(
+                `${res.data.activated} produit(s) active(s).` +
+                  (res.data.still_hidden_without_price ? ` ${res.data.still_hidden_without_price} reste(nt) masque(s) : prix a renseigner.` : "")
+              );
+              reload();
+            }}
+            className="border border-brand text-brand rounded-lg px-3 py-2 text-sm"
+          >
+            Activer les produits masques avec un prix
+          </button>
+        )}
         <input
           type="search"
           placeholder="Rechercher un produit ou une reference..."

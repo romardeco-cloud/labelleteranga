@@ -1,5 +1,6 @@
 "use client";
 
+import Link from "next/link";
 import { useCallback, useEffect, useState } from "react";
 import Icon from "@/components/admin/Icon";
 import { Category, PointOfSale, fetchCategories, fetchPointsOfSale } from "@/lib/api";
@@ -165,10 +166,19 @@ export default function AdminCategoriesPage() {
                 </label>
                 {l.stock_total > 0 ? (
                   <span className="px-2 py-0.5 rounded-md bg-emerald-500/15 text-emerald-400 text-xs">
-                    {l.products_count} produit{l.products_count > 1 ? "s" : ""} · stock {l.stock_total}
+                    {l.products_count} en caisse · stock {l.stock_total}
                   </span>
                 ) : (
                   <span className="px-2 py-0.5 rounded-md bg-amber-500/15 text-amber-400 text-xs">Sans stock</span>
+                )}
+                {l.hidden_count > 0 && (
+                  <Link
+                    href="/admin/products"
+                    className="px-2 py-0.5 rounded-md bg-rose-500/15 text-rose-400 text-xs"
+                    title="Ces produits sont masques (inactifs) : ils n'apparaissent ni en caisse ni sur le site. Activez-les dans Produits."
+                  >
+                    {l.hidden_count} masque{l.hidden_count > 1 ? "s" : ""} (absents de la caisse)
+                  </Link>
                 )}
               </div>
             </div>

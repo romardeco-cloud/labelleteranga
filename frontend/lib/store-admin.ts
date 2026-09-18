@@ -8,6 +8,7 @@ export type StoreCategory = {
   name: string;
   order: number;
   products_count: number;
+  hidden_count: number;
   stock_total: number;
 };
 

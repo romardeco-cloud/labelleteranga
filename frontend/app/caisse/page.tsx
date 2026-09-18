@@ -127,6 +127,18 @@ export default function CaissePage() {
     heldLoaded.current = true;
   }, [session, loadProducts, loadClosing]);
 
+  // Catalogue a jour sans recharger : un produit active ou reapprovisionne apparait dans la minute.
+  useEffect(() => {
+    if (!session) return;
+    const refresh = () => document.visibilityState === "visible" && loadProducts();
+    const t = setInterval(refresh, 60000);
+    document.addEventListener("visibilitychange", refresh);
+    return () => {
+      clearInterval(t);
+      document.removeEventListener("visibilitychange", refresh);
+    };
+  }, [session, loadProducts]);
+
   useEffect(() => {
     if (!session || !heldLoaded.current) return;
     try {
