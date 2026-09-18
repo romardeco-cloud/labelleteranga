@@ -8,12 +8,17 @@ backend/staticfiles/
 backend/media/
 backend/venv/
 backend/.venv/
+backend/*.log
 
 # Frontend (Next.js)
 frontend/node_modules/
 frontend/.next/
 frontend/.env.local
 frontend/out/
+frontend/*.log
+
+# Exports/artefacts de test
+*.xlsx
 
 # OS
 .DS_Store

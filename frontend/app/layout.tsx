@@ -13,8 +13,14 @@ export default function RootLayout({ children }: { children: React.ReactNode }) 
       <body>
         <Navbar />
         <main className="min-h-screen">{children}</main>
-        <footer className="border-t mt-16 py-8 text-center text-sm text-gray-500">
-          © {new Date().getFullYear()} La Belle Teranga — Labelleteranga.com
+        <footer className="border-t mt-16 py-8 text-center text-sm text-gray-500 space-y-1">
+          <p>© {new Date().getFullYear()} La Belle Teranga — Labelleteranga.com</p>
+          <p>
+            Contact :{" "}
+            <a href="mailto:info@labelleteranga.com" className="text-brand hover:underline">
+              info@labelleteranga.com
+            </a>
+          </p>
         </footer>
       </body>
     </html>
