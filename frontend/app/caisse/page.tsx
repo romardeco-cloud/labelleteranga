@@ -1,7 +1,8 @@
 "use client";
 
-import { useCallback, useEffect, useMemo, useState } from "react";
+import { useCallback, useEffect, useMemo, useRef, useState } from "react";
 import Image from "next/image";
+import Icon from "@/components/admin/Icon";
 import ProductVisual from "@/components/ProductVisual";
 import { PAYMENT_QR, storeImage } from "@/lib/branding";
 import {
@@ -14,6 +15,7 @@ import {
   cashierLogin,
   createPOSSale,
   fetchPOSProducts,
+  fetchPOSSalesToday,
 } from "@/lib/api";
 
 const METHODS: { value: PaymentMethod; label: string }[] = [
@@ -23,11 +25,17 @@ const METHODS: { value: PaymentMethod; label: string }[] = [
   { value: "card", label: "Carte" },
 ];
 
+const NO_CATEGORY = "Sans categorie";
+
 function xof(v: number | string) {
   return new Intl.NumberFormat("fr-SN", { maximumFractionDigits: 0 }).format(Number(v)) + " FCFA";
 }
 
 type Line = { product: POSProduct; quantity: number };
+type Held = { id: number; at: string; lines: Line[] };
+
+const heldKey = (username: string) => `lbt_pos_held_${username}`;
+const linesTotal = (lines: Line[]) => lines.reduce((s, l) => s + Number(l.product.effective_price) * l.quantity, 0);
 
 export default function CaissePage() {
   const [session, setSession] = useState<{ username: string; store: string } | null>(null);
@@ -36,13 +44,20 @@ export default function CaissePage() {
   const [loginError, setLoginError] = useState("");
 
   const [search, setSearch] = useState("");
+  const [category, setCategory] = useState("all");
   const [products, setProducts] = useState<POSProduct[]>([]);
   const [lines, setLines] = useState<Line[]>([]);
+  const [held, setHeld] = useState<Held[]>([]);
+  const heldLoaded = useRef(false);
+  const [panel, setPanel] = useState<"held" | "history" | null>(null);
+  const [history, setHistory] = useState<POSReceipt[]>([]);
+  const [historyLoading, setHistoryLoading] = useState(false);
   const [method, setMethod] = useState<PaymentMethod>("cash");
   const [received, setReceived] = useState("");
   const [error, setError] = useState("");
   const [busy, setBusy] = useState(false);
   const [receipt, setReceipt] = useState<POSReceipt | null>(null);
+  const [reprint, setReprint] = useState(false);
   const [closingState, setClosingState] = useState<CashierClosingState | null>(null);
   const [closingMode, setClosingMode] = useState(false);
   const [counted, setCounted] = useState({ cash: "", wave: "", orange_money: "", card: "" });
@@ -58,13 +73,14 @@ export default function CaissePage() {
     setChecked(true);
   }, []);
 
-  const loadProducts = useCallback(async (q: string) => {
+  const loadProducts = useCallback(async () => {
     try {
-      const data = await fetchPOSProducts(q);
+      const data = await fetchPOSProducts("");
       setProducts(data.results);
     } catch (e: any) {
       if (e?.response?.status === 401 || e?.response?.status === 403) logout();
     }
+    // eslint-disable-next-line react-hooks/exhaustive-deps
   }, []);
 
   const loadClosing = useCallback(async () => {
@@ -74,8 +90,23 @@ export default function CaissePage() {
   }, []);
 
   useEffect(() => {
-    if (session) loadClosing();
-  }, [session, loadClosing]);
+    if (!session) return;
+    loadProducts();
+    loadClosing();
+    try {
+      setHeld(JSON.parse(localStorage.getItem(heldKey(session.username)) ?? "[]"));
+    } catch {
+      setHeld([]);
+    }
+    heldLoaded.current = true;
+  }, [session, loadProducts, loadClosing]);
+
+  useEffect(() => {
+    if (!session || !heldLoaded.current) return;
+    try {
+      localStorage.setItem(heldKey(session.username), JSON.stringify(held));
+    } catch {}
+  }, [held, session]);
 
   function startClosing() {
     const c = closingState?.closing;
@@ -91,6 +122,7 @@ export default function CaissePage() {
     );
     setClosingNotes(c?.notes ?? "");
     setClosingError("");
+    setPanel(null);
     setClosingMode(true);
   }
 
@@ -116,17 +148,14 @@ export default function CaissePage() {
     }
   }
 
-  useEffect(() => {
-    if (!session) return;
-    const t = setTimeout(() => loadProducts(search), 250);
-    return () => clearTimeout(t);
-  }, [session, search, loadProducts]);
-
   function logout() {
     localStorage.removeItem("lbt_cashier_token");
     localStorage.removeItem("lbt_cashier_info");
+    heldLoaded.current = false;
     setSession(null);
     setLines([]);
+    setHeld([]);
+    setPanel(null);
     setClosingState(null);
     setClosingMode(false);
   }
@@ -173,22 +202,76 @@ export default function CaissePage() {
     );
   }
 
+  const removeLine = (id: number) => setLines((prev) => prev.filter((l) => l.product.id !== id));
+
+  /* ----- ventes en attente ----- */
+  function holdCurrent() {
+    if (lines.length === 0) return;
+    setHeld((h) => [{ id: Date.now(), at: new Date().toISOString(), lines }, ...h]);
+    setLines([]);
+    setReceived("");
+    setError("");
+  }
+
+  function resume(h: Held) {
+    // Remet a jour prix et stock depuis le catalogue courant ; ignore les produits disparus.
+    const fresh: Line[] = [];
+    for (const l of h.lines) {
+      const p = products.find((x) => x.id === l.product.id);
+      if (p && p.stock > 0) fresh.push({ product: p, quantity: Math.min(l.quantity, p.stock) });
+    }
+    setHeld((all) => {
+      const rest = all.filter((x) => x.id !== h.id);
+      return lines.length ? [{ id: Date.now(), at: new Date().toISOString(), lines }, ...rest] : rest;
+    });
+    setLines(fresh);
+    setPanel(null);
+  }
+
+  /* ----- historique du jour ----- */
+  async function openHistory() {
+    setPanel("history");
+    setHistoryLoading(true);
+    try {
+      setHistory(await fetchPOSSalesToday());
+    } catch {
+      setHistory([]);
+    } finally {
+      setHistoryLoading(false);
+    }
+  }
+
+  /* ----- catalogue ----- */
+  const categories = useMemo(() => {
+    const map = new Map<string, number>();
+    products.forEach((p) => map.set(p.category ?? NO_CATEGORY, (map.get(p.category ?? NO_CATEGORY) ?? 0) + 1));
+    return Array.from(map.entries()).sort((a, b) => a[0].localeCompare(b[0], "fr"));
+  }, [products]);
+
+  const visible = useMemo(() => {
+    const q = search.trim().toLowerCase();
+    return products.filter(
+      (p) =>
+        (category === "all" || (p.category ?? NO_CATEGORY) === category) &&
+        (!q || p.name.toLowerCase().includes(q) || p.sku.toLowerCase().includes(q))
+    );
+  }, [products, category, search]);
+
   function onSearchEnter(e: React.KeyboardEvent<HTMLInputElement>) {
     if (e.key !== "Enter") return;
     const exact = products.find((p) => p.sku.toLowerCase() === search.trim().toLowerCase());
-    const target = exact ?? (products.length === 1 ? products[0] : null);
+    const target = exact ?? (visible.length === 1 ? visible[0] : null);
     if (target && target.stock > 0) {
       addProduct(target);
       setSearch("");
     }
   }
 
-  const total = useMemo(
-    () => lines.reduce((s, l) => s + Number(l.product.effective_price) * l.quantity, 0),
-    [lines]
-  );
+  const total = useMemo(() => linesTotal(lines), [lines]);
+  const itemsCount = lines.reduce((n, l) => n + l.quantity, 0);
   const receivedNum = Number(received || 0);
   const change = method === "cash" && received ? receivedNum - total : null;
+  const inCart = (id: number) => lines.find((l) => l.product.id === id)?.quantity ?? 0;
 
   async function validate() {
     setError("");
@@ -204,15 +287,16 @@ export default function CaissePage() {
         payment_method: method,
         amount_received: method === "cash" && received ? receivedNum : null,
       });
+      setReprint(false);
       setReceipt(r);
       setLines([]);
       setReceived("");
-      loadProducts(search);
+      loadProducts();
     } catch (e: any) {
       const d = e?.response?.data;
       const msg = d?.items ?? d?.amount_received ?? d?.detail ?? "Impossible d'enregistrer la vente.";
       setError(typeof msg === "string" ? msg : JSON.stringify(msg));
-      loadProducts(search);
+      loadProducts();
     } finally {
       setBusy(false);
     }
@@ -220,333 +304,494 @@ export default function CaissePage() {
 
   if (!checked) return <p className="p-8">Chargement...</p>;
 
+  /* ---------------- Connexion ---------------- */
   if (!session) {
     return (
-      <div className="max-w-sm mx-auto px-4 py-16">
-        <Image src="/logo.jpg" alt="La Belle Teranga" width={80} height={80} className="rounded-full mx-auto mb-4" />
-        <h1 className="text-2xl font-bold mb-1 text-center">Caisse</h1>
-        <p className="text-sm text-gray-500 text-center mb-6">Connexion caissier</p>
-        <form onSubmit={handleLogin} className="space-y-3">
-          <input
-            required
-            placeholder="Identifiant"
-            value={loginForm.username}
-            onChange={(e) => setLoginForm({ ...loginForm, username: e.target.value })}
-            className="w-full border rounded px-3 py-2"
-          />
-          <input
-            required
-            type="password"
-            placeholder="Mot de passe"
-            value={loginForm.password}
-            onChange={(e) => setLoginForm({ ...loginForm, password: e.target.value })}
-            className="w-full border rounded px-3 py-2"
-          />
-          {loginError && <p className="text-red-500 text-sm">{loginError}</p>}
-          <button className="w-full bg-brand text-white py-2.5 rounded-lg font-medium hover:bg-brand-dark">
-            Ouvrir la caisse
-          </button>
-        </form>
+      <div className="admin-shell min-h-screen flex items-center justify-center px-4">
+        <div className="w-full max-w-sm bg-[#1c1514] border rounded-2xl p-6">
+          <Image src="/logo.jpg" alt="La Belle Teranga" width={80} height={80} className="rounded-full mx-auto mb-4 ring-2 ring-brand-accent" />
+          <h1 className="text-2xl font-bold mb-1 text-center">Caisse</h1>
+          <p className="text-sm text-gray-500 text-center mb-6">Connexion caissier</p>
+          <form onSubmit={handleLogin} className="space-y-3">
+            <input
+              required
+              placeholder="Identifiant"
+              value={loginForm.username}
+              onChange={(e) => setLoginForm({ ...loginForm, username: e.target.value })}
+              className="w-full border rounded-lg px-3 py-2.5"
+            />
+            <input
+              required
+              type="password"
+              placeholder="Mot de passe"
+              value={loginForm.password}
+              onChange={(e) => setLoginForm({ ...loginForm, password: e.target.value })}
+              className="w-full border rounded-lg px-3 py-2.5"
+            />
+            {loginError && <p className="text-red-500 text-sm">{loginError}</p>}
+            <button className="w-full bg-brand text-white py-2.5 rounded-lg font-medium hover:opacity-90">Ouvrir la caisse</button>
+          </form>
+        </div>
       </div>
     );
   }
 
+  const closed = !!closingState?.closed;
+  const showCatalog = !closingMode && !closed;
+
   return (
-    <div className="max-w-7xl mx-auto px-3 py-4">
-      <div className="flex items-center justify-between mb-3 print:hidden">
-        <div className="flex items-center gap-3">
-          <Image
-            src={storeImage(session.store)}
-            alt={session.store}
-            width={72}
-            height={48}
-            className="h-12 w-auto object-contain"
-          />
-          <div>
-            <h1 className="text-xl font-bold">Caisse — {session.store}</h1>
-            <p className="text-xs text-gray-500">Caissier : {session.username}</p>
+    <div className="admin-shell min-h-screen lg:h-screen flex flex-col print:h-auto print:block">
+      <div className="flex flex-col flex-1 min-h-0 print:hidden">
+        {/* Barre du haut */}
+        <header className="flex flex-wrap items-center gap-3 px-4 py-3 border-b bg-[#170f0e]">
+          <div className="flex items-center gap-3 mr-2">
+            <Image src={storeImage(session.store)} alt={session.store} width={72} height={48} className="h-10 w-auto object-contain" />
+            <div className="leading-tight hidden sm:block">
+              <p className="font-bold text-sm">{session.store}</p>
+              <p className="text-xs text-gray-500">Caissier : {session.username}</p>
+            </div>
           </div>
-        </div>
-        <div className="flex items-center gap-4">
-          {!closingMode && (
-            <button onClick={startClosing} className="text-sm border border-brand text-brand rounded px-3 py-1.5">
-              {closingState?.closed ? "Voir / corriger ma fermeture" : "Fermer ma caisse"}
+
+          <div className="relative flex-1 min-w-[180px] max-w-md">
+            <Icon name="search" className="w-4 h-4 absolute left-3 top-1/2 -translate-y-1/2 text-gray-500" />
+            <input
+              autoFocus
+              type="search"
+              placeholder="Rechercher ou scanner une reference (Entree)"
+              value={search}
+              onChange={(e) => setSearch(e.target.value)}
+              onKeyDown={onSearchEnter}
+              className="w-full border rounded-xl pl-9 pr-3 py-2.5 text-sm focus:outline-none focus:border-[#f5b942]"
+            />
+          </div>
+
+          <div className="flex flex-wrap items-center gap-2 ml-auto">
+            <button
+              onClick={() => setPanel(panel === "held" ? null : "held")}
+              className={`flex items-center gap-2 border rounded-xl px-3 py-2 text-sm ${
+                held.length ? "border-[#f5b942]/60 text-[#f5b942]" : "text-gray-500"
+              }`}
+            >
+              <Icon name="clock" className="w-4 h-4" /> En attente{held.length ? ` (${held.length})` : ""}
             </button>
-          )}
-          <button onClick={logout} className="text-sm text-red-500">
-            Se deconnecter
-          </button>
-        </div>
-      </div>
+            <button onClick={openHistory} className="flex items-center gap-2 border rounded-xl px-3 py-2 text-sm hover:bg-white/5">
+              <Icon name="list" className="w-4 h-4" /> Historique
+            </button>
+            {!closingMode && (
+              <button onClick={startClosing} className="flex items-center gap-2 border rounded-xl px-3 py-2 text-sm hover:bg-white/5">
+                <Icon name="lock" className="w-4 h-4" /> {closed ? "Ma fermeture" : "Fermeture"}
+              </button>
+            )}
+            <button onClick={logout} className="flex items-center gap-2 border rounded-xl px-3 py-2 text-sm text-red-400 hover:bg-white/5">
+              <Icon name="logout" className="w-4 h-4" />
+              <span className="hidden sm:inline">Deconnexion</span>
+            </button>
+          </div>
+        </header>
 
-      {closingMode && (
-        <div className="max-w-xl mx-auto bg-white border rounded-lg p-5 print:hidden">
-          <h2 className="text-lg font-bold mb-1">
-            {closingState?.closed ? "Corriger ma fermeture de caisse" : "Fermeture de caisse"}
-          </h2>
-          {closingState?.closed && closingState.closing ? (
-            <p className="text-sm text-gray-500 mb-3">
-              Verifiez l&apos;ecart ci-dessous, recomptez, puis corrigez vos montants si necessaire.
-            </p>
-          ) : (
-            <p className="text-sm text-gray-500 mb-3">
-              Comptez ce que vous avez encaisse aujourd&apos;hui pour chaque moyen de paiement (
-              {closingState?.sales_count ?? 0} vente(s) enregistree(s)). Le total attendu vous sera montre apres
-              validation.
-            </p>
-          )}
+        <div className="flex flex-col lg:flex-row flex-1 min-h-0">
+          {/* ---------- Zone centrale ---------- */}
+          <section className="flex-1 min-w-0 flex flex-col">
+            {closingMode && (
+              <div className="p-4 lg:overflow-y-auto">
+                <div className="max-w-xl mx-auto bg-[#1c1514] border rounded-2xl p-5">
+                  <h2 className="text-lg font-bold mb-1">
+                    {closed ? "Corriger ma fermeture de caisse" : "Fermeture de caisse"}
+                  </h2>
+                  {closed && closingState?.closing ? (
+                    <p className="text-sm text-gray-500 mb-3">
+                      Verifiez l&apos;ecart ci-dessous, recomptez, puis corrigez vos montants si necessaire.
+                    </p>
+                  ) : (
+                    <p className="text-sm text-gray-500 mb-3">
+                      Comptez ce que vous avez encaisse aujourd&apos;hui pour chaque moyen de paiement ({closingState?.sales_count ?? 0}{" "}
+                      vente(s) enregistree(s)). Le total attendu vous sera montre apres validation.
+                    </p>
+                  )}
 
-          {closingState?.closing && (
-            <table className="w-full text-sm mb-4">
-              <thead>
-                <tr className="text-left text-gray-500">
-                  <th>Moyen</th>
-                  <th>Attendu</th>
-                  <th>Compte</th>
-                  <th>Ecart</th>
-                </tr>
-              </thead>
-              <tbody>
-                {[
-                  ["Especes", closingState.closing.expected_cash, closingState.closing.declared_cash, closingState.closing.discrepancy_cash],
-                  ["Wave", closingState.closing.expected_wave, closingState.closing.declared_wave, closingState.closing.discrepancy_wave],
-                  ["Orange Money", closingState.closing.expected_orange_money, closingState.closing.declared_orange_money, closingState.closing.discrepancy_orange_money],
-                  ["Carte", closingState.closing.expected_card, closingState.closing.declared_card, closingState.closing.discrepancy_card],
-                ].map(([label, exp, dec, gap]) => (
-                  <tr key={label} className="border-t">
-                    <td className="py-1">{label}</td>
-                    <td>{xof(exp)}</td>
-                    <td>{xof(dec)}</td>
-                    <td className={Number(gap) === 0 ? "text-green-600" : "text-red-600 font-medium"}>
-                      {Number(gap) > 0 ? "+" : ""}
-                      {xof(gap)}
-                    </td>
-                  </tr>
+                  {closingState?.closing && (
+                    <table className="w-full text-sm mb-4">
+                      <thead>
+                        <tr className="text-left text-gray-500">
+                          <th>Moyen</th>
+                          <th>Attendu</th>
+                          <th>Compte</th>
+                          <th>Ecart</th>
+                        </tr>
+                      </thead>
+                      <tbody>
+                        {[
+                          ["Especes", closingState.closing.expected_cash, closingState.closing.declared_cash, closingState.closing.discrepancy_cash],
+                          ["Wave", closingState.closing.expected_wave, closingState.closing.declared_wave, closingState.closing.discrepancy_wave],
+                          ["Orange Money", closingState.closing.expected_orange_money, closingState.closing.declared_orange_money, closingState.closing.discrepancy_orange_money],
+                          ["Carte", closingState.closing.expected_card, closingState.closing.declared_card, closingState.closing.discrepancy_card],
+                        ].map(([label, exp, dec, gap]) => (
+                          <tr key={label} className="border-t">
+                            <td className="py-1">{label}</td>
+                            <td>{xof(exp)}</td>
+                            <td>{xof(dec)}</td>
+                            <td className={Number(gap) === 0 ? "text-green-600" : "text-red-600 font-medium"}>
+                              {Number(gap) > 0 ? "+" : ""}
+                              {xof(gap)}
+                            </td>
+                          </tr>
+                        ))}
+                        <tr className="border-t font-semibold">
+                          <td className="py-1">Total</td>
+                          <td>{xof(closingState.closing.expected_total)}</td>
+                          <td>{xof(closingState.closing.declared_total)}</td>
+                          <td className={Number(closingState.closing.discrepancy_total) === 0 ? "text-green-600" : "text-red-600"}>
+                            {Number(closingState.closing.discrepancy_total) > 0 ? "+" : ""}
+                            {xof(closingState.closing.discrepancy_total)}
+                          </td>
+                        </tr>
+                      </tbody>
+                    </table>
+                  )}
+                  {closingState?.closing && closingState.closing.revision_count > 0 && (
+                    <p className="text-xs text-gray-500 mb-3">
+                      Ecart initial : {xof(closingState.closing.initial_discrepancy_total)} — {closingState.closing.revision_count}{" "}
+                      correction(s) enregistree(s) (visibles par l&apos;administrateur).
+                    </p>
+                  )}
+
+                  <form onSubmit={submitClosing} className="space-y-3">
+                    <div className="grid grid-cols-2 gap-3">
+                      {(
+                        [
+                          ["cash", "Especes comptees"],
+                          ["wave", "Wave recu"],
+                          ["orange_money", "Orange Money recu"],
+                          ["card", "Carte (total terminal)"],
+                        ] as const
+                      ).map(([key, label]) => (
+                        <label key={key} className="text-sm">
+                          {label}
+                          <input
+                            type="number"
+                            min={0}
+                            value={counted[key]}
+                            onChange={(e) => setCounted({ ...counted, [key]: e.target.value })}
+                            placeholder="0"
+                            className="w-full border rounded-lg px-3 py-2 mt-1"
+                          />
+                        </label>
+                      ))}
+                    </div>
+                    <label className="text-sm block">
+                      Remarque (facultatif)
+                      <textarea
+                        value={closingNotes}
+                        onChange={(e) => setClosingNotes(e.target.value)}
+                        rows={2}
+                        className="w-full border rounded-lg px-3 py-2 mt-1"
+                      />
+                    </label>
+                    {closingError && <p className="text-red-500 text-sm">{closingError}</p>}
+                    <div className="flex gap-2">
+                      <button disabled={closingBusy} className="flex-1 bg-brand text-white py-2.5 rounded-lg font-medium disabled:opacity-50">
+                        {closingBusy ? "Enregistrement..." : closed ? "Enregistrer la correction" : "Valider la fermeture"}
+                      </button>
+                      <button type="button" onClick={() => setClosingMode(false)} className="border rounded-lg px-4">
+                        Retour
+                      </button>
+                    </div>
+                  </form>
+                </div>
+              </div>
+            )}
+
+            {!closingMode && closed && (
+              <div className="p-4">
+                <div className="max-w-xl mx-auto bg-[#251c1a] border border-[#f5b942]/40 rounded-2xl p-5 text-center">
+                  <p className="font-semibold text-[#f5b942]">Caisse fermee pour aujourd&apos;hui</p>
+                  <p className="text-sm text-gray-500 mt-1">
+                    Ecart : {xof(closingState?.closing?.discrepancy_total ?? 0)}. Les ventes sont bloquees jusqu&apos;a demain. Touchez
+                    &laquo; Ma fermeture &raquo; pour recompter.
+                  </p>
+                </div>
+              </div>
+            )}
+
+            {showCatalog && (
+              <>
+                {/* Categories */}
+                <div className="flex gap-2 overflow-x-auto px-4 py-3 border-b shrink-0 [scrollbar-width:none] [&::-webkit-scrollbar]:hidden">
+                  {[["all", "Tout", products.length] as const, ...categories.map(([n, c]) => [n, n, c] as const)].map(([key, label, count]) => (
+                    <button
+                      key={key}
+                      onClick={() => setCategory(key)}
+                      className={`shrink-0 px-4 py-2 rounded-xl text-sm font-medium border whitespace-nowrap ${
+                        category === key ? "bg-[#f5b942] text-[#241010] border-[#f5b942]" : "text-gray-300 hover:border-[#f5b942]/60"
+                      }`}
+                    >
+                      {label} <span className="opacity-60 text-xs">{count}</span>
+                    </button>
+                  ))}
+                </div>
+
+                {/* Produits */}
+                <div className="flex-1 lg:overflow-y-auto p-4">
+                  <div className="grid grid-cols-2 sm:grid-cols-3 xl:grid-cols-4 2xl:grid-cols-5 gap-3">
+                    {visible.map((p) => {
+                      const qty = inCart(p.id);
+                      const out = p.stock <= 0;
+                      return (
+                        <button
+                          key={p.id}
+                          disabled={out}
+                          onClick={() => addProduct(p)}
+                          className={`text-left border rounded-2xl overflow-hidden bg-[#1c1514] flex flex-col transition hover:border-[#f5b942] disabled:opacity-40 ${
+                            qty ? "border-[#f5b942] ring-1 ring-[#f5b942]/40" : ""
+                          }`}
+                        >
+                          <div className="relative aspect-[4/3] bg-[#251c1a] overflow-hidden">
+                            <div className="absolute inset-0">
+                              <ProductVisual image={p.image} name={p.name} category={p.category} />
+                            </div>
+                            {qty > 0 && (
+                              <span className="absolute top-2 right-2 bg-[#f5b942] text-[#241010] text-xs font-bold rounded-full min-w-6 h-6 px-1.5 flex items-center justify-center">
+                                {qty}
+                              </span>
+                            )}
+                            {p.promotion && (
+                              <span className="absolute top-2 left-2 bg-[#b3261e] text-white text-[11px] font-medium rounded-md px-1.5 py-0.5">
+                                {p.promotion}
+                              </span>
+                            )}
+                            {out && (
+                              <span className="absolute inset-0 bg-black/60 flex items-center justify-center text-sm font-semibold">Rupture</span>
+                            )}
+                          </div>
+                          <div className="p-3 flex-1 flex flex-col">
+                            <p className="font-semibold text-sm leading-tight line-clamp-2 min-h-[2.25rem]">{p.name}</p>
+                            <p className="mt-1.5 font-bold text-[#f5b942]">
+                              {xof(p.effective_price)}
+                              {p.promotion && <span className="ml-1.5 text-xs font-normal line-through text-gray-500">{xof(p.price)}</span>}
+                            </p>
+                            <p className="text-[11px] text-gray-500 mt-0.5">{out ? "Rupture" : `Stock : ${p.stock}`}</p>
+                          </div>
+                        </button>
+                      );
+                    })}
+                  </div>
+                  {visible.length === 0 && (
+                    <p className="text-gray-500 text-center py-16">{products.length === 0 ? "Aucun produit disponible." : "Aucun produit ne correspond."}</p>
+                  )}
+                </div>
+              </>
+            )}
+          </section>
+
+          {/* ---------- Panier ---------- */}
+          <aside className={`lg:w-[380px] lg:shrink-0 border-t lg:border-t-0 lg:border-l bg-[#170f0e] flex flex-col lg:min-h-0 ${showCatalog ? "" : "hidden"}`}>
+            <div className="flex items-center justify-between px-4 py-3 border-b">
+              <h2 className="font-semibold">
+                Panier {itemsCount > 0 && <span className="text-sm text-gray-500 font-normal">({itemsCount} article{itemsCount > 1 ? "s" : ""})</span>}
+              </h2>
+              {lines.length > 0 && (
+                <button onClick={() => setLines([])} className="text-xs text-gray-500 hover:text-red-400">
+                  Vider
+                </button>
+              )}
+            </div>
+
+            <div className="flex-1 lg:overflow-y-auto min-h-[8rem]">
+              {lines.length === 0 ? (
+                <div className="h-full flex flex-col items-center justify-center text-center px-6 py-10">
+                  <span className="w-14 h-14 rounded-2xl bg-white/5 flex items-center justify-center mb-3 text-gray-500">
+                    <Icon name="card" className="w-6 h-6" />
+                  </span>
+                  <p className="font-medium text-gray-400">Panier vide</p>
+                  <p className="text-sm text-gray-500">Ajoutez des produits</p>
+                </div>
+              ) : (
+                <ul className="divide-y">
+                  {lines.map((l) => (
+                    <li key={l.product.id} className="px-4 py-3 flex items-center gap-3">
+                      <div className="w-12 h-12 rounded-lg overflow-hidden shrink-0 bg-[#251c1a]">
+                        <ProductVisual image={l.product.image} name={l.product.name} category={l.product.category} size="tile" />
+                      </div>
+                      <div className="flex-1 min-w-0">
+                        <p className="text-sm font-medium leading-tight truncate">{l.product.name}</p>
+                        <p className="text-xs text-gray-500">{xof(l.product.effective_price)}</p>
+                        <div className="flex items-center gap-1.5 mt-1.5">
+                          <button onClick={() => changeQty(l.product.id, -1)} className="w-7 h-7 border rounded-lg hover:bg-white/5">
+                            −
+                          </button>
+                          <span className="w-7 text-center text-sm">{l.quantity}</span>
+                          <button onClick={() => changeQty(l.product.id, 1)} className="w-7 h-7 border rounded-lg hover:bg-white/5">
+                            +
+                          </button>
+                        </div>
+                      </div>
+                      <div className="text-right">
+                        <p className="text-sm font-semibold">{xof(Number(l.product.effective_price) * l.quantity)}</p>
+                        <button onClick={() => removeLine(l.product.id)} aria-label="Retirer" className="mt-2 text-gray-500 hover:text-red-400">
+                          <Icon name="trash" className="w-4 h-4" />
+                        </button>
+                      </div>
+                    </li>
+                  ))}
+                </ul>
+              )}
+            </div>
+
+            <div className="border-t p-4 space-y-3">
+              <div className="flex justify-between items-baseline">
+                <span className="text-gray-400">Total</span>
+                <span className="text-2xl font-bold text-[#f5b942]">{xof(total)}</span>
+              </div>
+
+              <div className="grid grid-cols-2 gap-2">
+                {METHODS.map((m) => (
+                  <button
+                    key={m.value}
+                    onClick={() => setMethod(m.value)}
+                    className={`py-2 rounded-xl border text-sm ${
+                      method === m.value ? "bg-[#b3261e] text-white border-[#b3261e]" : "text-gray-300 hover:border-[#f5b942]/60"
+                    }`}
+                  >
+                    {m.label}
+                  </button>
                 ))}
-                <tr className="border-t font-semibold">
-                  <td className="py-1">Total</td>
-                  <td>{xof(closingState.closing.expected_total)}</td>
-                  <td>{xof(closingState.closing.declared_total)}</td>
-                  <td className={Number(closingState.closing.discrepancy_total) === 0 ? "text-green-600" : "text-red-600"}>
-                    {Number(closingState.closing.discrepancy_total) > 0 ? "+" : ""}
-                    {xof(closingState.closing.discrepancy_total)}
-                  </td>
-                </tr>
-              </tbody>
-            </table>
-          )}
-          {closingState?.closing && closingState.closing.revision_count > 0 && (
-            <p className="text-xs text-gray-500 mb-3">
-              Ecart initial : {xof(closingState.closing.initial_discrepancy_total)} —{" "}
-              {closingState.closing.revision_count} correction(s) enregistree(s) (visibles par l&apos;administrateur).
-            </p>
-          )}
+              </div>
 
-          <form onSubmit={submitClosing} className="space-y-3">
-            <div className="grid grid-cols-2 gap-3">
-              {(
-                [
-                  ["cash", "Especes comptees"],
-                  ["wave", "Wave recu"],
-                  ["orange_money", "Orange Money recu"],
-                  ["card", "Carte (total terminal)"],
-                ] as const
-              ).map(([key, label]) => (
-                <label key={key} className="text-sm">
-                  {label}
+              {PAYMENT_QR[method] && lines.length > 0 && (
+                <div className="text-center">
+                  <p className="text-xs text-gray-500 mb-1">Le client scanne ce code pour payer {xof(total)}</p>
+                  <Image
+                    src={PAYMENT_QR[method].src}
+                    alt={PAYMENT_QR[method].alt}
+                    width={PAYMENT_QR[method].width}
+                    height={PAYMENT_QR[method].height}
+                    className="mx-auto max-h-64 w-auto rounded-xl border"
+                  />
+                  <p className="text-xs text-gray-500 mt-1">Validez la vente seulement apres reception du paiement.</p>
+                </div>
+              )}
+
+              {method === "cash" && lines.length > 0 && (
+                <div>
                   <input
                     type="number"
                     min={0}
-                    value={counted[key]}
-                    onChange={(e) => setCounted({ ...counted, [key]: e.target.value })}
-                    placeholder="0"
-                    className="w-full border rounded px-3 py-2 mt-1"
+                    placeholder="Montant recu (optionnel)"
+                    value={received}
+                    onChange={(e) => setReceived(e.target.value)}
+                    className="w-full border rounded-xl px-3 py-2.5"
                   />
-                </label>
-              ))}
-            </div>
-            <label className="text-sm block">
-              Remarque (facultatif)
-              <textarea
-                value={closingNotes}
-                onChange={(e) => setClosingNotes(e.target.value)}
-                rows={2}
-                className="w-full border rounded px-3 py-2 mt-1"
-              />
-            </label>
-            {closingError && <p className="text-red-600 text-sm">{closingError}</p>}
-            <div className="flex gap-2">
+                  {change !== null && (
+                    <p className={`text-sm mt-1 ${change < 0 ? "text-red-400" : "text-gray-400"}`}>
+                      {change < 0 ? `Manque ${xof(-change)}` : `A rendre : ${xof(change)}`}
+                    </p>
+                  )}
+                </div>
+              )}
+
+              {error && <p className="text-red-400 text-sm">{error}</p>}
+
               <button
-                disabled={closingBusy}
-                className="flex-1 bg-brand text-white py-2.5 rounded-lg font-medium disabled:opacity-50"
+                onClick={validate}
+                disabled={busy || lines.length === 0}
+                className="w-full bg-[#b3261e] text-white py-3.5 rounded-xl font-semibold hover:opacity-90 disabled:opacity-40"
               >
-                {closingBusy
-                  ? "Enregistrement..."
-                  : closingState?.closed
-                    ? "Enregistrer la correction"
-                    : "Valider la fermeture"}
+                {busy ? "Enregistrement..." : `Encaisser ${xof(total)}`}
               </button>
-              <button type="button" onClick={() => setClosingMode(false)} className="border rounded-lg px-4">
-                Retour
-              </button>
-            </div>
-          </form>
-        </div>
-      )}
-
-      {!closingMode && closingState?.closed && (
-        <div className="max-w-xl mx-auto bg-brand-light border border-brand-accent/50 rounded-lg p-5 text-center mb-4 print:hidden">
-          <p className="font-semibold text-brand-dark">Caisse fermee pour aujourd&apos;hui</p>
-          <p className="text-sm text-gray-600 mt-1">
-            Ecart : {xof(closingState.closing?.discrepancy_total ?? 0)}. Les ventes sont bloquees jusqu&apos;a demain.
-            Touchez &laquo; Voir / corriger ma fermeture &raquo; pour recompter.
-          </p>
-        </div>
-      )}
-
-      <div className={`grid lg:grid-cols-3 gap-4 print:hidden ${closingMode || closingState?.closed ? "hidden" : ""}`}>
-        <div className="lg:col-span-2">
-          <input
-            autoFocus
-            type="search"
-            placeholder="Rechercher un produit ou saisir/scanner une reference (Entree pour ajouter)"
-            value={search}
-            onChange={(e) => setSearch(e.target.value)}
-            onKeyDown={onSearchEnter}
-            className="w-full border border-brand/30 rounded-lg px-4 py-3 mb-3 focus:outline-none focus:ring-2 focus:ring-brand-accent"
-          />
-          <div className="grid grid-cols-2 sm:grid-cols-3 xl:grid-cols-4 gap-2">
-            {products.map((p) => (
-              <button
-                key={p.id}
-                disabled={p.stock <= 0}
-                onClick={() => addProduct(p)}
-                className="text-left border rounded-lg bg-white p-3 hover:border-brand disabled:opacity-40 transition"
-              >
-                <span className="flex items-start gap-2">
-                  <span className="w-11 h-11 shrink-0 rounded overflow-hidden">
-                    <ProductVisual image={p.image} name={p.name} category={p.category} size="tile" />
-                  </span>
-                  <span>
-                    <span className="block font-medium leading-tight">{p.name}</span>
-                    <span className="block text-xs text-gray-400">{p.sku}</span>
-                  </span>
-                </span>
-                {p.promotion && (
-                  <span className="inline-block text-xs bg-brand-accent text-brand-dark px-1.5 rounded mt-1">
-                    {p.promotion}
-                  </span>
-                )}
-                <span className="block mt-1 font-bold text-brand-dark">{xof(p.effective_price)}</span>
-                <span className={`block text-xs ${p.stock > 0 ? "text-gray-500" : "text-red-500"}`}>
-                  {p.stock > 0 ? `Stock : ${p.stock}` : "Rupture"}
-                </span>
-              </button>
-            ))}
-            {products.length === 0 && <p className="text-gray-500 col-span-full">Aucun produit.</p>}
-          </div>
-        </div>
-
-        <div className="bg-white border rounded-lg p-3 h-fit lg:sticky lg:top-20">
-          <h2 className="font-semibold mb-2">Vente en cours</h2>
-          {lines.length === 0 ? (
-            <p className="text-sm text-gray-400 mb-3">Aucun article. Touchez un produit pour l&apos;ajouter.</p>
-          ) : (
-            <ul className="divide-y mb-3">
-              {lines.map((l) => (
-                <li key={l.product.id} className="py-2 flex items-center justify-between gap-2 text-sm">
-                  <span className="flex-1">
-                    {l.product.name}
-                    <span className="block text-xs text-gray-400">{xof(l.product.effective_price)}</span>
-                  </span>
-                  <span className="flex items-center gap-1">
-                    <button onClick={() => changeQty(l.product.id, -1)} className="w-7 h-7 border rounded">
-                      -
-                    </button>
-                    <span className="w-6 text-center">{l.quantity}</span>
-                    <button onClick={() => changeQty(l.product.id, 1)} className="w-7 h-7 border rounded">
-                      +
-                    </button>
-                  </span>
-                  <span className="w-24 text-right font-medium">
-                    {xof(Number(l.product.effective_price) * l.quantity)}
-                  </span>
-                </li>
-              ))}
-            </ul>
-          )}
-
-          <div className="flex justify-between text-lg font-bold border-t pt-2 mb-3">
-            <span>Total</span>
-            <span className="text-brand-dark">{xof(total)}</span>
-          </div>
-
-          <div className="grid grid-cols-2 gap-2 mb-3">
-            {METHODS.map((m) => (
-              <button
-                key={m.value}
-                onClick={() => setMethod(m.value)}
-                className={`py-2 rounded border text-sm ${
-                  method === m.value ? "bg-brand text-white border-brand" : "bg-white hover:border-brand"
-                }`}
-              >
-                {m.label}
-              </button>
-            ))}
-          </div>
-
-          {PAYMENT_QR[method] && (
-            <div className="mb-3 text-center">
-              <p className="text-xs text-gray-500 mb-1">Le client scanne ce code pour payer {xof(total)}</p>
-              <Image
-                src={PAYMENT_QR[method].src}
-                alt={PAYMENT_QR[method].alt}
-                width={PAYMENT_QR[method].width}
-                height={PAYMENT_QR[method].height}
-                className="mx-auto max-h-72 w-auto rounded-lg border"
-              />
-              <p className="text-xs text-gray-500 mt-1">Validez la vente seulement apres reception du paiement.</p>
-            </div>
-          )}
-
-          {method === "cash" && (
-            <div className="mb-3">
-              <input
-                type="number"
-                min={0}
-                placeholder="Montant recu (optionnel)"
-                value={received}
-                onChange={(e) => setReceived(e.target.value)}
-                className="w-full border rounded px-3 py-2"
-              />
-              {change !== null && (
-                <p className={`text-sm mt-1 ${change < 0 ? "text-red-600" : "text-gray-600"}`}>
-                  {change < 0 ? `Manque ${xof(-change)}` : `A rendre : ${xof(change)}`}
-                </p>
+              {lines.length > 0 && (
+                <button onClick={holdCurrent} className="w-full flex items-center justify-center gap-2 border rounded-xl py-2.5 text-sm text-gray-300 hover:bg-white/5">
+                  <Icon name="pause" className="w-4 h-4" /> Mettre en attente
+                </button>
               )}
             </div>
-          )}
-
-          {error && <p className="text-red-600 text-sm mb-2">{error}</p>}
-
-          <button
-            onClick={validate}
-            disabled={busy || lines.length === 0}
-            className="w-full bg-brand text-white py-3 rounded-lg font-semibold hover:bg-brand-dark disabled:opacity-40"
-          >
-            {busy ? "Enregistrement..." : `Encaisser ${xof(total)}`}
-          </button>
-          {lines.length > 0 && (
-            <button onClick={() => setLines([])} className="w-full text-xs text-gray-500 mt-2 underline">
-              Annuler la vente
-            </button>
-          )}
+          </aside>
         </div>
       </div>
 
+      {/* Ventes en attente / historique */}
+      {panel && (
+        <div className="fixed inset-0 z-40 bg-black/60 flex items-start justify-end print:hidden" onClick={() => setPanel(null)}>
+          <div className="w-full max-w-md h-full bg-[#170f0e] border-l overflow-y-auto" onClick={(e) => e.stopPropagation()}>
+            <div className="flex items-center justify-between px-4 py-3 border-b sticky top-0 bg-[#170f0e]">
+              <h2 className="font-semibold">{panel === "held" ? "Ventes en attente" : "Historique du jour"}</h2>
+              <button onClick={() => setPanel(null)} className="text-gray-500 text-sm">
+                Fermer
+              </button>
+            </div>
+
+            {panel === "held" && (
+              <ul className="divide-y">
+                {held.length === 0 && <li className="p-6 text-center text-gray-500 text-sm">Aucune vente en attente.</li>}
+                {held.map((h) => (
+                  <li key={h.id} className="p-4 flex items-center justify-between gap-3">
+                    <div className="min-w-0">
+                      <p className="text-sm font-medium">
+                        {h.lines.reduce((n, l) => n + l.quantity, 0)} article(s) — {xof(linesTotal(h.lines))}
+                      </p>
+                      <p className="text-xs text-gray-500 truncate">
+                        {new Date(h.at).toLocaleTimeString("fr-FR", { hour: "2-digit", minute: "2-digit" })} ·{" "}
+                        {h.lines.map((l) => l.product.name).join(", ")}
+                      </p>
+                    </div>
+                    <div className="flex gap-2 shrink-0">
+                      <button onClick={() => resume(h)} className="bg-brand text-white text-sm rounded-lg px-3 py-1.5">
+                        Reprendre
+                      </button>
+                      <button onClick={() => setHeld((all) => all.filter((x) => x.id !== h.id))} aria-label="Supprimer" className="text-gray-500 hover:text-red-400">
+                        <Icon name="trash" className="w-4 h-4" />
+                      </button>
+                    </div>
+                  </li>
+                ))}
+              </ul>
+            )}
+
+            {panel === "history" && (
+              <>
+                {history.length > 0 && (
+                  <div className="px-4 py-3 border-b text-sm text-gray-400">
+                    {history.length} vente(s) — total {xof(history.reduce((s, r) => s + Number(r.total), 0))}
+                  </div>
+                )}
+                <ul className="divide-y">
+                  {historyLoading && <li className="p-6 text-center text-gray-500 text-sm">Chargement...</li>}
+                  {!historyLoading && history.length === 0 && (
+                    <li className="p-6 text-center text-gray-500 text-sm">Aucune vente enregistree aujourd&apos;hui.</li>
+                  )}
+                  {history.map((r) => (
+                    <li key={r.reference} className="p-4 flex items-center justify-between gap-3">
+                      <div>
+                        <p className="text-sm font-medium">
+                          {xof(r.total)} <span className="text-gray-500 font-normal">· {r.payment_method_label}</span>
+                        </p>
+                        <p className="text-xs text-gray-500">
+                          Ticket {r.receipt_number} ·{" "}
+                          {new Date(r.created_at).toLocaleTimeString("fr-FR", { hour: "2-digit", minute: "2-digit" })}
+                        </p>
+                      </div>
+                      <button
+                        onClick={() => {
+                          setReprint(true);
+                          setReceipt(r);
+                          setPanel(null);
+                        }}
+                        className="border rounded-lg px-3 py-1.5 text-sm hover:bg-white/5"
+                      >
+                        Reimprimer
+                      </button>
+                    </li>
+                  ))}
+                </ul>
+              </>
+            )}
+          </div>
+        </div>
+      )}
+
+      {/* Ticket */}
       {receipt && (
-        <div className="fixed inset-0 bg-black/50 flex items-center justify-center p-4 z-50 print:static print:bg-transparent print:p-0">
-          <div className="bg-white rounded-lg p-5 w-full max-w-sm print:shadow-none print:max-w-none">
+        <div className="fixed inset-0 bg-black/60 flex items-center justify-center p-4 z-50 print:static print:bg-transparent print:p-0">
+          <div className="rounded-xl p-5 w-full max-w-sm print:shadow-none print:max-w-none" style={{ background: "#fff", color: "#111" }}>
             <div id="receipt" className="font-mono text-sm">
               <p className="text-center font-bold">La Belle Teranga</p>
               <p className="text-center">{receipt.point_of_sale}</p>
@@ -591,11 +836,11 @@ export default function CaissePage() {
               <p className="text-center text-xs">L&apos;art du service</p>
             </div>
             <div className="flex gap-2 mt-4 print:hidden">
-              <button onClick={() => window.print()} className="flex-1 border rounded py-2">
+              <button onClick={() => window.print()} className="flex-1 border border-gray-300 rounded-lg py-2">
                 Imprimer le ticket
               </button>
-              <button onClick={() => setReceipt(null)} className="flex-1 bg-brand text-white rounded py-2">
-                Nouvelle vente
+              <button onClick={() => setReceipt(null)} className="flex-1 bg-brand text-white rounded-lg py-2">
+                {reprint ? "Fermer" : "Nouvelle vente"}
               </button>
             </div>
           </div>

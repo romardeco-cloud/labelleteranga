@@ -19,18 +19,7 @@ export default function Navbar() {
       .catch(() => setCount(0));
   }, [isPos, isAdmin]);
 
-  if (isAdmin) return null;
-
-  if (isPos) {
-    return (
-      <header className="bg-brand text-white sticky top-0 z-20 shadow-md border-b-2 border-brand-accent print:hidden">
-        <div className="max-w-7xl mx-auto flex items-center gap-3 px-4 py-2.5">
-          <Image src="/logo.jpg" alt="La Belle Teranga" width={40} height={40} className="rounded-full ring-2 ring-brand-accent" />
-          <span className="font-bold text-brand-accent">La Belle Teranga — Caisse</span>
-        </div>
-      </header>
-    );
-  }
+  if (isAdmin || isPos) return null;
 
   return (
     <header className="bg-brand text-white sticky top-0 z-20 shadow-md border-b-2 border-brand-accent">

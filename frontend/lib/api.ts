@@ -413,6 +413,11 @@ export async function fetchPOSProducts(search: string) {
   return data;
 }
 
+export async function fetchPOSSalesToday() {
+  const { data } = await api.get<POSReceipt[]>("/pos/sales/");
+  return data;
+}
+
 export async function createPOSSale(input: {
   items: { product: number; quantity: number }[];
   payment_method: PaymentMethod;

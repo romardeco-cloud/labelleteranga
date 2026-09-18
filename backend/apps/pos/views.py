@@ -4,6 +4,7 @@ from rest_framework.views import APIView
 
 from apps.accounts.permissions import IsCashier
 from apps.catalog.models import Product
+from apps.orders.models import Order
 from apps.stores.models import Stock
 
 from django.utils import timezone
@@ -25,7 +26,7 @@ class POSProductListView(APIView):
         search = request.query_params.get("search", "").strip()
         if search:
             qs = qs.filter(Q(name__icontains=search) | Q(sku__icontains=search))
-        qs = qs.order_by("name")[:80]
+        qs = qs.order_by("name")[:1000]
 
         stock_by_product = dict(
             Stock.objects.filter(point_of_sale=store, product__in=qs).values_list("product_id", "quantity")
@@ -51,13 +52,63 @@ class POSProductListView(APIView):
         return Response({"point_of_sale": store.name, "results": results})
 
 
+METHOD_LABELS = {
+    "cash": "Especes",
+    "card": "Carte bancaire",
+    "wave": "Wave",
+    "orange_money": "Orange Money",
+}
+
+
+def receipt_payload(order, profile, received=None):
+    """Donnees du ticket de caisse (vente et reimpression depuis l'historique)."""
+    total = order.total_amount
+    return {
+        "reference": order.reference,
+        "receipt_number": order.reference[:8].upper(),
+        "created_at": order.created_at,
+        "point_of_sale": profile.point_of_sale.name,
+        "cashier": profile.user.username,
+        "customer_name": order.customer_name,
+        "payment_method": order.payment_method,
+        "payment_method_label": METHOD_LABELS.get(order.payment_method, order.payment_method),
+        "items": [
+            {
+                "name": i.product_name,
+                "quantity": i.quantity,
+                "unit_price": str(i.unit_price),
+                "subtotal": str(i.subtotal),
+            }
+            for i in order.items.all()
+        ],
+        "total": str(total),
+        "amount_received": str(received) if received is not None else None,
+        "change": str(received - total) if received is not None and received >= total else None,
+    }
+
+
 class POSSaleView(APIView):
     """
     POST /api/pos/sales/
     body: {items: [{product, quantity}], payment_method, customer_name?, amount_received?}
+    GET  /api/pos/sales/ -> historique des ventes du jour de ce caissier (pour reimprimer un ticket)
     """
 
     permission_classes = [IsCashier]
+
+    def get(self, request):
+        profile = request.user.cashier_profile
+        orders = (
+            Order.objects.filter(
+                channel=Order.Channel.POS,
+                cashier=request.user,
+                status=Order.Status.PAID,
+                created_at__date=timezone.localdate(),
+            )
+            .prefetch_related("items")
+            .order_by("-created_at")
+        )
+        return Response([receipt_payload(o, profile) for o in orders])
 
     def post(self, request):
         profile = request.user.cashier_profile
@@ -68,37 +119,7 @@ class POSSaleView(APIView):
             request.data.get("customer_name", ""),
             request.data.get("amount_received"),
         )
-        total = order.total_amount
-        return Response(
-            {
-                "reference": order.reference,
-                "receipt_number": order.reference[:8].upper(),
-                "created_at": order.created_at,
-                "point_of_sale": profile.point_of_sale.name,
-                "cashier": request.user.username,
-                "customer_name": order.customer_name,
-                "payment_method": order.payment_method,
-                "payment_method_label": {
-                    "cash": "Especes",
-                    "card": "Carte bancaire",
-                    "wave": "Wave",
-                    "orange_money": "Orange Money",
-                }.get(order.payment_method, order.payment_method),
-                "items": [
-                    {
-                        "name": i.product_name,
-                        "quantity": i.quantity,
-                        "unit_price": str(i.unit_price),
-                        "subtotal": str(i.subtotal),
-                    }
-                    for i in order.items.all()
-                ],
-                "total": str(total),
-                "amount_received": str(received) if received is not None else None,
-                "change": str(received - total) if received is not None and received >= total else None,
-            },
-            status=201,
-        )
+        return Response(receipt_payload(order, profile, received), status=201)
 
 
 class POSClosingView(APIView):
