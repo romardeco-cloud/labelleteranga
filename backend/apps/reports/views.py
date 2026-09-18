@@ -1,13 +1,19 @@
+from datetime import date as date_cls
 from datetime import timedelta
 
 from django.db.models import Count, Sum
 from django.db.models.functions import TruncDate, TruncMonth, TruncYear
 from django.utils import timezone
+from rest_framework import status, viewsets
+from rest_framework.decorators import action
 from rest_framework.permissions import IsAdminUser
 from rest_framework.response import Response
 from rest_framework.views import APIView
 
 from apps.orders.models import Order
+
+from .models import DailyClosing
+from .serializers import DailyClosingSerializer
 
 
 def _paid_orders_qs(start=None, end=None):
@@ -17,6 +23,17 @@ def _paid_orders_qs(start=None, end=None):
     if end:
         qs = qs.filter(paid_at__lt=end)
     return qs
+
+
+def _compute_expected_totals(for_date):
+    """Totaux payes ce jour-la, par moyen de paiement (utilise pour la cloture)."""
+    totals = {key: 0 for key, _ in Order.PaymentMethod.choices}
+    qs = Order.objects.filter(status=Order.Status.PAID, paid_at__date=for_date).values("payment_method").annotate(
+        total=Sum("total_amount")
+    )
+    for row in qs:
+        totals[row["payment_method"]] = row["total"] or 0
+    return totals
 
 
 class DailySalesView(APIView):
@@ -130,3 +147,90 @@ class PreviousMonthsView(APIView):
             .order_by("month")
         )
         return Response(list(qs))
+
+
+class PaymentMethodBreakdownView(APIView):
+    """
+    GET /api/reports/by-payment-method/?period=today|month|year
+    Repartition du chiffre d'affaires par moyen de paiement sur la periode.
+    """
+
+    permission_classes = [IsAdminUser]
+
+    def get(self, request):
+        period = request.query_params.get("period", "month")
+        now = timezone.now()
+        if period == "today":
+            start = now.replace(hour=0, minute=0, second=0, microsecond=0)
+        elif period == "year":
+            start = now.replace(month=1, day=1, hour=0, minute=0, second=0, microsecond=0)
+        else:
+            start = now.replace(day=1, hour=0, minute=0, second=0, microsecond=0)
+
+        qs = (
+            _paid_orders_qs(start=start)
+            .values("payment_method")
+            .annotate(revenue=Sum("total_amount"), orders_count=Count("id"))
+            .order_by("payment_method")
+        )
+        return Response(list(qs))
+
+
+class DailyClosingViewSet(viewsets.ModelViewSet):
+    """
+    Cloture de caisse journaliere.
+
+    GET  /api/reports/closings/                 -> historique des clotures
+    GET  /api/reports/closings/preview/?date=... -> montants attendus pour une date, sans sauvegarder
+    POST /api/reports/closings/                  -> cloture une journee (body: date, declared_*, notes)
+    PATCH /api/reports/closings/<date>/           -> corrige une cloture existante
+    """
+
+    queryset = DailyClosing.objects.all()
+    serializer_class = DailyClosingSerializer
+    permission_classes = [IsAdminUser]
+    lookup_field = "date"
+
+    def _apply_expected_totals(self, serializer, for_date):
+        totals = _compute_expected_totals(for_date)
+        serializer.save(
+            expected_card=totals.get(Order.PaymentMethod.CARD, 0),
+            expected_wave=totals.get(Order.PaymentMethod.WAVE, 0),
+            expected_orange_money=totals.get(Order.PaymentMethod.ORANGE_MONEY, 0),
+            expected_cash=totals.get(Order.PaymentMethod.CASH, 0),
+        )
+
+    def perform_create(self, serializer):
+        for_date = serializer.validated_data["date"]
+        serializer.save(closed_by=self.request.user)
+        self._apply_expected_totals(serializer, for_date)
+
+    def perform_update(self, serializer):
+        for_date = serializer.instance.date
+        self._apply_expected_totals(serializer, for_date)
+
+    @action(detail=False, methods=["get"])
+    def preview(self, request):
+        date_str = request.query_params.get("date")
+        if not date_str:
+            return Response({"detail": "Parametre date requis (YYYY-MM-DD)."}, status=status.HTTP_400_BAD_REQUEST)
+        try:
+            for_date = date_cls.fromisoformat(date_str)
+        except ValueError:
+            return Response({"detail": "Date invalide."}, status=status.HTTP_400_BAD_REQUEST)
+
+        totals = _compute_expected_totals(for_date)
+        existing = DailyClosing.objects.filter(date=for_date).first()
+        return Response(
+            {
+                "date": date_str,
+                "expected": {
+                    "card": totals.get(Order.PaymentMethod.CARD, 0),
+                    "wave": totals.get(Order.PaymentMethod.WAVE, 0),
+                    "orange_money": totals.get(Order.PaymentMethod.ORANGE_MONEY, 0),
+                    "cash": totals.get(Order.PaymentMethod.CASH, 0),
+                },
+                "already_closed": existing is not None,
+                "closing": DailyClosingSerializer(existing).data if existing else None,
+            }
+        )

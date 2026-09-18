@@ -150,9 +150,13 @@ ORANGE_MONEY_MERCHANT_KEY = os.environ.get("ORANGE_MONEY_MERCHANT_KEY", "")
 # votre contrat marchand Orange Money avant mise en production.
 ORANGE_MONEY_CURRENCY = os.environ.get("ORANGE_MONEY_CURRENCY", "XOF")
 
-# WhatsApp (Meta WhatsApp Cloud API - optionnel, voir apps/notifications/whatsapp.py)
+# WhatsApp Cloud API (Meta) - voir apps/notifications/whatsapp.py pour le
+# detail de la configuration et le texte exact du modele a faire approuver
 WHATSAPP_ACCESS_TOKEN = os.environ.get("WHATSAPP_ACCESS_TOKEN", "")
 WHATSAPP_PHONE_NUMBER_ID = os.environ.get("WHATSAPP_PHONE_NUMBER_ID", "")
+WHATSAPP_API_VERSION = os.environ.get("WHATSAPP_API_VERSION", "v21.0")
+WHATSAPP_TEMPLATE_NAME = os.environ.get("WHATSAPP_TEMPLATE_NAME", "")
+WHATSAPP_TEMPLATE_LANGUAGE = os.environ.get("WHATSAPP_TEMPLATE_LANGUAGE", "fr")
 # Numero WhatsApp de la boutique (format international sans "+", ex: 221771234567)
 WHATSAPP_SHOP_NUMBER = os.environ.get("WHATSAPP_SHOP_NUMBER", "")
 

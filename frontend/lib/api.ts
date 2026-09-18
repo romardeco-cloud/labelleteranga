@@ -152,6 +152,74 @@ export async function markOrderPaid(reference: string) {
   return data;
 }
 
+export type PaymentBreakdownRow = {
+  payment_method: PaymentMethod;
+  revenue: number;
+  orders_count: number;
+};
+
+export async function fetchPaymentBreakdown(period: "today" | "month" | "year") {
+  const { data } = await api.get<PaymentBreakdownRow[]>("/reports/by-payment-method/", { params: { period } });
+  return data;
+}
+
+export type DailyClosing = {
+  id: number;
+  date: string;
+  closed_by_username: string | null;
+  closed_at: string;
+  updated_at: string;
+  expected_card: string;
+  expected_wave: string;
+  expected_orange_money: string;
+  expected_cash: string;
+  expected_total: string;
+  declared_card: string;
+  declared_wave: string;
+  declared_orange_money: string;
+  declared_cash: string;
+  declared_total: string;
+  discrepancy_card: string;
+  discrepancy_wave: string;
+  discrepancy_orange_money: string;
+  discrepancy_cash: string;
+  discrepancy_total: string;
+  notes: string;
+};
+
+export type ClosingPreview = {
+  date: string;
+  expected: { card: number; wave: number; orange_money: number; cash: number };
+  already_closed: boolean;
+  closing: DailyClosing | null;
+};
+
+export async function fetchClosingPreview(date: string) {
+  const { data } = await api.get<ClosingPreview>("/reports/closings/preview/", { params: { date } });
+  return data;
+}
+
+export async function fetchClosings() {
+  const { data } = await api.get("/reports/closings/", { params: { page_size: 100 } });
+  return (data.results ?? data) as DailyClosing[];
+}
+
+export type ClosingInput = {
+  date: string;
+  declared_card: number;
+  declared_wave: number;
+  declared_orange_money: number;
+  declared_cash: number;
+  notes: string;
+};
+
+export async function saveClosing(input: ClosingInput, isUpdate: boolean) {
+  const { data } = isUpdate
+    ? await api.patch<DailyClosing>(`/reports/closings/${input.date}/`, input)
+    : await api.post<DailyClosing>("/reports/closings/", input);
+  return data;
+}
+
 export function getBrowserLocation(): Promise<{ lat: number; lng: number } | null> {
   return new Promise((resolve) => {
     if (typeof navigator === "undefined" || !navigator.geolocation) {

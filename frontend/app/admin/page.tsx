@@ -3,6 +3,7 @@
 import { useEffect, useState } from "react";
 import { api } from "@/lib/api";
 import SalesChart, { SalesPoint } from "@/components/SalesChart";
+import PaymentBreakdown from "@/components/PaymentBreakdown";
 
 type Summary = {
   today: { revenue: number; orders_count: number };
@@ -83,6 +84,10 @@ export default function AdminDashboardPage() {
           <Card title="Cette annee" revenue={summary.this_year.revenue} orders={summary.this_year.orders_count} />
         </div>
       )}
+
+      <section className="border rounded-lg bg-white p-4">
+        <PaymentBreakdown />
+      </section>
 
       <section>
         <h2 className="font-semibold mb-2">Ventes des 30 derniers jours</h2>
