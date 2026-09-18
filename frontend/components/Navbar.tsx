@@ -10,13 +10,16 @@ export default function Navbar() {
   const [count, setCount] = useState(0);
   const pathname = usePathname();
   const isPos = pathname?.startsWith("/caisse");
+  const isAdmin = !!pathname?.startsWith("/admin") && pathname !== "/admin/login";
 
   useEffect(() => {
-    if (isPos) return;
+    if (isPos || isAdmin) return;
     fetchCart()
       .then((cart) => setCount(cart.items.reduce((sum, i) => sum + i.quantity, 0)))
       .catch(() => setCount(0));
-  }, [isPos]);
+  }, [isPos, isAdmin]);
+
+  if (isAdmin) return null;
 
   if (isPos) {
     return (

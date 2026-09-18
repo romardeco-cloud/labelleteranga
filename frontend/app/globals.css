@@ -16,3 +16,115 @@ body {
     background: #fff;
   }
 }
+
+/* ---------- Espace administration : theme sombre (ecran uniquement, l'impression reste claire) ---------- */
+@media screen {
+  .admin-shell {
+    --a-bg: #120e0d;
+    --a-side: #170f0e;
+    --a-surface: #1c1514;
+    --a-surface-2: #251c1a;
+    --a-border: #33272a;
+    --a-text: #f1ebe8;
+    --a-muted: #a99b96;
+    background: var(--a-bg);
+    color: var(--a-text);
+    color-scheme: dark;
+  }
+  :where(.admin-shell) * {
+    border-color: var(--a-border);
+  }
+  .admin-shell .bg-white,
+  .admin-shell [class~="bg-white/90"] {
+    background-color: var(--a-surface);
+  }
+  .admin-shell .bg-gray-50,
+  .admin-shell .hover\:bg-gray-50:hover {
+    background-color: var(--a-surface-2);
+  }
+  .admin-shell .bg-brand-light,
+  .admin-shell [class~="bg-brand-light/60"] {
+    background-color: var(--a-surface-2);
+  }
+  .admin-shell .bg-gray-100 {
+    background-color: rgba(255, 255, 255, 0.08);
+    color: var(--a-muted);
+  }
+  .admin-shell .bg-green-50,
+  .admin-shell .bg-green-100 {
+    background-color: rgba(34, 197, 94, 0.14);
+    color: #86efac;
+  }
+  .admin-shell .bg-red-50,
+  .admin-shell .bg-red-100 {
+    background-color: rgba(239, 68, 68, 0.15);
+    color: #fca5a5;
+  }
+  .admin-shell .bg-yellow-50,
+  .admin-shell .bg-yellow-100 {
+    background-color: rgba(234, 179, 8, 0.15);
+    color: #fde68a;
+  }
+  .admin-shell .border-yellow-200 {
+    border-color: rgba(234, 179, 8, 0.35);
+  }
+  .admin-shell .text-gray-300,
+  .admin-shell .text-gray-400,
+  .admin-shell .text-gray-500,
+  .admin-shell .text-gray-600 {
+    color: var(--a-muted);
+  }
+  .admin-shell .text-gray-700,
+  .admin-shell .text-gray-800,
+  .admin-shell .text-gray-900 {
+    color: var(--a-text);
+  }
+  .admin-shell .text-brand,
+  .admin-shell .text-brand-dark {
+    color: #f5b942;
+  }
+  .admin-shell .text-red-500,
+  .admin-shell .text-red-600,
+  .admin-shell .text-red-700 {
+    color: #f87171;
+  }
+  .admin-shell .text-green-600,
+  .admin-shell .text-green-700,
+  .admin-shell .text-green-800 {
+    color: #4ade80;
+  }
+  .admin-shell .text-yellow-800 {
+    color: #fde68a;
+  }
+  .admin-shell .bg-brand {
+    background-color: #b3261e;
+  }
+  .admin-shell .bg-brand.text-white,
+  .admin-shell .bg-brand .text-white {
+    color: #fff;
+  }
+  .admin-shell input:not([type="checkbox"]):not([type="radio"]),
+  .admin-shell select,
+  .admin-shell textarea {
+    background-color: var(--a-surface-2);
+    color: var(--a-text);
+    border-color: #4a3a37;
+  }
+  .admin-shell input::placeholder,
+  .admin-shell textarea::placeholder {
+    color: #7d706b;
+  }
+  .admin-shell table thead {
+    color: var(--a-muted);
+  }
+  .admin-shell a.underline {
+    color: #f5b942;
+  }
+}
+
+@media print {
+  .admin-shell {
+    background: #fff !important;
+    color: #000 !important;
+  }
+}

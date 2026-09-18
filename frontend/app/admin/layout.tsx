@@ -1,14 +1,16 @@
 "use client";
 
+import Image from "next/image";
 import Link from "next/link";
 import { usePathname, useRouter } from "next/navigation";
 import { useEffect, useState } from "react";
+import Icon, { IconName } from "@/components/admin/Icon";
 import { clearAdminToken, getAdminToken } from "@/lib/auth";
 
-type NavItem = { href: string; label: string; exact?: boolean; match?: string[] };
+type NavItem = { href: string; label: string; icon: IconName; exact?: boolean; match?: string[] };
 
 // Onglet "Comptabilite" : regroupe tous les documents et etats financiers.
-const ACCOUNTING_TABS: NavItem[] = [
+const ACCOUNTING_TABS: { href: string; label: string; exact?: boolean }[] = [
   { href: "/admin/accounting", label: "Vue d'ensemble", exact: true },
   { href: "/admin/documents/quotes", label: "Devis" },
   { href: "/admin/documents/invoices", label: "Factures" },
@@ -21,17 +23,17 @@ const ACCOUNTING_TABS: NavItem[] = [
 const ACCOUNTING_PREFIXES = ["/admin/accounting", "/admin/documents", "/admin/closing", "/admin/contacts", "/admin/reports"];
 
 const MAIN_NAV: NavItem[] = [
-  { href: "/admin", label: "Tableau de bord", exact: true },
-  { href: "/admin/accounting", label: "Comptabilite", match: ACCOUNTING_PREFIXES },
-  { href: "/admin/inventory", label: "Inventaire" },
-  { href: "/admin/products", label: "Produits" },
-  { href: "/admin/promotions", label: "Promotions" },
-  { href: "/admin/orders", label: "Commandes" },
-  { href: "/admin/cashiers", label: "Caissiers" },
-  { href: "/admin/stores", label: "Points de vente" },
+  { href: "/admin", label: "Tableau de bord", icon: "dashboard", exact: true },
+  { href: "/admin/accounting", label: "Comptabilite", icon: "book", match: ACCOUNTING_PREFIXES },
+  { href: "/admin/inventory", label: "Inventaire", icon: "clipboard" },
+  { href: "/admin/products", label: "Produits", icon: "box" },
+  { href: "/admin/promotions", label: "Promotions", icon: "tag" },
+  { href: "/admin/orders", label: "Commandes", icon: "cart" },
+  { href: "/admin/cashiers", label: "Caissiers", icon: "users" },
+  { href: "/admin/stores", label: "Points de vente", icon: "store" },
 ];
 
-function isActive(pathname: string | null, item: NavItem) {
+function isActive(pathname: string | null, item: { href: string; exact?: boolean; match?: string[] }) {
   if (!pathname) return false;
   if (item.match) return item.match.some((p) => pathname.startsWith(p));
   return item.exact ? pathname === item.href : pathname.startsWith(item.href);
@@ -41,6 +43,7 @@ export default function AdminLayout({ children }: { children: React.ReactNode })
   const pathname = usePathname();
   const router = useRouter();
   const [ready, setReady] = useState(false);
+  const [menuOpen, setMenuOpen] = useState(false);
   const isLoginPage = pathname === "/admin/login";
 
   useEffect(() => {
@@ -51,41 +54,94 @@ export default function AdminLayout({ children }: { children: React.ReactNode })
     setReady(true);
   }, [isLoginPage, router]);
 
+  useEffect(() => setMenuOpen(false), [pathname]);
+
   if (isLoginPage) return <>{children}</>;
   if (!ready) return <p className="p-8">Verification...</p>;
 
   const inAccounting = ACCOUNTING_PREFIXES.some((p) => pathname?.startsWith(p));
 
-  return (
-    <div className="max-w-6xl mx-auto px-4 py-6">
-      <div className="print:hidden mb-6">
-        <div className="flex items-start justify-between gap-4">
-          <nav className="flex gap-x-5 gap-y-2 text-sm font-medium flex-wrap">
-            {MAIN_NAV.map((item) => (
-              <Link key={item.href} href={item.href} className={isActive(pathname, item) ? "text-brand" : "text-gray-500"}>
-                {item.label}
-              </Link>
-            ))}
-          </nav>
-          <button
-            onClick={() => {
-              clearAdminToken();
-              router.push("/admin/login");
-            }}
-            className="text-sm text-red-500 whitespace-nowrap"
-          >
-            Deconnexion
-          </button>
-        </div>
+  const logout = () => {
+    clearAdminToken();
+    router.push("/admin/login");
+  };
 
+  const sidebar = (
+    <div className="flex flex-col h-full">
+      <div className="flex items-center gap-3 px-4 py-5 border-b">
+        <Image src="/logo.jpg" alt="La Belle Teranga" width={44} height={44} className="rounded-full ring-2 ring-brand-accent" />
+        <div className="leading-tight">
+          <p className="font-bold text-white">La Belle Teranga</p>
+          <p className="text-xs text-brand-accent">Administration</p>
+        </div>
+      </div>
+
+      <nav className="flex-1 px-3 py-4 space-y-1 overflow-y-auto">
+        {MAIN_NAV.map((item) => {
+          const active = isActive(pathname, item);
+          return (
+            <Link
+              key={item.href}
+              href={item.href}
+              className={`flex items-center gap-3 px-3 py-2.5 rounded-lg text-sm font-medium transition ${
+                active ? "bg-[#b3261e]/25 text-[#f5b942]" : "text-[#a99b96] hover:bg-white/5 hover:text-white"
+              }`}
+            >
+              <Icon name={item.icon} />
+              {item.label}
+            </Link>
+          );
+        })}
+      </nav>
+
+      <div className="px-3 py-4 border-t space-y-1">
+        <Link href="/" className="flex items-center gap-3 px-3 py-2 rounded-lg text-sm text-[#a99b96] hover:bg-white/5 hover:text-white">
+          <Icon name="globe" />
+          Voir le site
+        </Link>
+        <button
+          onClick={logout}
+          className="w-full flex items-center gap-3 px-3 py-2 rounded-lg text-sm text-[#f87171] hover:bg-white/5"
+        >
+          <Icon name="logout" />
+          Deconnexion
+        </button>
+      </div>
+    </div>
+  );
+
+  return (
+    <div className="admin-shell min-h-screen lg:flex">
+      {/* Barre mobile */}
+      <div className="lg:hidden print:hidden flex items-center justify-between px-4 py-3 border-b bg-[#170f0e] sticky top-0 z-30">
+        <div className="flex items-center gap-2">
+          <Image src="/logo.jpg" alt="" width={32} height={32} className="rounded-full" />
+          <span className="font-semibold text-white">Administration</span>
+        </div>
+        <button onClick={() => setMenuOpen(!menuOpen)} aria-label="Menu" className="p-2 text-white">
+          <Icon name="menu" />
+        </button>
+      </div>
+
+      {/* Menu lateral */}
+      <aside
+        className={`print:hidden bg-[#170f0e] border-r lg:w-60 lg:shrink-0 lg:sticky lg:top-0 lg:h-screen lg:block ${
+          menuOpen ? "fixed inset-y-0 left-0 w-64 z-40 shadow-2xl" : "hidden"
+        }`}
+      >
+        {sidebar}
+      </aside>
+      {menuOpen && <div className="fixed inset-0 bg-black/60 z-30 lg:hidden" onClick={() => setMenuOpen(false)} />}
+
+      <div className="flex-1 min-w-0 px-4 sm:px-6 lg:px-8 py-6">
         {inAccounting && (
-          <nav className="mt-4 flex gap-1.5 flex-wrap bg-brand-light/60 border border-brand/10 rounded-lg p-1.5 text-sm">
+          <nav className="print:hidden mb-6 flex gap-1.5 flex-wrap bg-[#1c1514] border rounded-xl p-1.5 text-sm">
             {ACCOUNTING_TABS.map((item) => (
               <Link
                 key={item.href}
                 href={item.href}
-                className={`px-3 py-1.5 rounded-md ${
-                  isActive(pathname, item) ? "bg-brand text-white font-medium" : "text-gray-700 hover:bg-white"
+                className={`px-3 py-1.5 rounded-lg ${
+                  isActive(pathname, item) ? "bg-[#b3261e] text-white font-medium" : "text-[#a99b96] hover:bg-white/5 hover:text-white"
                 }`}
               >
                 {item.label}
@@ -93,8 +149,8 @@ export default function AdminLayout({ children }: { children: React.ReactNode })
             ))}
           </nav>
         )}
+        {children}
       </div>
-      {children}
     </div>
   );
 }

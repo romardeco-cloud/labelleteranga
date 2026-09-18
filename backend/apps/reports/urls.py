@@ -9,6 +9,7 @@ from .advanced import (
     PayablesView,
     ReceivablesView,
 )
+from .dashboard import DashboardView
 from .views import (
     DailyClosingViewSet,
     DailySalesView,
@@ -31,6 +32,7 @@ urlpatterns = [
     path("summary/", SummaryView.as_view()),
     path("by-payment-method/", PaymentMethodBreakdownView.as_view()),
     path("by-product/", ProductSalesView.as_view()),
+    path("dashboard/", DashboardView.as_view()),
     path("overview/", OverviewReportView.as_view()),
     path("inventory/", InventoryReportView.as_view()),
     path("receivables/", ReceivablesView.as_view()),
