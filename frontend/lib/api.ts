@@ -49,6 +49,8 @@ export type Product = {
   category: Category | null;
   price: string;
   compare_at_price: string | null;
+  effective_price: string;
+  active_promotion_name: string | null;
   total_stock: number;
   stocks: Stock[];
   unit: string;
@@ -56,6 +58,60 @@ export type Product = {
   is_active: boolean;
   in_stock: boolean;
 };
+
+export async function fetchCategories() {
+  const { data } = await api.get("/catalog/categories/", { params: { page_size: 100 } });
+  return (data.results ?? data) as Category[];
+}
+
+export async function createCategory(name: string) {
+  const { data } = await api.post<Category>("/catalog/categories/", { name });
+  return data;
+}
+
+export async function updateProduct(id: number, input: Record<string, unknown> | FormData) {
+  const { data } = await api.patch<Product>(`/catalog/products/${id}/`, input);
+  return data;
+}
+
+export type DiscountType = "percent" | "fixed";
+
+export type Promotion = {
+  id: number;
+  name: string;
+  discount_type: DiscountType;
+  value: string;
+  category: number | null;
+  category_name: string | null;
+  products: number[];
+  product_names: string[];
+  point_of_sale: number | null;
+  point_of_sale_name: string | null;
+  start_date: string;
+  end_date: string;
+  is_active: boolean;
+  is_current: boolean;
+  created_at: string;
+};
+
+export async function fetchPromotions() {
+  const { data } = await api.get("/catalog/promotions/", { params: { page_size: 100 } });
+  return (data.results ?? data) as Promotion[];
+}
+
+export async function createPromotion(input: Partial<Promotion>) {
+  const { data } = await api.post<Promotion>("/catalog/promotions/", input);
+  return data;
+}
+
+export async function updatePromotion(id: number, input: Partial<Promotion>) {
+  const { data } = await api.patch<Promotion>(`/catalog/promotions/${id}/`, input);
+  return data;
+}
+
+export async function deletePromotion(id: number) {
+  await api.delete(`/catalog/promotions/${id}/`);
+}
 
 export async function fetchPointsOfSale() {
   const { data } = await api.get("/stores/points-of-sale/", { params: { page_size: 100 } });
@@ -279,6 +335,21 @@ export async function saveClosing(input: ClosingInput, existingId: number | null
   const { data } = existingId
     ? await api.patch<DailyClosing>(`/reports/closings/${existingId}/`, input)
     : await api.post<DailyClosing>("/reports/closings/", input);
+  return data;
+}
+
+export type ProductSalesRow = {
+  product_id: number;
+  product_name: string;
+  quantity_sold: number;
+  revenue: number;
+  orders_count: number;
+};
+
+export async function fetchProductSales(start: string, end: string, pointOfSaleId?: number | null) {
+  const { data } = await api.get<ProductSalesRow[]>("/reports/by-product/", {
+    params: { start, end, ...(pointOfSaleId ? { point_of_sale: pointOfSaleId } : {}) },
+  });
   return data;
 }
 

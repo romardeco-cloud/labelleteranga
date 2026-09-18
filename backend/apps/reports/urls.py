@@ -7,6 +7,7 @@ from .views import (
     MonthlySalesView,
     PaymentMethodBreakdownView,
     PreviousMonthsView,
+    ProductSalesView,
     SummaryView,
     YearlySalesView,
 )
@@ -21,5 +22,6 @@ urlpatterns = [
     path("previous-months/", PreviousMonthsView.as_view()),
     path("summary/", SummaryView.as_view()),
     path("by-payment-method/", PaymentMethodBreakdownView.as_view()),
+    path("by-product/", ProductSalesView.as_view()),
     path("", include(router.urls)),
 ]

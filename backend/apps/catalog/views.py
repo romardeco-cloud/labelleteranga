@@ -6,8 +6,8 @@ from rest_framework.parsers import MultiPartParser
 from rest_framework.response import Response
 
 from .excel import export_products_to_excel, import_products_from_excel
-from .models import Category, Product
-from .serializers import CategorySerializer, ProductSerializer
+from .models import Category, Product, Promotion
+from .serializers import CategorySerializer, ProductSerializer, PromotionSerializer
 
 
 class IsAdminOrReadOnly(permissions.BasePermission):
@@ -24,7 +24,7 @@ class CategoryViewSet(viewsets.ModelViewSet):
 
 
 class ProductViewSet(viewsets.ModelViewSet):
-    queryset = Product.objects.select_related("category").all()
+    queryset = Product.objects.select_related("category").prefetch_related("stocks__point_of_sale").all()
     serializer_class = ProductSerializer
     permission_classes = [IsAdminOrReadOnly]
     filter_backends = [DjangoFilterBackend, filters.SearchFilter, filters.OrderingFilter]
@@ -60,3 +60,9 @@ class ProductViewSet(viewsets.ModelViewSet):
             return Response({"detail": "Aucun fichier fourni."}, status=status.HTTP_400_BAD_REQUEST)
         summary = import_products_from_excel(file_obj)
         return Response(summary, status=status.HTTP_200_OK)
+
+
+class PromotionViewSet(viewsets.ModelViewSet):
+    queryset = Promotion.objects.select_related("category", "point_of_sale").prefetch_related("products").all()
+    serializer_class = PromotionSerializer
+    permission_classes = [permissions.IsAdminUser]

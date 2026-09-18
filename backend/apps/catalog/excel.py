@@ -1,6 +1,9 @@
 import io
+from urllib.parse import urlparse
 
 import openpyxl
+import requests
+from django.core.files.base import ContentFile
 from openpyxl.utils import get_column_letter
 
 from apps.stores.models import PointOfSale, Stock
@@ -16,6 +19,7 @@ BASE_HEADERS = [
     "unit",
     "description",
     "is_active",
+    "image_url",
 ]
 
 STOCK_COLUMN_PREFIX = "stock:"
@@ -48,6 +52,7 @@ def export_products_to_excel(queryset=None):
             product.unit,
             product.description,
             "oui" if product.is_active else "non",
+            product.image.url if product.image else "",
         ]
         row += [stock_by_store.get(store.id, 0) for store in stores]
         ws.append(row)
@@ -59,6 +64,18 @@ def export_products_to_excel(queryset=None):
     wb.save(buffer)
     buffer.seek(0)
     return buffer
+
+
+def _attach_image_from_url(product, url):
+    """Telecharge une image depuis une URL et la rattache au produit."""
+    response = requests.get(url, timeout=15)
+    response.raise_for_status()
+
+    filename = urlparse(url).path.rsplit("/", 1)[-1] or f"{product.sku}.jpg"
+    if "." not in filename:
+        filename += ".jpg"
+
+    product.image.save(filename, ContentFile(response.content), save=True)
 
 
 def import_products_from_excel(file_obj):
@@ -135,6 +152,13 @@ def import_products_from_excel(file_obj):
                 created += 1
             else:
                 updated += 1
+
+            if "image_url" in col_index and row[col_index["image_url"]]:
+                image_url = str(row[col_index["image_url"]]).strip()
+                try:
+                    _attach_image_from_url(obj, image_url)
+                except Exception as exc:  # noqa: BLE001
+                    errors.append(f"Ligne {row_number}: image non recuperee ({image_url}) - {exc}")
 
             for idx, store_name in stock_columns:
                 if row[idx] is None or row[idx] == "":

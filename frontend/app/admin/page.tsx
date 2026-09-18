@@ -4,6 +4,7 @@ import { useEffect, useState } from "react";
 import { api } from "@/lib/api";
 import SalesChart, { SalesPoint } from "@/components/SalesChart";
 import PaymentBreakdown from "@/components/PaymentBreakdown";
+import ProductSalesReport from "@/components/ProductSalesReport";
 
 type Summary = {
   today: { revenue: number; orders_count: number };
@@ -87,6 +88,10 @@ export default function AdminDashboardPage() {
 
       <section className="border rounded-lg bg-white p-4">
         <PaymentBreakdown />
+      </section>
+
+      <section className="border rounded-lg bg-white p-4">
+        <ProductSalesReport />
       </section>
 
       <section>

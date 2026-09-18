@@ -1,6 +1,7 @@
 import type { Metadata } from "next";
 import "./globals.css";
 import Navbar from "@/components/Navbar";
+import SocialLinks from "@/components/SocialLinks";
 
 export const metadata: Metadata = {
   title: "La Belle Teranga | Supermarche en ligne",
@@ -23,6 +24,7 @@ export default function RootLayout({ children }: { children: React.ReactNode }) 
               info@labelleteranga.com
             </a>
           </p>
+          <SocialLinks />
         </footer>
       </body>
     </html>

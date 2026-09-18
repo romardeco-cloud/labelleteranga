@@ -35,8 +35,20 @@ export default function ProductCard({ product }: { product: Product }) {
       <div className="p-3 flex flex-col gap-1 flex-1">
         <span className="text-xs text-gray-400">{product.category?.name}</span>
         <h3 className="font-medium leading-tight">{product.name}</h3>
+        {product.active_promotion_name && (
+          <span className="text-xs bg-brand-accent text-brand-dark font-medium px-1.5 py-0.5 rounded w-fit">
+            {product.active_promotion_name}
+          </span>
+        )}
         <div className="mt-auto flex items-center justify-between pt-2">
-          <span className="font-bold text-brand-dark">{formatXof(product.price)}</span>
+          {product.active_promotion_name ? (
+            <span className="flex flex-col">
+              <span className="text-xs line-through text-gray-400">{formatXof(product.price)}</span>
+              <span className="font-bold text-red-600">{formatXof(product.effective_price)}</span>
+            </span>
+          ) : (
+            <span className="font-bold text-brand-dark">{formatXof(product.price)}</span>
+          )}
           <button
             onClick={handleAdd}
             disabled={loading || !product.in_stock}

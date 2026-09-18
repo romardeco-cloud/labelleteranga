@@ -1,7 +1,7 @@
 from datetime import date as date_cls
 from datetime import timedelta
 
-from django.db.models import Count, Sum
+from django.db.models import Count, F, Sum
 from django.db.models.functions import TruncDate, TruncMonth, TruncYear
 from django.utils import timezone
 from rest_framework import status, viewsets
@@ -10,7 +10,7 @@ from rest_framework.permissions import IsAdminUser
 from rest_framework.response import Response
 from rest_framework.views import APIView
 
-from apps.orders.models import Order
+from apps.orders.models import Order, OrderItem
 
 from .models import DailyClosing
 from .serializers import DailyClosingSerializer
@@ -175,6 +175,50 @@ class PaymentMethodBreakdownView(APIView):
 
         qs = qs.values("payment_method").annotate(revenue=Sum("total_amount"), orders_count=Count("id")).order_by(
             "payment_method"
+        )
+        return Response(list(qs))
+
+
+class ProductSalesView(APIView):
+    """
+    GET /api/reports/by-product/?start=2026-09-01&end=2026-09-30&point_of_sale=1
+    Ventes par produit sur une periode (par defaut : le mois en cours).
+    Trie par chiffre d'affaires decroissant.
+    """
+
+    permission_classes = [IsAdminUser]
+
+    def get(self, request):
+        start_str = request.query_params.get("start")
+        end_str = request.query_params.get("end")
+        pos_param = request.query_params.get("point_of_sale")
+
+        now = timezone.now()
+        if start_str:
+            start = date_cls.fromisoformat(start_str)
+        else:
+            start = now.replace(day=1).date()
+        if end_str:
+            end = date_cls.fromisoformat(end_str) + timedelta(days=1)
+        else:
+            end = (now + timedelta(days=1)).date()
+
+        qs = OrderItem.objects.filter(
+            order__status=Order.Status.PAID,
+            order__paid_at__date__gte=start,
+            order__paid_at__date__lt=end,
+        )
+        if pos_param:
+            qs = qs.filter(order__point_of_sale_id=pos_param)
+
+        qs = (
+            qs.values("product_id", "product_name")
+            .annotate(
+                quantity_sold=Sum("quantity"),
+                revenue=Sum(F("unit_price") * F("quantity")),
+                orders_count=Count("order_id", distinct=True),
+            )
+            .order_by("-revenue")
         )
         return Response(list(qs))
 

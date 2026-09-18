@@ -4,7 +4,7 @@ from django.contrib import admin, messages
 from django.shortcuts import redirect, render
 
 from .excel import export_products_to_excel, import_products_from_excel
-from .models import Category, Product
+from .models import Category, Product, Promotion
 
 
 @admin.register(Category)
@@ -49,3 +49,10 @@ class ProductAdmin(admin.ModelAdmin):
                 messages.warning(request, err)
             return redirect("..")
         return render(request, "catalog/import_excel.html")
+
+
+@admin.register(Promotion)
+class PromotionAdmin(admin.ModelAdmin):
+    list_display = ["name", "discount_type", "value", "category", "point_of_sale", "start_date", "end_date", "is_active"]
+    list_filter = ["is_active", "discount_type", "category", "point_of_sale"]
+    filter_horizontal = ["products"]
