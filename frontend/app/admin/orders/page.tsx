@@ -26,6 +26,16 @@ export default function AdminOrdersPage() {
   const [orders, setOrders] = useState<Order[]>([]);
   const [stores, setStores] = useState<PointOfSale[]>([]);
   const [busyRef, setBusyRef] = useState<string | null>(null);
+
+  async function resendWhatsApp(reference: string) {
+    setBusyRef(reference);
+    try {
+      await api.post(`/payments/orders/${reference}/resend-whatsapp/`);
+      reload();
+    } finally {
+      setBusyRef(null);
+    }
+  }
   const [voiding, setVoiding] = useState<Order | null>(null);
   const [pin, setPin] = useState("");
   const [reason, setReason] = useState("");
@@ -205,6 +215,26 @@ export default function AdminOrdersPage() {
                   >
                     Supprimer
                   </button>
+                )}
+                {o.status === "paid" && (
+                  <div className="text-xs">
+                    {(o as Order & { whatsapp_status?: string }).whatsapp_status === "sent" ? (
+                      <span className="text-green-600">WhatsApp envoye</span>
+                    ) : (
+                      <>
+                        <span className="text-amber-600" title={(o as Order & { whatsapp_error?: string }).whatsapp_error}>
+                          WhatsApp non envoye
+                        </span>
+                        <button
+                          onClick={() => resendWhatsApp(o.reference)}
+                          disabled={busyRef === o.reference}
+                          className="block underline text-brand disabled:opacity-50"
+                        >
+                          Renvoyer
+                        </button>
+                      </>
+                    )}
+                  </div>
                 )}
                 {o.status === "paid" && o.customer_whatsapp_link && (
                   <a

@@ -224,6 +224,21 @@ class CreateCashOrderView(APIView):
         return Response(OrderSerializer(order).data, status=status.HTTP_201_CREATED)
 
 
+class ResendWhatsAppView(APIView):
+    """POST /api/payments/orders/<reference>/resend-whatsapp/ : renvoie la confirmation WhatsApp d'une commande payee."""
+
+    permission_classes = [IsAdminUser]
+
+    def post(self, request, reference):
+        from apps.notifications.whatsapp import send_order_confirmation
+
+        order = get_object_or_404(Order, reference=reference)
+        if order.status != Order.Status.PAID:
+            return Response({"detail": "La commande n'est pas payee."}, status=status.HTTP_400_BAD_REQUEST)
+        send_order_confirmation(order)
+        return Response(OrderSerializer(order).data)
+
+
 class MarkOrderPaidView(APIView):
     """
     POST /api/payments/orders/<reference>/mark-paid/

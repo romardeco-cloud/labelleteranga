@@ -67,16 +67,26 @@ function SuccessContent() {
   return (
     <div className="max-w-md mx-auto px-4 py-16 text-center">
       <h1 className="text-2xl font-bold text-brand-dark mb-2">Merci pour votre commande !</h1>
-      <p className="text-gray-600 mb-1">Reference : {reference}</p>
+      <p className="text-gray-600 mb-1">
+        Commande n° <strong>{order?.order_number ?? reference.slice(0, 8).toUpperCase()}</strong>
+      </p>
       {order && <p className="text-gray-600 mb-6">Moyen de paiement : {PAYMENT_LABELS[order.payment_method]}</p>}
 
       {isPaid && (
         <div className="bg-brand-light border border-brand-accent/50 rounded-lg p-4 mb-6">
           <p className="text-brand-dark font-medium mb-1">Paiement confirme !</p>
           <p className="text-sm text-gray-600">
-            Vous allez recevoir la confirmation de votre commande par WhatsApp au{" "}
-            <span className="font-medium">{order?.customer_phone}</span>, avec le recapitulatif et votre adresse de
-            livraison.
+            {order?.whatsapp_status === "sent" ? (
+              <>
+                Une confirmation avec votre numero de commande <strong>{order?.order_number}</strong> vient d&apos;etre envoyee par WhatsApp au{" "}
+                <span className="font-medium">{order?.customer_phone}</span>.
+              </>
+            ) : (
+              <>
+                Votre numero de commande : <strong>{order?.order_number}</strong>. La confirmation WhatsApp vous sera envoyee au{" "}
+                <span className="font-medium">{order?.customer_phone}</span> par notre equipe.
+              </>
+            )}
           </p>
         </div>
       )}

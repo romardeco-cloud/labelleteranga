@@ -6,6 +6,7 @@ from .views import (
     CreateOrangeMoneyCheckoutView,
     CreateWaveCheckoutView,
     MarkOrderPaidView,
+    ResendWhatsAppView,
     orange_money_webhook,
     stripe_webhook,
     wave_webhook,
@@ -20,4 +21,5 @@ urlpatterns = [
     path("orange-money/webhook/", orange_money_webhook),
     path("cash-order/", CreateCashOrderView.as_view()),
     path("orders/<str:reference>/mark-paid/", MarkOrderPaidView.as_view()),
+    path("orders/<str:reference>/resend-whatsapp/", ResendWhatsAppView.as_view()),
 ]

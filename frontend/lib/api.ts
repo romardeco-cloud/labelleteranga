@@ -234,6 +234,8 @@ export type Order = {
   created_at: string;
   paid_at: string | null;
   voided_at?: string | null;
+  order_number?: string;
+  whatsapp_status?: string;
   whatsapp_confirmation_sent_at: string | null;
   customer_whatsapp_link: string | null;
   shop_whatsapp_link: string | null;

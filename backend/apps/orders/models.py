@@ -64,6 +64,9 @@ class Order(models.Model):
     wave_checkout_id = models.CharField(max_length=255, blank=True)
     orange_money_order_id = models.CharField(max_length=255, blank=True)
     whatsapp_confirmation_sent_at = models.DateTimeField(null=True, blank=True)
+    # sent | failed | not_configured | "" (pas encore tente)
+    whatsapp_status = models.CharField(max_length=20, blank=True)
+    whatsapp_error = models.CharField(max_length=250, blank=True)
     created_at = models.DateTimeField(auto_now_add=True)
     paid_at = models.DateTimeField(null=True, blank=True)
     voided_at = models.DateTimeField(null=True, blank=True)
@@ -76,6 +79,11 @@ class Order(models.Model):
     def recompute_total(self):
         self.total_amount = sum(item.subtotal for item in self.items.all())
         return self.total_amount
+
+    @property
+    def order_number(self):
+        """Numero de commande communique au client (WhatsApp, ticket, admin)."""
+        return self.reference[:8].upper()
 
     @property
     def site_base(self):

@@ -17,6 +17,7 @@ class OrderSerializer(serializers.ModelSerializer):
     shop_whatsapp_link = serializers.SerializerMethodField()
     point_of_sale_name = serializers.CharField(source="point_of_sale.name", read_only=True, default=None)
     voided_by_username = serializers.CharField(source="voided_by.username", read_only=True, default=None)
+    order_number = serializers.CharField(read_only=True)
 
     class Meta:
         model = Order
@@ -45,7 +46,10 @@ class OrderSerializer(serializers.ModelSerializer):
             "voided_at",
             "voided_by_username",
             "void_reason",
+            "order_number",
             "whatsapp_confirmation_sent_at",
+            "whatsapp_status",
+            "whatsapp_error",
             "customer_whatsapp_link",
             "shop_whatsapp_link",
         ]

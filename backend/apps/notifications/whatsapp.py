@@ -21,9 +21,9 @@ plupart du temps (erreur 131047). Il faut donc creer et faire approuver un
 modele dans Meta Business Manager (WhatsApp Manager > Modeles de message),
 avec exactement ce corps de texte (5 variables) :
 
-  "Bonjour {{1}}, votre commande {{2}} chez La Belle Teranga est confirmee.
-   Total : {{3}} FCFA. Paiement : {{4}}. Livraison : {{5}}. Merci de votre
-   confiance - La Belle Teranga, l'art du service."
+  "Bonjour {{1}}, merci pour votre paiement ! Votre commande n° {{2}} est
+   confirmee. Total : {{3}} FCFA. Paiement : {{4}}. {{5}}. Pour toute
+   question : info@labelleteranga.com. La Belle Teranga, l'art du service."
 
 Une fois approuve (delai Meta habituel: quelques minutes a 24h), renseignez
 son nom exact dans WHATSAPP_TEMPLATE_NAME.
@@ -45,13 +45,31 @@ from django.utils import timezone
 
 
 def _normalize_phone(phone):
-    return "".join(ch for ch in (phone or "") if ch.isdigit())
+    """
+    Numero au format international sans "+" (exige par WhatsApp). Un numero senegalais saisi sans indicatif
+    (ex. 77 719 24 40) recoit automatiquement le 221.
+    """
+    digits = "".join(ch for ch in (phone or "") if ch.isdigit())
+    if digits.startswith("00"):
+        digits = digits[2:]
+    if len(digits) == 9 and digits.startswith("7"):
+        digits = "221" + digits
+    return digits
+
+
+def _fulfillment_line(order):
+    store = order.point_of_sale.name if order.point_of_sale else "La Belle Teranga"
+    if order.fulfillment == "pickup":
+        address = order.point_of_sale.address if order.point_of_sale else ""
+        return f"A emporter chez {store}" + (f" ({address})" if address else "")
+    return f"Livraison : {order.delivery_address or 'adresse a confirmer'}"
 
 
 def build_confirmation_message(order):
+    store = order.point_of_sale.name if order.point_of_sale else "La Belle Teranga"
     lines = [
-        f"Bonjour {order.customer_name}, votre commande {order.reference} chez "
-        "La Belle Teranga est confirmee !",
+        f"Bonjour {order.customer_name}, merci pour votre paiement !",
+        f"Votre commande n° {order.order_number} chez {store} est confirmée.",
         "",
         "Articles :",
     ]
@@ -62,13 +80,17 @@ def build_confirmation_message(order):
         "",
         f"Total : {int(order.total_amount)} FCFA",
         f"Paiement : {order.get_payment_method_display()}",
-        f"Adresse de livraison : {order.delivery_address or 'non renseignee'}",
+        _fulfillment_line(order),
     ]
 
-    if order.location_maps_url:
+    if order.fulfillment != "pickup" and order.location_maps_url:
         lines.append(f"Position du client : {order.location_maps_url}")
 
-    lines += ["", "Merci de votre confiance - La Belle Teranga, l'art du service."]
+    lines += [
+        "",
+        "Une question ? Ecrivez-nous a info@labelleteranga.com en citant votre numéro de commande.",
+        "La Belle Teranga, l'art du service.",
+    ]
     return "\n".join(lines)
 
 
@@ -76,10 +98,10 @@ def _template_parameters(order):
     """Doit correspondre exactement aux 5 variables {{1}}..{{5}} du modele approuve (voir docstring)."""
     return [
         order.customer_name or "client",
-        order.reference[:8],
+        order.order_number,
         f"{int(order.total_amount)}",
         order.get_payment_method_display(),
-        order.delivery_address or "a confirmer",
+        _fulfillment_line(order),
     ]
 
 
@@ -92,29 +114,36 @@ def whatsapp_deep_link(phone_number, message):
 
 def send_order_confirmation(order):
     """
-    A appeler uniquement une fois la commande marquee PAID (voir
-    apps.orders.services.mark_order_paid). Tente l'envoi automatique via
-    l'API WhatsApp Cloud si elle est configuree, et renvoie dans tous les
-    cas les liens wa.me prets a l'emploi (client et boutique) en secours.
+    A appeler uniquement une fois la commande marquee PAID (voir apps.orders.services.mark_order_paid).
+    Envoie la confirmation via l'API WhatsApp Cloud si elle est configuree et memorise le resultat sur la
+    commande (statut + erreur eventuelle) ; les liens wa.me de secours sont toujours generes.
     """
     message = build_confirmation_message(order)
+    configured = bool(settings.WHATSAPP_ACCESS_TOKEN and settings.WHATSAPP_PHONE_NUMBER_ID)
 
-    sent_automatically = False
-    if settings.WHATSAPP_ACCESS_TOKEN and settings.WHATSAPP_PHONE_NUMBER_ID and order.customer_phone:
-        sent_automatically = _send_via_cloud_api(order)
+    if not order.customer_phone:
+        status, error = "failed", "Aucun numero de telephone sur la commande."
+    elif not configured:
+        status, error = "not_configured", "L'envoi automatique WhatsApp n'est pas encore configure."
+    else:
+        ok, error = _send_via_cloud_api(order)
+        status = "sent" if ok else "failed"
 
-    order.whatsapp_confirmation_sent_at = timezone.now()
-    order.save(update_fields=["whatsapp_confirmation_sent_at"])
+    order.whatsapp_status = status
+    order.whatsapp_error = (error or "")[:250]
+    order.whatsapp_confirmation_sent_at = timezone.now() if status == "sent" else None
+    order.save(update_fields=["whatsapp_status", "whatsapp_error", "whatsapp_confirmation_sent_at"])
 
     return {
         "message": message,
-        "sent_automatically": sent_automatically,
+        "sent_automatically": status == "sent",
         "customer_link": whatsapp_deep_link(order.customer_phone, message),
         "shop_link": whatsapp_deep_link(settings.WHATSAPP_SHOP_NUMBER, message),
     }
 
 
 def _send_via_cloud_api(order):
+    """Retourne (succes, message d'erreur)."""
     url = (
         f"https://graph.facebook.com/{settings.WHATSAPP_API_VERSION}/"
         f"{settings.WHATSAPP_PHONE_NUMBER_ID}/messages"
@@ -139,9 +168,7 @@ def _send_via_cloud_api(order):
             },
         }
     else:
-        # Texte libre : ne fonctionne que dans la fenetre de conversation
-        # client de 24h (voir docstring du module). Fourni comme repli
-        # tant qu'aucun modele n'est approuve.
+        # Texte libre : ne fonctionne que dans la fenetre de conversation client de 24h (voir docstring du module).
         payload = {
             "messaging_product": "whatsapp",
             "to": recipient,
@@ -151,6 +178,13 @@ def _send_via_cloud_api(order):
 
     try:
         response = requests.post(url, json=payload, headers=headers, timeout=10)
-        return response.status_code == 200
-    except requests.RequestException:
-        return False
+    except requests.RequestException as exc:
+        return False, f"Connexion a WhatsApp impossible : {exc.__class__.__name__}"
+    if response.status_code == 200:
+        return True, ""
+    try:
+        err = response.json().get("error", {})
+        detail = f"{err.get('message', 'erreur inconnue')} (code {err.get('code', response.status_code)})"
+    except ValueError:
+        detail = f"HTTP {response.status_code}"
+    return False, detail
