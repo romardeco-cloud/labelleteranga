@@ -12,7 +12,9 @@ import {
   setStock,
   updateProduct,
 } from "@/lib/api";
+import ProductVisual from "@/components/ProductVisual";
 import { getAdminToken } from "@/lib/auth";
+import { matchKey, prepareImage } from "@/lib/images";
 import { downloadFile } from "@/lib/documents";
 
 function formatXof(value: string | number) {
@@ -46,6 +48,9 @@ export default function AdminProductsPage() {
   const fileInputRef = useRef<HTMLInputElement>(null);
   const [storeId, setStoreId] = useState<number | null>(null);
   const [search, setSearch] = useState("");
+  const [uploadingId, setUploadingId] = useState<number | null>(null);
+  const [photoMsg, setPhotoMsg] = useState("");
+  const bulkRef = useRef<HTMLInputElement>(null);
   const store = stores.find((x) => x.id === storeId) ?? null;
   const storeSlug = store ? store.name.toLowerCase().replace(/[^a-z0-9]+/g, "-").replace(/^-|-$/g, "") : "";
 
@@ -72,7 +77,7 @@ export default function AdminProductsPage() {
     e.preventDefault();
     const data = new FormData();
     Object.entries(form).forEach(([k, v]) => v && data.append(k, v));
-    if (newImage) data.append("image", newImage);
+    if (newImage) data.append("image", await prepareImage(newImage));
     const created = await api.post("/catalog/products/", data, { headers: { "Content-Type": "multipart/form-data" } });
     if (storeId) await setStock(created.data.id, storeId, 0); // rattache le nouveau produit au point de vente choisi
     setForm(emptyForm);
@@ -113,10 +118,68 @@ export default function AdminProductsPage() {
         data.append(k, String(v));
       }
     });
-    if (editImage) data.append("image", editImage);
+    if (editImage) data.append("image", await prepareImage(editImage));
     await updateProduct(id, data);
     setEditingId(null);
     setEditForm(null);
+    reload();
+  }
+
+  async function uploadPhoto(p: Product, file: File | undefined) {
+    if (!file) return;
+    setUploadingId(p.id);
+    setPhotoMsg("");
+    try {
+      const data = new FormData();
+      data.append("image", await prepareImage(file));
+      await updateProduct(p.id, data);
+      reload();
+    } catch {
+      setPhotoMsg(`Photo de "${p.name}" non enregistree (fichier trop lourd ou stockage d'images indisponible).`);
+    } finally {
+      setUploadingId(null);
+    }
+  }
+
+  async function removePhoto(p: Product) {
+    if (!confirm(`Retirer la photo de "${p.name}" ?`)) return;
+    const data = new FormData();
+    data.append("image", "");
+    await updateProduct(p.id, data);
+    reload();
+  }
+
+  // Plusieurs photos d'un coup : le nom de chaque fichier doit etre la reference (SKU) ou le nom du produit.
+  async function bulkPhotos(e: React.ChangeEvent<HTMLInputElement>) {
+    const files = Array.from(e.target.files ?? []);
+    if (bulkRef.current) bulkRef.current.value = "";
+    if (files.length === 0) return;
+    const bySku = new Map(products.map((p) => [matchKey(p.sku), p]));
+    const byName = new Map(products.map((p) => [matchKey(p.name), p]));
+    let done = 0;
+    const unmatched: string[] = [];
+    for (let i = 0; i < files.length; i++) {
+      const f = files[i];
+      setPhotoMsg(`Envoi des photos... ${i + 1} / ${files.length}`);
+      const key = matchKey(f.name.replace(/\.[^.]+$/, ""));
+      const target = bySku.get(key) ?? byName.get(key);
+      if (!target) {
+        unmatched.push(f.name);
+        continue;
+      }
+      try {
+        const data = new FormData();
+        data.append("image", await prepareImage(f));
+        await updateProduct(target.id, data);
+        done++;
+      } catch {
+        unmatched.push(`${f.name} (echec de l'envoi)`);
+      }
+    }
+    setPhotoMsg(
+      `${done} photo(s) ajoutee(s).` +
+        (unmatched.length ? ` Sans correspondance : ${unmatched.slice(0, 8).join(", ")}${unmatched.length > 8 ? "..." : ""}.` : "")
+    );
     reload();
   }
 
@@ -191,6 +254,13 @@ export default function AdminProductsPage() {
             Exporter Excel
           </button>
           <label
+            className="border px-3 py-1.5 rounded text-sm cursor-pointer"
+            title="Nommez chaque fichier avec la reference (SKU) ou le nom du produit"
+          >
+            Ajouter des photos
+            <input ref={bulkRef} type="file" accept="image/*" multiple onChange={bulkPhotos} className="hidden" />
+          </label>
+          <label
             className={`px-3 py-1.5 rounded text-sm ${
               storeId ? "bg-brand text-white cursor-pointer" : "bg-gray-100 text-gray-500 cursor-not-allowed"
             }`}
@@ -243,6 +313,7 @@ export default function AdminProductsPage() {
         </p>
       )}
 
+      {photoMsg && <p className="text-sm text-brand-dark bg-brand-light p-2 rounded">{photoMsg}</p>}
       {importSummary && <p className="text-sm text-brand-dark bg-brand-light p-2 rounded">{importSummary}</p>}
 
       {stores.length === 0 && (
@@ -345,6 +416,7 @@ export default function AdminProductsPage() {
       <table className="w-full text-sm bg-white border rounded-lg overflow-hidden">
         <thead className="bg-gray-50 text-left">
           <tr>
+            <th className="p-2">Photo</th>
             <th className="p-2">SKU</th>
             <th className="p-2">Nom</th>
             <th className="p-2">Categorie</th>
@@ -359,7 +431,7 @@ export default function AdminProductsPage() {
             <React.Fragment key={p.id}>
               {editingId === p.id && editForm ? (
                 <tr className="border-t bg-brand-light/40">
-                  <td className="p-2" colSpan={7}>
+                  <td className="p-2" colSpan={8}>
                     <div className="grid sm:grid-cols-6 gap-2 mb-2">
                       <input
                         value={editForm.sku}
@@ -419,12 +491,24 @@ export default function AdminProductsPage() {
                         />
                         Actif
                       </label>
-                      <input
-                        type="file"
-                        accept="image/*"
-                        onChange={(e) => setEditImage(e.target.files?.[0] ?? null)}
-                        className="text-xs sm:col-span-2"
-                      />
+                      <div className="sm:col-span-2 flex items-center gap-2">
+                        <div className="w-12 h-12 rounded-lg overflow-hidden bg-[#251c1a] shrink-0">
+                          {editImage ? (
+                            // eslint-disable-next-line @next/next/no-img-element
+                            <img src={URL.createObjectURL(editImage)} alt="" className="w-full h-full object-cover" />
+                          ) : (
+                            <ProductVisual image={p.image} name={p.name} category={p.category?.name} size="tile" />
+                          )}
+                        </div>
+                        <div className="text-xs space-y-1">
+                          <input type="file" accept="image/*" onChange={(e) => setEditImage(e.target.files?.[0] ?? null)} className="text-xs w-full" />
+                          {p.image && !editImage && (
+                            <button type="button" onClick={() => removePhoto(p)} className="text-red-500">
+                              Retirer la photo
+                            </button>
+                          )}
+                        </div>
+                      </div>
                     </div>
                     <div className="flex gap-2">
                       <button
@@ -447,6 +531,26 @@ export default function AdminProductsPage() {
                 </tr>
               ) : (
                 <tr className="border-t">
+                  <td className="p-2 w-16">
+                    <label
+                      className="relative block w-12 h-12 rounded-lg overflow-hidden cursor-pointer group bg-[#251c1a]"
+                      title="Cliquer pour ajouter ou changer la photo"
+                    >
+                      <ProductVisual image={p.image} name={p.name} category={p.category?.name} size="tile" />
+                      <span className="absolute inset-0 bg-black/65 text-white text-[10px] font-medium flex items-center justify-center text-center leading-tight opacity-0 group-hover:opacity-100 transition">
+                        {uploadingId === p.id ? "Envoi..." : p.image ? "Changer" : "+ Photo"}
+                      </span>
+                      <input
+                        type="file"
+                        accept="image/*"
+                        className="hidden"
+                        onChange={(e) => {
+                          uploadPhoto(p, e.target.files?.[0]);
+                          e.target.value = "";
+                        }}
+                      />
+                    </label>
+                  </td>
                   <td className="p-2">{p.sku}</td>
                   <td className="p-2">{p.name}</td>
                   <td className="p-2">{p.category?.name ?? "-"}</td>
@@ -480,7 +584,7 @@ export default function AdminProductsPage() {
               )}
               {expanded === p.id && (
                 <tr className="bg-brand-light/40 border-t">
-                  <td colSpan={7} className="p-3">
+                  <td colSpan={8} className="p-3">
                     <p className="text-xs font-medium text-brand-dark mb-2">Stock par point de vente</p>
                     <div className="flex flex-wrap gap-3">
                       {stores.map((s) => {
