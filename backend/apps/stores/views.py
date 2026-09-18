@@ -289,6 +289,19 @@ class InventoryCountViewSet(viewsets.ModelViewSet):
         return self._detail(count)
 
 
+def _available_online_methods(enabled):
+    """Moyens proposes sur le site : actives pour le point de vente ET reellement configures sur le serveur (cles API)."""
+    from django.conf import settings as dj
+
+    configured = {
+        "cash": True,
+        "card": bool(dj.STRIPE_SECRET_KEY),
+        "wave": bool(dj.WAVE_API_KEY),
+        "orange_money": bool(dj.ORANGE_MONEY_CLIENT_ID and dj.ORANGE_MONEY_CLIENT_SECRET and dj.ORANGE_MONEY_MERCHANT_KEY),
+    }
+    return [m for m in enabled if configured.get(m)]
+
+
 def _site_payload(store, with_categories=False):
     st = get_settings(store)
     data = {
@@ -299,7 +312,7 @@ def _site_payload(store, with_categories=False):
         "address": store.address,
         "phone": store.phone,
         "email": st.email or "info@labelleteranga.com",
-        "payment_methods": st.payment_methods,
+        "payment_methods": _available_online_methods(st.payment_methods),
     }
     if with_categories:
         counts = {

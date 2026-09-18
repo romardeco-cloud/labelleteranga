@@ -60,8 +60,13 @@ export default function CheckoutPage() {
       }
       const { checkout_url } = await createCheckoutSession(method, customer);
       window.location.href = checkout_url;
-    } catch (err) {
-      setError("Impossible de finaliser la commande. Verifiez votre panier et reessayez.");
+    } catch (err: any) {
+      const detail = err?.response?.data?.detail;
+      setError(
+        typeof detail === "string"
+          ? detail
+          : "Impossible de finaliser la commande. Verifiez votre panier et reessayez."
+      );
       setLoading(false);
     }
   }

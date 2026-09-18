@@ -6,7 +6,7 @@ from apps.cart.models import Cart
 from .models import Order, OrderItem
 
 
-def create_order_from_cart(session_key, customer_data, payment_method):
+def create_order_from_cart(session_key, customer_data, payment_method, clear_cart=True):
     """
     Cree une Commande (statut PENDING) a partir du panier de la session,
     copie les lignes du panier en OrderItem, puis vide le panier.
@@ -45,8 +45,16 @@ def create_order_from_cart(session_key, customer_data, payment_method):
     order.recompute_total()
     order.save()
 
-    cart.items.all().delete()
+    if clear_cart:
+        cart.items.all().delete()
     return order
+
+
+def clear_cart(session_key):
+    """Vide le panier d'une session (apres creation reussie du paiement en ligne)."""
+    cart = Cart.objects.filter(session_key=session_key).first()
+    if cart:
+        cart.items.all().delete()
 
 
 def mark_order_paid(order, **extra_fields):

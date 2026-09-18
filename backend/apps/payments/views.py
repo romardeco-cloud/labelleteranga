@@ -11,7 +11,7 @@ import stripe
 
 from apps.orders.models import Order
 from apps.orders.serializers import OrderSerializer
-from apps.orders.services import create_order_from_cart, mark_order_paid
+from apps.orders.services import clear_cart, create_order_from_cart, mark_order_paid
 
 from . import orange_money, wave
 
@@ -29,7 +29,9 @@ class CreateCheckoutSessionView(APIView):
     """
 
     def post(self, request):
-        order = create_order_from_cart(request.data.get("session_key"), request.data, Order.PaymentMethod.CARD)
+        order = create_order_from_cart(
+            request.data.get("session_key"), request.data, Order.PaymentMethod.CARD, clear_cart=False
+        )
         if order is None:
             return Response({"detail": "Le panier est vide."}, status=status.HTTP_400_BAD_REQUEST)
 
@@ -45,17 +47,26 @@ class CreateCheckoutSessionView(APIView):
             for item in order.items.all()
         ]
 
-        checkout_session = stripe.checkout.Session.create(
-            mode="payment",
-            line_items=line_items,
-            success_url=f"{settings.FRONTEND_URL}{order.site_base}/checkout/success?order={order.reference}",
-            cancel_url=f"{settings.FRONTEND_URL}{order.site_base}/checkout/cancel?order={order.reference}",
-            customer_email=order.customer_email or None,
-            metadata={"order_reference": order.reference},
-        )
+        try:
+            checkout_session = stripe.checkout.Session.create(
+                mode="payment",
+                line_items=line_items,
+                success_url=f"{settings.FRONTEND_URL}{order.site_base}/checkout/success?order={order.reference}",
+                cancel_url=f"{settings.FRONTEND_URL}{order.site_base}/checkout/cancel?order={order.reference}",
+                customer_email=order.customer_email or None,
+                metadata={"order_reference": order.reference},
+            )
+        except Exception:
+            order.status = Order.Status.FAILED
+            order.save(update_fields=["status"])
+            return Response(
+                {"detail": "Le paiement par carte n'est pas disponible pour le moment. Choisissez un autre moyen de paiement."},
+                status=status.HTTP_502_BAD_GATEWAY,
+            )
 
         order.stripe_checkout_session_id = checkout_session.id
         order.save(update_fields=["stripe_checkout_session_id"])
+        clear_cart(request.data.get("session_key"))
 
         return Response(
             {"checkout_url": checkout_session.url, "order_reference": order.reference},
@@ -94,7 +105,9 @@ class CreateWaveCheckoutView(APIView):
     """
 
     def post(self, request):
-        order = create_order_from_cart(request.data.get("session_key"), request.data, Order.PaymentMethod.WAVE)
+        order = create_order_from_cart(
+            request.data.get("session_key"), request.data, Order.PaymentMethod.WAVE, clear_cart=False
+        )
         if order is None:
             return Response({"detail": "Le panier est vide."}, status=status.HTTP_400_BAD_REQUEST)
 
@@ -110,6 +123,7 @@ class CreateWaveCheckoutView(APIView):
 
         order.wave_checkout_id = session.get("id", "")
         order.save(update_fields=["wave_checkout_id"])
+        clear_cart(request.data.get("session_key"))
 
         return Response(
             {"checkout_url": session.get("wave_launch_url"), "order_reference": order.reference},
@@ -148,7 +162,7 @@ class CreateOrangeMoneyCheckoutView(APIView):
 
     def post(self, request):
         order = create_order_from_cart(
-            request.data.get("session_key"), request.data, Order.PaymentMethod.ORANGE_MONEY
+            request.data.get("session_key"), request.data, Order.PaymentMethod.ORANGE_MONEY, clear_cart=False
         )
         if order is None:
             return Response({"detail": "Le panier est vide."}, status=status.HTTP_400_BAD_REQUEST)
@@ -168,6 +182,7 @@ class CreateOrangeMoneyCheckoutView(APIView):
 
         order.orange_money_order_id = payment.get("pay_token", "")
         order.save(update_fields=["orange_money_order_id"])
+        clear_cart(request.data.get("session_key"))
 
         return Response(
             {"checkout_url": payment.get("payment_url"), "order_reference": order.reference},
