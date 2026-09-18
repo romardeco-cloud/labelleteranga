@@ -13,6 +13,7 @@ urlpatterns = [
     path("api/accounts/", include("apps.accounts.urls")),
     path("api/stores/", include("apps.stores.urls")),
     path("api/pos/", include("apps.pos.urls")),
+    path("api/documents/", include("apps.documents.urls")),
 ]
 
 if settings.DEBUG:

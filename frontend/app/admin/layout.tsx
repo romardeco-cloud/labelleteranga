@@ -22,38 +22,40 @@ export default function AdminLayout({ children }: { children: React.ReactNode })
   if (isLoginPage) return <>{children}</>;
   if (!ready) return <p className="p-8">Verification...</p>;
 
+  const links: [string, string, boolean?][] = [
+    ["/admin", "Tableau de bord", true],
+    ["/admin/reports", "Rapports"],
+    ["/admin/documents/quotes", "Devis"],
+    ["/admin/documents/invoices", "Factures"],
+    ["/admin/documents/purchase-orders", "Bons de commande"],
+    ["/admin/contacts", "Clients / Fournisseurs"],
+    ["/admin/products", "Produits"],
+    ["/admin/promotions", "Promotions"],
+    ["/admin/orders", "Commandes"],
+    ["/admin/closing", "Cloture de caisse"],
+    ["/admin/cashiers", "Caissiers"],
+    ["/admin/stores", "Points de vente"],
+  ];
+
   return (
     <div className="max-w-6xl mx-auto px-4 py-6">
-      <div className="flex items-center justify-between mb-6">
-        <nav className="flex gap-6 text-sm font-medium flex-wrap">
-          <Link href="/admin" className={pathname === "/admin" ? "text-brand" : "text-gray-500"}>
-            Tableau de bord
-          </Link>
-          <Link href="/admin/products" className={pathname?.startsWith("/admin/products") ? "text-brand" : "text-gray-500"}>
-            Produits
-          </Link>
-          <Link href="/admin/promotions" className={pathname?.startsWith("/admin/promotions") ? "text-brand" : "text-gray-500"}>
-            Promotions
-          </Link>
-          <Link href="/admin/orders" className={pathname?.startsWith("/admin/orders") ? "text-brand" : "text-gray-500"}>
-            Commandes
-          </Link>
-          <Link href="/admin/closing" className={pathname?.startsWith("/admin/closing") ? "text-brand" : "text-gray-500"}>
-            Cloture de caisse
-          </Link>
-          <Link href="/admin/cashiers" className={pathname?.startsWith("/admin/cashiers") ? "text-brand" : "text-gray-500"}>
-            Caissiers
-          </Link>
-          <Link href="/admin/stores" className={pathname?.startsWith("/admin/stores") ? "text-brand" : "text-gray-500"}>
-            Points de vente
-          </Link>
+      <div className="flex items-start justify-between gap-4 mb-6 print:hidden">
+        <nav className="flex gap-x-5 gap-y-2 text-sm font-medium flex-wrap">
+          {links.map(([href, label, exact]) => {
+            const active = exact ? pathname === href : pathname?.startsWith(href);
+            return (
+              <Link key={href} href={href} className={active ? "text-brand" : "text-gray-500"}>
+                {label}
+              </Link>
+            );
+          })}
         </nav>
         <button
           onClick={() => {
             clearAdminToken();
             router.push("/admin/login");
           }}
-          className="text-sm text-red-500"
+          className="text-sm text-red-500 whitespace-nowrap"
         >
           Deconnexion
         </button>
