@@ -9,7 +9,7 @@ from openpyxl.worksheet.datavalidation import DataValidation
 from django.core.files.base import ContentFile
 from openpyxl.utils import get_column_letter
 
-from apps.stores.models import PointOfSale, Stock, StockMovement
+from apps.stores.models import PointOfSale, Stock, StockMovement, StoreCategory
 from apps.stores.services import change_stock
 
 from .models import Category, Product
@@ -294,6 +294,12 @@ def import_products_from_excel(file_obj, store=None):
 
             if store:
                 Stock.objects.get_or_create(product=obj, point_of_sale=store)
+                if obj.category_id:
+                    StoreCategory.objects.get_or_create(
+                        point_of_sale=store,
+                        category_id=obj.category_id,
+                        defaults={"order": StoreCategory.objects.filter(point_of_sale=store).count()},
+                    )
                 if store_stock_idx is not None and row[store_stock_idx] not in (None, ""):
                     change_stock(obj, store, set_to=int(row[store_stock_idx]), reason=StockMovement.Reason.IMPORT)
 

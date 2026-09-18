@@ -5,7 +5,8 @@ from rest_framework.views import APIView
 from apps.accounts.permissions import IsCashier
 from apps.catalog.models import Product
 from apps.orders.models import Order
-from apps.stores.models import Stock
+from apps.stores.models import DrawerOpening, Stock, StoreCategory
+from apps.stores.serializers import pos_settings
 
 from django.utils import timezone
 
@@ -50,7 +51,13 @@ class POSProductListView(APIView):
                     "image": request.build_absolute_uri(p.image.url) if p.image else None,
                 }
             )
-        return Response({"point_of_sale": store.name, "results": results})
+        categories = [
+            {"name": l.category.name, "order": l.order}
+            for l in StoreCategory.objects.filter(point_of_sale=store).select_related("category")
+        ]
+        return Response(
+            {"point_of_sale": store.name, "results": results, "categories": categories, "settings": pos_settings(store)}
+        )
 
 
 METHOD_LABELS = {
@@ -71,6 +78,7 @@ def receipt_payload(order, profile, received=None):
         "point_of_sale": profile.point_of_sale.name,
         "cashier": profile.user.username,
         "customer_name": order.customer_name,
+        "table_label": order.table_label,
         "payment_method": order.payment_method,
         "payment_method_label": METHOD_LABELS.get(order.payment_method, order.payment_method),
         "items": [
@@ -82,6 +90,8 @@ def receipt_payload(order, profile, received=None):
             }
             for i in order.items.all()
         ],
+        "receipt_slogan": pos_settings(profile.point_of_sale)["receipt_slogan"],
+        "receipt_footer": pos_settings(profile.point_of_sale)["receipt_footer"],
         "total": str(total),
         "amount_received": str(received) if received is not None else None,
         "change": str(received - total) if received is not None and received >= total else None,
@@ -119,6 +129,7 @@ class POSSaleView(APIView):
             request.data.get("payment_method"),
             request.data.get("customer_name", ""),
             request.data.get("amount_received"),
+            str(request.data.get("table_label") or "").strip(),
         )
         return Response(receipt_payload(order, profile, received), status=201)
 
@@ -169,3 +180,63 @@ class POSClosingView(APIView):
             data.get("notes", ""),
         )
         return Response(DailyClosingSerializer(closing).data, status=201 if created else 200)
+
+
+class POSCustomerOrdersView(APIView):
+    """GET /api/pos/customer-orders/ : commandes des clients (site web) rattachees a ce point de vente, 7 derniers jours."""
+
+    permission_classes = [IsCashier]
+
+    def get(self, request):
+        store = request.user.cashier_profile.point_of_sale
+        since = timezone.now() - timezone.timedelta(days=7)
+        orders = (
+            Order.objects.filter(channel=Order.Channel.ONLINE, point_of_sale=store, created_at__gte=since)
+            .prefetch_related("items")
+            .order_by("-created_at")
+        )
+        return Response(
+            [
+                {
+                    "reference": o.reference[:8].upper(),
+                    "created_at": o.created_at,
+                    "status": o.status,
+                    "status_label": o.get_status_display(),
+                    "customer_name": o.customer_name,
+                    "customer_phone": o.customer_phone,
+                    "delivery_address": o.delivery_address,
+                    "maps_url": o.location_maps_url,
+                    "payment_method_label": METHOD_LABELS.get(o.payment_method, o.payment_method),
+                    "total": str(o.total_amount),
+                    "items": [{"name": i.product_name, "quantity": i.quantity} for i in o.items.all()],
+                }
+                for o in orders
+            ]
+        )
+
+
+class POSDrawerView(APIView):
+    """
+    POST /api/pos/drawer/ {reason} : enregistre une ouverture du tiroir hors vente (controle).
+    GET : ouvertures du jour. L'ouverture physique necessite un tiroir branche a l'imprimante de tickets.
+    """
+
+    permission_classes = [IsCashier]
+
+    def get(self, request):
+        store = request.user.cashier_profile.point_of_sale
+        rows = DrawerOpening.objects.filter(point_of_sale=store, created_at__date=timezone.localdate())
+        return Response(
+            [{"id": r.id, "reason": r.reason, "cashier": r.cashier.username if r.cashier else None, "created_at": r.created_at} for r in rows]
+        )
+
+    def post(self, request):
+        reason = str(request.data.get("reason") or "").strip()
+        if not reason:
+            from rest_framework.exceptions import ValidationError
+
+            raise ValidationError({"reason": "Indiquez le motif de l'ouverture."})
+        row = DrawerOpening.objects.create(
+            point_of_sale=request.user.cashier_profile.point_of_sale, cashier=request.user, reason=reason[:200]
+        )
+        return Response({"id": row.id, "reason": row.reason, "created_at": row.created_at}, status=201)

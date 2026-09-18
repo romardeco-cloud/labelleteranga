@@ -134,6 +134,13 @@ export function productEmoji(name: string, category?: string | null): string {
 }
 
 const EXTRA_CATEGORY_EMOJI: [string, string][] = [
+  ["fast food", "🍔"],
+  ["pizza", "🍕"],
+  ["livraison", "🛵"],
+  ["repas", "🍽️"],
+  ["dessert", "🍰"],
+  ["chaudes", "☕"],
+  ["fraiches", "🧃"],
   ["boisson", "🥤"],
   ["boucherie", "🥩"],
   ["poisson", "🐟"],
@@ -152,6 +159,9 @@ const EXTRA_CATEGORY_EMOJI: [string, string][] = [
 export function categoryEmoji(name: string): string {
   const c = norm(name);
   return (
-    CATEGORY_EMOJI.find(([k]) => c.includes(k))?.[1] ?? EXTRA_CATEGORY_EMOJI.find(([k]) => c.includes(k))?.[1] ?? "🛒"
+    EXTRA_CATEGORY_EMOJI.slice(0, 7).find(([k]) => c.includes(k))?.[1] ??
+    CATEGORY_EMOJI.find(([k]) => c.includes(k))?.[1] ??
+    EXTRA_CATEGORY_EMOJI.find(([k]) => c.includes(k))?.[1] ??
+    "🛒"
   );
 }

@@ -97,3 +97,70 @@ class InventoryCountLine(models.Model):
     @property
     def variance(self):
         return None if self.counted_quantity is None else self.counted_quantity - self.theoretical_quantity
+
+
+class StoreCategory(models.Model):
+    """Categories affichees pour un point de vente (ordre, icone en caisse). Les categories elles-memes sont partagees."""
+
+    point_of_sale = models.ForeignKey(PointOfSale, related_name="store_categories", on_delete=models.CASCADE)
+    category = models.ForeignKey("catalog.Category", related_name="store_links", on_delete=models.CASCADE)
+    order = models.PositiveIntegerField("Ordre", default=0)
+
+    class Meta:
+        unique_together = ("point_of_sale", "category")
+        ordering = ["order", "category__name"]
+
+    def __str__(self):
+        return f"{self.point_of_sale} / {self.category}"
+
+
+def default_payment_methods():
+    return ["cash", "wave", "orange_money", "card"]
+
+
+class StoreSettings(models.Model):
+    """Parametres d'un point de vente (identite legale, finances, ticket, modules de la caisse)."""
+
+    point_of_sale = models.OneToOneField(PointOfSale, related_name="settings", on_delete=models.CASCADE)
+    timezone = models.CharField("Fuseau horaire", max_length=60, default="Africa/Dakar")
+    email = models.EmailField(blank=True)
+    # informations legales
+    legal_form = models.CharField("Forme juridique", max_length=60, blank=True)
+    share_capital = models.DecimalField("Capital social", max_digits=14, decimal_places=0, null=True, blank=True)
+    ninea = models.CharField("NINEA", max_length=60, blank=True)
+    rccm = models.CharField("RCCM", max_length=60, blank=True)
+    # finances
+    vat_rate = models.DecimalField("TVA (%)", max_digits=5, decimal_places=2, default=0)
+    prices_include_vat = models.BooleanField("Prix TTC", default=True)
+    payment_methods = models.JSONField("Moyens de paiement acceptes", default=default_payment_methods)
+    # apparence du ticket
+    receipt_slogan = models.CharField(max_length=120, blank=True, default="L'art du service")
+    receipt_footer = models.CharField(max_length=200, blank=True, default="Merci de votre visite !")
+    # modules de la caisse
+    module_hold = models.BooleanField("Ventes en attente", default=True)
+    module_history = models.BooleanField("Historique du jour", default=True)
+    module_qr = models.BooleanField("QR Wave / Orange Money", default=True)
+    module_dine_in = models.BooleanField("Vente sur place (tables)", default=True)
+    module_customer_orders = models.BooleanField("Commandes client", default=True)
+    module_drawer = models.BooleanField("Tiroir-caisse", default=True)
+    module_xreport = models.BooleanField("Rapport X", default=True)
+
+    def __str__(self):
+        return f"Parametres de {self.point_of_sale}"
+
+
+def get_settings(store):
+    settings, _ = StoreSettings.objects.get_or_create(point_of_sale=store)
+    return settings
+
+
+class DrawerOpening(models.Model):
+    """Ouverture du tiroir-caisse hors vente (pour controle : qui, quand, pourquoi)."""
+
+    point_of_sale = models.ForeignKey(PointOfSale, related_name="drawer_openings", on_delete=models.CASCADE)
+    cashier = models.ForeignKey("auth.User", null=True, on_delete=models.SET_NULL, related_name="+")
+    reason = models.CharField(max_length=200)
+    created_at = models.DateTimeField(auto_now_add=True)
+
+    class Meta:
+        ordering = ["-created_at"]

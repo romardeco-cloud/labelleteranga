@@ -39,6 +39,12 @@ class Order(models.Model):
         related_name="orders",
         help_text="Magasin ayant traite la commande (optionnel, pour la cloture de caisse par magasin).",
     )
+    class ServiceMode(models.TextChoices):
+        DIRECT = "direct", "Vente directe"
+        DINE_IN = "dine_in", "Sur place"
+
+    service_mode = models.CharField(max_length=10, choices=ServiceMode.choices, default=ServiceMode.DIRECT)
+    table_label = models.CharField("Table", max_length=40, blank=True)
     customer_name = models.CharField(max_length=150)
     customer_email = models.EmailField()
     customer_phone = models.CharField(max_length=30, blank=True)

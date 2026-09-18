@@ -1,6 +1,8 @@
 from django.contrib.auth import get_user_model
 from django.db import transaction
 from rest_framework import permissions, serializers, viewsets
+from rest_framework.response import Response
+from rest_framework.views import APIView
 from rest_framework_simplejwt.serializers import TokenObtainPairSerializer
 from rest_framework_simplejwt.views import TokenObtainPairView
 
@@ -84,3 +86,24 @@ class CashierViewSet(viewsets.ModelViewSet):
     queryset = CashierProfile.objects.select_related("user", "point_of_sale").all()
     serializer_class = CashierSerializer
     permission_classes = [permissions.IsAdminUser]
+
+
+class StaffListView(APIView):
+    """GET /api/accounts/staff/ : comptes administrateurs (lecture seule)."""
+
+    permission_classes = [permissions.IsAdminUser]
+
+    def get(self, request):
+        users = get_user_model().objects.filter(is_staff=True, is_active=True).order_by("username")
+        return Response(
+            [
+                {
+                    "id": u.id,
+                    "username": u.username,
+                    "email": u.email,
+                    "role": "Proprietaire" if u.is_superuser else "Administrateur",
+                    "last_login": u.last_login,
+                }
+                for u in users
+            ]
+        )

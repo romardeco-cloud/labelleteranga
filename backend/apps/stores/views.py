@@ -1,4 +1,4 @@
-from django.db.models import Q
+from django.db.models import Count, Max, Q, Sum
 from django.http import HttpResponse
 from rest_framework import permissions, status, viewsets
 from rest_framework.decorators import action
@@ -14,7 +14,9 @@ from .inventory import (
     set_counts,
     validate_inventory,
 )
-from .models import InventoryCount, PointOfSale, Stock, StockMovement
+from apps.catalog.models import Category
+
+from .models import InventoryCount, PointOfSale, Stock, StockMovement, StoreCategory, get_settings
 from .serializers import (
     InventoryCountDetailSerializer,
     InventoryCountSerializer,
@@ -22,6 +24,9 @@ from .serializers import (
     SetStockSerializer,
     StockMovementSerializer,
     StockSerializer,
+    StoreCategorySerializer,
+    StoreSettingsSerializer,
+    store_config,
 )
 from .services import change_stock
 
@@ -37,6 +42,85 @@ class PointOfSaleViewSet(viewsets.ModelViewSet):
     queryset = PointOfSale.objects.all()
     serializer_class = PointOfSaleSerializer
     permission_classes = [IsAdminOrReadOnly]
+
+    @action(detail=True, methods=["get", "patch"], permission_classes=[permissions.IsAdminUser], url_path="settings")
+    def config(self, request, pk=None):
+        """GET/PATCH /api/stores/points-of-sale/<id>/settings/ : identite, coordonnees, legal, finances, ticket, modules."""
+        store = self.get_object()
+        if request.method == "PATCH":
+            base = PointOfSaleSerializer(store, data=request.data, partial=True)
+            base.is_valid(raise_exception=True)
+            extra = StoreSettingsSerializer(get_settings(store), data=request.data, partial=True)
+            extra.is_valid(raise_exception=True)
+            base.save()
+            extra.save()
+        return Response(store_config(store))
+
+
+class StoreCategoryViewSet(viewsets.ModelViewSet):
+    """
+    Categories par point de vente. GET ?point_of_sale=<id>. POST {point_of_sale, category: <id> | name: "..."}
+    (cree la categorie si le nom est nouveau). PATCH {order}. DELETE : retire la categorie du point de vente
+    (la categorie et ses produits ne sont pas supprimes).
+    """
+
+    queryset = StoreCategory.objects.select_related("category", "point_of_sale")
+    serializer_class = StoreCategorySerializer
+    permission_classes = [permissions.IsAdminUser]
+    http_method_names = ["get", "post", "patch", "delete", "head", "options"]
+
+    def _annotate(self, links):
+        stats = {}
+        stores = {l.point_of_sale_id for l in links}
+        for row in (
+            Stock.objects.filter(point_of_sale_id__in=stores)
+            .values("point_of_sale_id", "product__category_id")
+            .annotate(n=Count("id"), qty=Sum("quantity"))
+        ):
+            stats[(row["point_of_sale_id"], row["product__category_id"])] = (row["n"], row["qty"] or 0)
+        for l in links:
+            l.products_count, l.stock_total = stats.get((l.point_of_sale_id, l.category_id), (0, 0))
+        return links
+
+    def get_queryset(self):
+        qs = super().get_queryset()
+        store = self.request.query_params.get("point_of_sale")
+        return qs.filter(point_of_sale_id=store) if store else qs
+
+    def list(self, request, *args, **kwargs):
+        links = self._annotate(list(self.filter_queryset(self.get_queryset())))
+        return Response(StoreCategorySerializer(links, many=True).data)
+
+    def create(self, request, *args, **kwargs):
+        try:
+            store = PointOfSale.objects.get(pk=request.data.get("point_of_sale"))
+        except (PointOfSale.DoesNotExist, ValueError, TypeError):
+            raise ValidationError({"point_of_sale": "Point de vente introuvable."})
+        if request.data.get("category"):
+            category = Category.objects.filter(pk=request.data["category"]).first()
+            if not category:
+                raise ValidationError({"category": "Categorie introuvable."})
+        else:
+            name = (request.data.get("name") or "").strip()
+            if not name:
+                raise ValidationError({"name": "Indiquez le nom de la categorie."})
+            category = Category.objects.filter(name__iexact=name).first() or Category.objects.create(name=name)
+        if StoreCategory.objects.filter(point_of_sale=store, category=category).exists():
+            raise ValidationError({"name": "Cette categorie existe deja pour ce point de vente."})
+        last = StoreCategory.objects.filter(point_of_sale=store).aggregate(m=Max("order"))["m"]
+        link = StoreCategory.objects.create(
+            point_of_sale=store, category=category, order=int(request.data.get("order", (last or 0) + 1 if last is not None else 0))
+        )
+        return Response(StoreCategorySerializer(self._annotate([link])[0]).data, status=status.HTTP_201_CREATED)
+
+    def partial_update(self, request, *args, **kwargs):
+        link = self.get_object()
+        try:
+            link.order = max(0, int(request.data.get("order", link.order)))
+        except (TypeError, ValueError):
+            raise ValidationError({"order": "Nombre entier attendu."})
+        link.save(update_fields=["order"])
+        return Response(StoreCategorySerializer(self._annotate([link])[0]).data)
 
 
 class StockViewSet(viewsets.ReadOnlyModelViewSet):

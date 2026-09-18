@@ -14,7 +14,7 @@ POS_PAYMENT_METHODS = {m for m, _ in Order.PaymentMethod.choices}
 
 
 @transaction.atomic
-def create_pos_sale(cashier_profile, items, payment_method, customer_name="", amount_received=None):
+def create_pos_sale(cashier_profile, items, payment_method, customer_name="", amount_received=None, table_label=""):
     """
     Enregistre une vente en caisse : commande deja payee, rattachee au point de
     vente du caissier, et decremente le stock de CE point de vente. Tout ou rien :
@@ -22,6 +22,10 @@ def create_pos_sale(cashier_profile, items, payment_method, customer_name="", am
     """
     if payment_method not in POS_PAYMENT_METHODS:
         raise ValidationError({"payment_method": "Moyen de paiement invalide."})
+    from apps.stores.models import get_settings  # import tardif (evite un cycle d'apps)
+
+    if payment_method not in get_settings(cashier_profile.point_of_sale).payment_methods:
+        raise ValidationError({"payment_method": "Ce moyen de paiement n'est pas active pour ce point de vente."})
     if not items:
         raise ValidationError({"items": "Le panier est vide."})
 
@@ -35,7 +39,9 @@ def create_pos_sale(cashier_profile, items, payment_method, customer_name="", am
         channel=Order.Channel.POS,
         cashier=cashier_profile.user,
         point_of_sale=store,
-        customer_name=customer_name or "Client comptoir",
+        customer_name=customer_name or (f"Table {table_label}" if table_label else "Client comptoir"),
+        service_mode=Order.ServiceMode.DINE_IN if table_label else Order.ServiceMode.DIRECT,
+        table_label=table_label[:40],
         customer_email="",
         payment_method=payment_method,
         status=Order.Status.PAID,

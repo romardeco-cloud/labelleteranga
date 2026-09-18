@@ -391,6 +391,9 @@ export type POSReceipt = {
   point_of_sale: string;
   cashier: string;
   customer_name: string;
+  table_label?: string;
+  receipt_slogan?: string;
+  receipt_footer?: string;
   payment_method: PaymentMethod;
   payment_method_label: string;
   items: { name: string; quantity: number; unit_price: string; subtotal: string }[];
@@ -406,8 +409,54 @@ export async function cashierLogin(username: string, password: string) {
   return data as { username: string; point_of_sale_name: string };
 }
 
+export type POSSettings = {
+  payment_methods: PaymentMethod[];
+  modules: {
+    hold: boolean;
+    history: boolean;
+    qr: boolean;
+    dine_in: boolean;
+    customer_orders: boolean;
+    drawer: boolean;
+    xreport: boolean;
+  };
+  receipt_slogan: string;
+  receipt_footer: string;
+};
+
+export type POSCustomerOrder = {
+  reference: string;
+  created_at: string;
+  status: string;
+  status_label: string;
+  customer_name: string;
+  customer_phone: string;
+  delivery_address: string;
+  maps_url: string | null;
+  payment_method_label: string;
+  total: string;
+  items: { name: string; quantity: number }[];
+};
+
+export type DrawerOpening = { id: number; reason: string; cashier: string | null; created_at: string };
+
+export async function fetchPOSCustomerOrders() {
+  return (await api.get<POSCustomerOrder[]>("/pos/customer-orders/")).data;
+}
+export async function fetchDrawerOpenings() {
+  return (await api.get<DrawerOpening[]>("/pos/drawer/")).data;
+}
+export async function recordDrawerOpening(reason: string) {
+  return (await api.post<DrawerOpening>("/pos/drawer/", { reason })).data;
+}
+
 export async function fetchPOSProducts(search: string) {
-  const { data } = await api.get<{ point_of_sale: string; results: POSProduct[] }>("/pos/products/", {
+  const { data } = await api.get<{
+    point_of_sale: string;
+    results: POSProduct[];
+    categories: { name: string; order: number }[];
+    settings: POSSettings;
+  }>("/pos/products/", {
     params: search ? { search } : {},
   });
   return data;
@@ -423,6 +472,7 @@ export async function createPOSSale(input: {
   payment_method: PaymentMethod;
   customer_name?: string;
   amount_received?: number | null;
+  table_label?: string;
 }) {
   const { data } = await api.post<POSReceipt>("/pos/sales/", input);
   return data;

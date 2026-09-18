@@ -34,3 +34,23 @@ class InventoryCountAdmin(admin.ModelAdmin):
     list_display = ["number", "point_of_sale", "date", "status"]
     list_filter = ["status", "point_of_sale"]
     inlines = [InventoryCountLineInline]
+
+
+from .models import DrawerOpening, StoreCategory, StoreSettings  # noqa: E402
+
+
+@admin.register(StoreCategory)
+class StoreCategoryAdmin(admin.ModelAdmin):
+    list_display = ["point_of_sale", "category", "order"]
+    list_filter = ["point_of_sale"]
+
+
+@admin.register(StoreSettings)
+class StoreSettingsAdmin(admin.ModelAdmin):
+    list_display = ["point_of_sale", "legal_form", "vat_rate"]
+
+
+@admin.register(DrawerOpening)
+class DrawerOpeningAdmin(admin.ModelAdmin):
+    list_display = ["created_at", "point_of_sale", "cashier", "reason"]
+    list_filter = ["point_of_sale"]

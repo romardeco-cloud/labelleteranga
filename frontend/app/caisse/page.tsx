@@ -9,13 +9,19 @@ import {
   CashierClosingState,
   fetchCashierClosing,
   submitCashierClosing,
+  DrawerOpening,
+  POSCustomerOrder,
   POSProduct,
   POSReceipt,
+  POSSettings,
   PaymentMethod,
   cashierLogin,
   createPOSSale,
+  fetchDrawerOpenings,
+  fetchPOSCustomerOrders,
   fetchPOSProducts,
   fetchPOSSalesToday,
+  recordDrawerOpening,
 } from "@/lib/api";
 
 const METHODS: { value: PaymentMethod; label: string }[] = [
@@ -32,7 +38,15 @@ function xof(v: number | string) {
 }
 
 type Line = { product: POSProduct; quantity: number };
-type Held = { id: number; at: string; lines: Line[] };
+type Held = { id: number; at: string; lines: Line[]; table?: string };
+type Mode = "direct" | "dine_in" | "orders";
+
+const DEFAULT_SETTINGS: POSSettings = {
+  payment_methods: ["cash", "wave", "orange_money", "card"],
+  modules: { hold: true, history: true, qr: true, dine_in: true, customer_orders: true, drawer: true, xreport: true },
+  receipt_slogan: "L'art du service",
+  receipt_footer: "Merci de votre visite !",
+};
 
 const heldKey = (username: string) => `lbt_pos_held_${username}`;
 const linesTotal = (lines: Line[]) => lines.reduce((s, l) => s + Number(l.product.effective_price) * l.quantity, 0);
@@ -49,7 +63,17 @@ export default function CaissePage() {
   const [lines, setLines] = useState<Line[]>([]);
   const [held, setHeld] = useState<Held[]>([]);
   const heldLoaded = useRef(false);
-  const [panel, setPanel] = useState<"held" | "history" | null>(null);
+  const [panel, setPanel] = useState<"held" | "history" | "drawer" | null>(null);
+  const [mode, setMode] = useState<Mode>("direct");
+  const [table, setTable] = useState("");
+  const [settings, setSettings] = useState<POSSettings>(DEFAULT_SETTINGS);
+  const [storeCats, setStoreCats] = useState<{ name: string; order: number }[]>([]);
+  const [customerOrders, setCustomerOrders] = useState<POSCustomerOrder[]>([]);
+  const [ordersLoading, setOrdersLoading] = useState(false);
+  const [drawerRows, setDrawerRows] = useState<DrawerOpening[]>([]);
+  const [drawerReason, setDrawerReason] = useState("");
+  const [drawerMsg, setDrawerMsg] = useState("");
+  const [showX, setShowX] = useState(false);
   const [history, setHistory] = useState<POSReceipt[]>([]);
   const [historyLoading, setHistoryLoading] = useState(false);
   const [method, setMethod] = useState<PaymentMethod>("cash");
@@ -77,6 +101,8 @@ export default function CaissePage() {
     try {
       const data = await fetchPOSProducts("");
       setProducts(data.results);
+      setStoreCats(data.categories ?? []);
+      if (data.settings) setSettings(data.settings);
     } catch (e: any) {
       if (e?.response?.status === 401 || e?.response?.status === 403) logout();
     }
@@ -207,8 +233,9 @@ export default function CaissePage() {
   /* ----- ventes en attente ----- */
   function holdCurrent() {
     if (lines.length === 0) return;
-    setHeld((h) => [{ id: Date.now(), at: new Date().toISOString(), lines }, ...h]);
+    setHeld((h) => [{ id: Date.now(), at: new Date().toISOString(), lines, table: table || undefined }, ...h]);
     setLines([]);
+    setTable("");
     setReceived("");
     setError("");
   }
@@ -222,9 +249,11 @@ export default function CaissePage() {
     }
     setHeld((all) => {
       const rest = all.filter((x) => x.id !== h.id);
-      return lines.length ? [{ id: Date.now(), at: new Date().toISOString(), lines }, ...rest] : rest;
+      return lines.length ? [{ id: Date.now(), at: new Date().toISOString(), lines, table: table || undefined }, ...rest] : rest;
     });
     setLines(fresh);
+    setTable(h.table ?? "");
+    if (h.table && settings.modules.dine_in) setMode("dine_in");
     setPanel(null);
   }
 
@@ -241,12 +270,55 @@ export default function CaissePage() {
     }
   }
 
+  /* ----- commandes des clients (site) ----- */
+  async function openCustomerOrders() {
+    setMode("orders");
+    setPanel(null);
+    setOrdersLoading(true);
+    try {
+      setCustomerOrders(await fetchPOSCustomerOrders());
+    } catch {
+      setCustomerOrders([]);
+    } finally {
+      setOrdersLoading(false);
+    }
+  }
+
+  /* ----- tiroir-caisse ----- */
+  async function openDrawerPanel() {
+    setPanel("drawer");
+    setDrawerMsg("");
+    try {
+      setDrawerRows(await fetchDrawerOpenings());
+    } catch {
+      setDrawerRows([]);
+    }
+  }
+  async function submitDrawer(e: React.FormEvent) {
+    e.preventDefault();
+    if (!drawerReason.trim()) return;
+    try {
+      await recordDrawerOpening(drawerReason.trim());
+      setDrawerReason("");
+      setDrawerMsg("Ouverture enregistree.");
+      setDrawerRows(await fetchDrawerOpenings());
+    } catch {
+      setDrawerMsg("Enregistrement impossible.");
+    }
+  }
+
   /* ----- catalogue ----- */
   const categories = useMemo(() => {
-    const map = new Map<string, number>();
-    products.forEach((p) => map.set(p.category ?? NO_CATEGORY, (map.get(p.category ?? NO_CATEGORY) ?? 0) + 1));
-    return Array.from(map.entries()).sort((a, b) => a[0].localeCompare(b[0], "fr"));
-  }, [products]);
+    const counts = new Map<string, number>();
+    products.forEach((p) => counts.set(p.category ?? NO_CATEGORY, (counts.get(p.category ?? NO_CATEGORY) ?? 0) + 1));
+    // categories du point de vente dans leur ordre (meme vides), puis celles des produits non listees
+    const listed = storeCats.map((c) => [c.name, counts.get(c.name) ?? 0] as [string, number]);
+    const known = new Set(storeCats.map((c) => c.name));
+    const extra = Array.from(counts.entries())
+      .filter(([n]) => !known.has(n))
+      .sort((a, b) => a[0].localeCompare(b[0], "fr"));
+    return [...listed, ...extra];
+  }, [products, storeCats]);
 
   const visible = useMemo(() => {
     const q = search.trim().toLowerCase();
@@ -267,6 +339,13 @@ export default function CaissePage() {
     }
   }
 
+  const methods = METHODS.filter((m) => settings.payment_methods.includes(m.value));
+  useEffect(() => {
+    if (methods.length && !methods.some((m) => m.value === method)) setMethod(methods[0].value);
+    // eslint-disable-next-line react-hooks/exhaustive-deps
+  }, [settings]);
+  const dineIn = mode === "dine_in" && settings.modules.dine_in;
+
   const total = useMemo(() => linesTotal(lines), [lines]);
   const itemsCount = lines.reduce((n, l) => n + l.quantity, 0);
   const receivedNum = Number(received || 0);
@@ -280,16 +359,22 @@ export default function CaissePage() {
       setError("Le montant recu est inferieur au total.");
       return;
     }
+    if (dineIn && !table.trim()) {
+      setError("Indiquez le numero de table.");
+      return;
+    }
     setBusy(true);
     try {
       const r = await createPOSSale({
         items: lines.map((l) => ({ product: l.product.id, quantity: l.quantity })),
         payment_method: method,
         amount_received: method === "cash" && received ? receivedNum : null,
+        ...(dineIn ? { table_label: table.trim() } : {}),
       });
       setReprint(false);
       setReceipt(r);
       setLines([]);
+      setTable("");
       setReceived("");
       loadProducts();
     } catch (e: any) {
@@ -337,27 +422,27 @@ export default function CaissePage() {
   }
 
   const closed = !!closingState?.closed;
-  const showCatalog = !closingMode && !closed;
+  const showCatalog = !closingMode && !closed && mode !== "orders";
 
   return (
     <div className="admin-shell min-h-screen lg:h-screen flex flex-col print:h-auto print:block">
       <div className="flex flex-col flex-1 min-h-0 print:hidden">
         {/* Barre du haut */}
-        <header className="flex flex-wrap items-center gap-3 px-4 py-3 border-b bg-[#170f0e]">
-          <div className="flex items-center gap-3 mr-2">
-            <Image src={storeImage(session.store)} alt={session.store} width={72} height={48} className="h-10 w-auto object-contain" />
-            <div className="leading-tight hidden sm:block">
-              <p className="font-bold text-sm">{session.store}</p>
-              <p className="text-xs text-gray-500">Caissier : {session.username}</p>
+        <header className="flex flex-wrap items-center gap-2.5 px-4 py-3 border-b bg-[#170f0e]">
+          <div className="flex items-center gap-3 mr-1">
+            <Image src={storeImage(session.store)} alt={session.store} width={72} height={48} className="h-11 w-auto object-contain rounded-full bg-white/5" />
+            <div className="leading-tight hidden md:block max-w-[9rem]">
+              <p className="font-bold text-sm truncate">{session.store.replace(/ La Belle Teranga$/i, "")}</p>
+              <p className="text-xs text-sky-400 font-medium">POS</p>
             </div>
           </div>
 
-          <div className="relative flex-1 min-w-[180px] max-w-md">
+          <div className="relative w-[150px] xl:w-[210px]">
             <Icon name="search" className="w-4 h-4 absolute left-3 top-1/2 -translate-y-1/2 text-gray-500" />
             <input
               autoFocus
               type="search"
-              placeholder="Rechercher ou scanner une reference (Entree)"
+              placeholder="Rechercher..."
               value={search}
               onChange={(e) => setSearch(e.target.value)}
               onKeyDown={onSearchEnter}
@@ -365,27 +450,86 @@ export default function CaissePage() {
             />
           </div>
 
+          {/* Mode de vente */}
+          <div className="flex items-center gap-1 border rounded-xl p-1 bg-[#1c1514]">
+            {(
+              [
+                ["direct", "Vente directe", "bag", true],
+                ["dine_in", "Sur place", "utensils", settings.modules.dine_in],
+                ["orders", "Commandes client", "truck", settings.modules.customer_orders],
+              ] as const
+            )
+              .filter(([, , , enabled]) => enabled)
+              .map(([key, label, icon]) => (
+                <button
+                  key={key}
+                  onClick={() => {
+                    if (closingMode) setClosingMode(false);
+                    if (key === "orders") openCustomerOrders();
+                    else {
+                      setMode(key);
+                      setPanel(null);
+                    }
+                  }}
+                  className={`flex items-center gap-2 px-3 py-1.5 rounded-lg text-sm font-medium leading-tight text-left ${
+                    mode === key ? "bg-[#f5b942] text-[#241010]" : "text-gray-400 hover:text-white"
+                  }`}
+                >
+                  <Icon name={icon} className="w-4 h-4 shrink-0" />
+                  <span>{label}</span>
+                </button>
+              ))}
+          </div>
+
           <div className="flex flex-wrap items-center gap-2 ml-auto">
-            <button
-              onClick={() => setPanel(panel === "held" ? null : "held")}
-              className={`flex items-center gap-2 border rounded-xl px-3 py-2 text-sm ${
-                held.length ? "border-[#f5b942]/60 text-[#f5b942]" : "text-gray-500"
-              }`}
-            >
-              <Icon name="clock" className="w-4 h-4" /> En attente{held.length ? ` (${held.length})` : ""}
-            </button>
-            <button onClick={openHistory} className="flex items-center gap-2 border rounded-xl px-3 py-2 text-sm hover:bg-white/5">
-              <Icon name="list" className="w-4 h-4" /> Historique
-            </button>
+            {settings.modules.hold && (
+              <button
+                onClick={() => setPanel(panel === "held" ? null : "held")}
+                className={`flex items-center gap-2 border rounded-xl px-3 py-2 text-sm ${
+                  held.length ? "border-[#f5b942]/60 text-[#f5b942]" : "text-gray-400"
+                }`}
+              >
+                <Icon name="clock" className="w-4 h-4" /> En attente{held.length ? ` (${held.length})` : ""}
+              </button>
+            )}
+            {settings.modules.history && (
+              <button onClick={openHistory} className="flex items-center gap-2 border rounded-xl px-3 py-2 text-sm text-gray-300 hover:bg-white/5">
+                <Icon name="list" className="w-4 h-4" /> Historique
+              </button>
+            )}
+            {settings.modules.drawer && (
+              <button onClick={openDrawerPanel} className="flex items-center gap-2 border rounded-xl px-3 py-2 text-sm text-gray-300 hover:bg-white/5">
+                <Icon name="archive" className="w-4 h-4" /> Tiroir
+              </button>
+            )}
+            {settings.modules.xreport && (
+              <button
+                onClick={() => setShowX(true)}
+                disabled={!closed}
+                title={closed ? "Reimprimer le rapport du jour" : "Disponible apres la fermeture de caisse"}
+                className="flex items-center gap-2 border rounded-xl px-3 py-2 text-sm text-gray-300 hover:bg-white/5 disabled:opacity-40 disabled:hover:bg-transparent"
+              >
+                <Icon name="fileText" className="w-4 h-4" /> Reimpr. X
+              </button>
+            )}
             {!closingMode && (
-              <button onClick={startClosing} className="flex items-center gap-2 border rounded-xl px-3 py-2 text-sm hover:bg-white/5">
+              <button onClick={startClosing} className="flex items-center gap-2 border rounded-xl px-3 py-2 text-sm text-gray-300 hover:bg-white/5">
                 <Icon name="lock" className="w-4 h-4" /> {closed ? "Ma fermeture" : "Fermeture"}
               </button>
             )}
-            <button onClick={logout} className="flex items-center gap-2 border rounded-xl px-3 py-2 text-sm text-red-400 hover:bg-white/5">
-              <Icon name="logout" className="w-4 h-4" />
-              <span className="hidden sm:inline">Deconnexion</span>
-            </button>
+            <span className="hidden lg:block w-px h-9 bg-white/10 mx-1" />
+            <div className="flex items-center gap-2.5">
+              <div className="leading-tight text-right hidden sm:block">
+                <p className="text-sm font-semibold max-w-[9rem] truncate">{session.username}</p>
+                <p className="text-xs text-gray-500">Caissier</p>
+              </div>
+              <span className="w-9 h-9 rounded-full bg-sky-500/20 text-sky-400 font-bold flex items-center justify-center">
+                {session.username.slice(0, 1).toUpperCase()}
+              </span>
+              <button onClick={logout} aria-label="Deconnexion" title="Deconnexion" className="border rounded-xl p-2 text-red-400 hover:bg-white/5">
+                <Icon name="logout" className="w-4 h-4" />
+              </button>
+            </div>
           </div>
         </header>
 
@@ -509,6 +653,61 @@ export default function CaissePage() {
                     Ecart : {xof(closingState?.closing?.discrepancy_total ?? 0)}. Les ventes sont bloquees jusqu&apos;a demain. Touchez
                     &laquo; Ma fermeture &raquo; pour recompter.
                   </p>
+                </div>
+              </div>
+            )}
+
+            {!closingMode && mode === "orders" && (
+              <div className="flex-1 lg:overflow-y-auto p-4">
+                <div className="max-w-3xl mx-auto space-y-3">
+                  <div className="flex items-center justify-between">
+                    <h2 className="font-semibold">Commandes des clients (7 derniers jours)</h2>
+                    <button onClick={openCustomerOrders} className="text-sm border rounded-lg px-3 py-1.5 hover:bg-white/5">
+                      Actualiser
+                    </button>
+                  </div>
+                  {ordersLoading && <p className="text-gray-500 text-sm">Chargement...</p>}
+                  {!ordersLoading && customerOrders.length === 0 && (
+                    <p className="text-gray-500 text-center border rounded-2xl bg-[#1c1514] py-12">
+                      Aucune commande client rattachee a ce point de vente.
+                    </p>
+                  )}
+                  {customerOrders.map((o) => (
+                    <article key={o.reference} className="border rounded-2xl bg-[#1c1514] p-4">
+                      <div className="flex flex-wrap items-center justify-between gap-2">
+                        <p className="font-semibold">
+                          #{o.reference} · {o.customer_name}
+                        </p>
+                        <span
+                          className={`text-xs px-2 py-1 rounded-md ${
+                            o.status === "paid" ? "bg-emerald-500/15 text-emerald-400" : "bg-amber-500/15 text-amber-400"
+                          }`}
+                        >
+                          {o.status_label}
+                        </span>
+                      </div>
+                      <p className="text-sm text-gray-500 mt-1">
+                        {new Date(o.created_at).toLocaleString("fr-FR")} · {o.payment_method_label}
+                        {o.customer_phone ? ` · ${o.customer_phone}` : ""}
+                      </p>
+                      <ul className="mt-2 text-sm text-gray-300 list-disc list-inside">
+                        {o.items.map((i, idx) => (
+                          <li key={idx}>
+                            {i.quantity} x {i.name}
+                          </li>
+                        ))}
+                      </ul>
+                      {o.delivery_address && <p className="text-sm text-gray-400 mt-2">Livraison : {o.delivery_address}</p>}
+                      <div className="flex items-center justify-between mt-2">
+                        <p className="font-bold text-[#f5b942]">{xof(o.total)}</p>
+                        {o.maps_url && (
+                          <a href={o.maps_url} target="_blank" rel="noreferrer" className="text-sm text-[#f5b942]">
+                            Voir sur la carte
+                          </a>
+                        )}
+                      </div>
+                    </article>
+                  ))}
                 </div>
               </div>
             )}
@@ -644,8 +843,17 @@ export default function CaissePage() {
                 <span className="text-2xl font-bold text-[#f5b942]">{xof(total)}</span>
               </div>
 
+              {dineIn && (
+                <input
+                  value={table}
+                  onChange={(e) => setTable(e.target.value)}
+                  placeholder="Numero de table (obligatoire)"
+                  className="w-full border rounded-xl px-3 py-2.5"
+                />
+              )}
+
               <div className="grid grid-cols-2 gap-2">
-                {METHODS.map((m) => (
+                {methods.map((m) => (
                   <button
                     key={m.value}
                     onClick={() => setMethod(m.value)}
@@ -658,7 +866,7 @@ export default function CaissePage() {
                 ))}
               </div>
 
-              {PAYMENT_QR[method] && lines.length > 0 && (
+              {settings.modules.qr && PAYMENT_QR[method] && lines.length > 0 && (
                 <div className="text-center">
                   <p className="text-xs text-gray-500 mb-1">Le client scanne ce code pour payer {xof(total)}</p>
                   <Image
@@ -699,7 +907,7 @@ export default function CaissePage() {
               >
                 {busy ? "Enregistrement..." : `Encaisser ${xof(total)}`}
               </button>
-              {lines.length > 0 && (
+              {settings.modules.hold && lines.length > 0 && (
                 <button onClick={holdCurrent} className="w-full flex items-center justify-center gap-2 border rounded-xl py-2.5 text-sm text-gray-300 hover:bg-white/5">
                   <Icon name="pause" className="w-4 h-4" /> Mettre en attente
                 </button>
@@ -714,11 +922,45 @@ export default function CaissePage() {
         <div className="fixed inset-0 z-40 bg-black/60 flex items-start justify-end print:hidden" onClick={() => setPanel(null)}>
           <div className="w-full max-w-md h-full bg-[#170f0e] border-l overflow-y-auto" onClick={(e) => e.stopPropagation()}>
             <div className="flex items-center justify-between px-4 py-3 border-b sticky top-0 bg-[#170f0e]">
-              <h2 className="font-semibold">{panel === "held" ? "Ventes en attente" : "Historique du jour"}</h2>
+              <h2 className="font-semibold">
+                {panel === "held" ? "Ventes en attente" : panel === "drawer" ? "Tiroir-caisse" : "Historique du jour"}
+              </h2>
               <button onClick={() => setPanel(null)} className="text-gray-500 text-sm">
                 Fermer
               </button>
             </div>
+
+            {panel === "drawer" && (
+              <div className="p-4 space-y-4">
+                <p className="text-sm text-gray-500">
+                  Enregistrez chaque ouverture du tiroir hors vente (rendre la monnaie, fond de caisse...). L&apos;administrateur peut la
+                  controler. L&apos;ouverture physique demande un tiroir branche a l&apos;imprimante de tickets.
+                </p>
+                <form onSubmit={submitDrawer} className="space-y-2">
+                  <input
+                    value={drawerReason}
+                    onChange={(e) => setDrawerReason(e.target.value)}
+                    placeholder="Motif de l'ouverture"
+                    className="w-full border rounded-xl px-3 py-2.5"
+                  />
+                  <button disabled={!drawerReason.trim()} className="w-full bg-brand text-white rounded-xl py-2.5 text-sm font-medium disabled:opacity-40">
+                    Enregistrer l&apos;ouverture
+                  </button>
+                  {drawerMsg && <p className="text-sm text-emerald-400">{drawerMsg}</p>}
+                </form>
+                <ul className="divide-y border-t">
+                  {drawerRows.length === 0 && <li className="py-4 text-sm text-gray-500 text-center">Aucune ouverture aujourd&apos;hui.</li>}
+                  {drawerRows.map((r) => (
+                    <li key={r.id} className="py-2.5 text-sm">
+                      <p>{r.reason}</p>
+                      <p className="text-xs text-gray-500">
+                        {new Date(r.created_at).toLocaleTimeString("fr-FR", { hour: "2-digit", minute: "2-digit" })} · {r.cashier}
+                      </p>
+                    </li>
+                  ))}
+                </ul>
+              </div>
+            )}
 
             {panel === "held" && (
               <ul className="divide-y">
@@ -727,6 +969,7 @@ export default function CaissePage() {
                   <li key={h.id} className="p-4 flex items-center justify-between gap-3">
                     <div className="min-w-0">
                       <p className="text-sm font-medium">
+                        {h.table ? `Table ${h.table} · ` : ""}
                         {h.lines.reduce((n, l) => n + l.quantity, 0)} article(s) — {xof(linesTotal(h.lines))}
                       </p>
                       <p className="text-xs text-gray-500 truncate">
@@ -789,6 +1032,64 @@ export default function CaissePage() {
         </div>
       )}
 
+      {/* Rapport X : totaux du jour, disponible apres la fermeture de caisse */}
+      {showX && closingState?.closing && (
+        <div className="fixed inset-0 bg-black/60 flex items-center justify-center p-4 z-50 print:static print:bg-transparent print:p-0">
+          <div className="rounded-xl p-5 w-full max-w-sm print:shadow-none print:max-w-none" style={{ background: "#fff", color: "#111" }}>
+            <div className="font-mono text-sm">
+              <p className="text-center font-bold">La Belle Teranga</p>
+              <p className="text-center">{session.store}</p>
+              <p className="text-center font-bold mt-1">RAPPORT X</p>
+              <p className="text-center text-xs mb-2">
+                {new Date().toLocaleString("fr-SN")} — Caissier : {session.username}
+              </p>
+              <hr className="my-2 border-dashed" />
+              <p className="mb-1">Ventes du jour : {closingState.sales_count}</p>
+              {(
+                [
+                  ["Especes", closingState.closing.expected_cash, closingState.closing.declared_cash],
+                  ["Wave", closingState.closing.expected_wave, closingState.closing.declared_wave],
+                  ["Orange Money", closingState.closing.expected_orange_money, closingState.closing.declared_orange_money],
+                  ["Carte", closingState.closing.expected_card, closingState.closing.declared_card],
+                ] as const
+              ).map(([label, exp, dec]) => (
+                <div key={label} className="mb-1">
+                  <div className="flex justify-between">
+                    <span>{label}</span>
+                    <span>{xof(exp)}</span>
+                  </div>
+                  <div className="flex justify-between text-xs">
+                    <span>compte : {xof(dec)}</span>
+                    <span>ecart : {xof(Number(dec) - Number(exp))}</span>
+                  </div>
+                </div>
+              ))}
+              <hr className="my-2 border-dashed" />
+              <div className="flex justify-between font-bold">
+                <span>TOTAL ATTENDU</span>
+                <span>{xof(closingState.closing.expected_total)}</span>
+              </div>
+              <div className="flex justify-between">
+                <span>Total compte</span>
+                <span>{xof(closingState.closing.declared_total)}</span>
+              </div>
+              <div className="flex justify-between font-bold">
+                <span>Ecart</span>
+                <span>{xof(closingState.closing.discrepancy_total)}</span>
+              </div>
+            </div>
+            <div className="flex gap-2 mt-4 print:hidden">
+              <button onClick={() => window.print()} className="flex-1 border border-gray-300 rounded-lg py-2">
+                Imprimer
+              </button>
+              <button onClick={() => setShowX(false)} className="flex-1 bg-brand text-white rounded-lg py-2">
+                Fermer
+              </button>
+            </div>
+          </div>
+        </div>
+      )}
+
       {/* Ticket */}
       {receipt && (
         <div className="fixed inset-0 bg-black/60 flex items-center justify-center p-4 z-50 print:static print:bg-transparent print:p-0">
@@ -796,6 +1097,7 @@ export default function CaissePage() {
             <div id="receipt" className="font-mono text-sm">
               <p className="text-center font-bold">La Belle Teranga</p>
               <p className="text-center">{receipt.point_of_sale}</p>
+              {receipt.table_label && <p className="text-center font-bold">Table {receipt.table_label}</p>}
               <p className="text-center text-xs mb-2">
                 {new Date(receipt.created_at).toLocaleString("fr-SN")} — Ticket n° {receipt.receipt_number}
               </p>
@@ -833,8 +1135,8 @@ export default function CaissePage() {
                 </>
               )}
               <p className="text-center text-xs mt-2">Caissier : {receipt.cashier}</p>
-              <p className="text-center mt-2">Merci de votre visite !</p>
-              <p className="text-center text-xs">L&apos;art du service</p>
+              <p className="text-center mt-2">{receipt.receipt_footer ?? "Merci de votre visite !"}</p>
+              <p className="text-center text-xs">{receipt.receipt_slogan ?? "L'art du service"}</p>
             </div>
             <div className="flex gap-2 mt-4 print:hidden">
               <button onClick={() => window.print()} className="flex-1 border border-gray-300 rounded-lg py-2">
