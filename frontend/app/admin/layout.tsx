@@ -5,7 +5,7 @@ import Link from "next/link";
 import { usePathname, useRouter } from "next/navigation";
 import { useEffect, useState } from "react";
 import Icon, { IconName } from "@/components/admin/Icon";
-import { clearAdminToken, getAdminToken } from "@/lib/auth";
+import { clearAdminToken, getAdminToken, setAdminToken } from "@/lib/auth";
 
 type NavItem = { href: string; label: string; icon: IconName; exact?: boolean; match?: string[] };
 
@@ -58,6 +58,8 @@ export default function AdminLayout({ children }: { children: React.ReactNode })
       router.replace("/admin/login");
       return;
     }
+    const t = getAdminToken();
+    if (t) setAdminToken(t); // (re)pose l'indicateur « admin connecte » pour l'affichage du lien Espace pro
     setReady(true);
   }, [isLoginPage, router]);
 

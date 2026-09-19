@@ -16,9 +16,25 @@ const HOSTS: Record<string, string> = {
 // L'adresse racine du sous-domaine ouvre directement l'espace ; les autres chemins (/admin/..., /caisse/...) fonctionnent tels quels.
 const APPS: Record<string, string> = { admin: "/admin", caisse: "/caisse" };
 
+// Sur les adresses publiques (labelleteranga.com, www, resto., supermarche., ...), /admin et /caisse ne sont jamais servis :
+// les clients sont renvoyes a l'accueil. Les espaces pro s'ouvrent uniquement sur admin. et caisse.labelleteranga.com.
+const PRIVATE_PATHS = ["/admin", "/caisse"];
+
 export function proxy(req: NextRequest) {
   const host = (req.headers.get("host") ?? "").toLowerCase();
   const sub = host.split(".")[0];
+
+  const isOfficial = host === "labelleteranga.com" || host.endsWith(".labelleteranga.com");
+  const isPrivateHost = APPS[sub] !== undefined && host.split(".").length > 2;
+  if (isOfficial && !isPrivateHost) {
+    const p = req.nextUrl.pathname;
+    if (PRIVATE_PATHS.some((x) => p === x || p.startsWith(x + "/"))) {
+      const url = req.nextUrl.clone();
+      url.pathname = "/";
+      url.search = "";
+      return NextResponse.redirect(url);
+    }
+  }
 
   const appPath = host.includes(".") ? APPS[sub] : undefined;
   if (appPath) {

@@ -1,6 +1,7 @@
 import Image from "next/image";
 import Link from "next/link";
 import SocialLinks from "@/components/SocialLinks";
+import StaffLink from "@/components/StaffLink";
 import { CONTACT_EMAIL, fetchSites } from "@/lib/site";
 
 export default async function PortalLayout({ children }: { children: React.ReactNode }) {
@@ -16,9 +17,7 @@ export default async function PortalLayout({ children }: { children: React.React
             <span className="text-xl font-bold tracking-tight text-brand-accent">La Belle Teranga</span>
           </Link>
           <nav className="text-sm font-medium">
-            <Link href="/admin" className="opacity-80 hover:opacity-100 hover:text-brand-accent transition">
-              Espace pro
-            </Link>
+            <StaffLink />
           </nav>
         </div>
       </header>
