@@ -72,7 +72,7 @@ export default function StoreHomePage() {
 
         {site.categories && site.categories.length > 0 && (
           <div className="flex flex-wrap gap-2 mb-6">
-            {[{ id: null as number | null, name: "Tout" }, ...site.categories].map((c) => (
+            {[{ id: null as number | null, name: "Tout", products_count: 0 }, ...site.categories].map((c) => (
               <button
                 key={c.id ?? "all"}
                 onClick={() => {
@@ -84,6 +84,7 @@ export default function StoreHomePage() {
                 }`}
               >
                 {c.name}
+                {c.id !== null && c.products_count > 0 && <span className="ml-1.5 text-xs opacity-70">{c.products_count}</span>}
               </button>
             ))}
           </div>

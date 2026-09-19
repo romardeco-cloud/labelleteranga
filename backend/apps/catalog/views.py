@@ -41,6 +41,8 @@ class ProductViewSet(viewsets.ModelViewSet):
         qs = super().get_queryset()
         if not (self.request.user and self.request.user.is_staff):
             qs = qs.filter(is_active=True)
+        if self.request.query_params.get("no_category"):
+            qs = qs.filter(category__isnull=True)
         store = self.request.query_params.get("point_of_sale")
         if store:  # produits rattaches a ce point de vente
             qs = qs.filter(stocks__point_of_sale_id=store).distinct()
@@ -181,6 +183,34 @@ class ProductViewSet(viewsets.ModelViewSet):
                     change_stock(product, store, reason=StockMovement.Reason.MANUAL, user=request.user, **kwargs)
                     updated += 1
             return Response({"updated": updated, "skipped": total - updated})
+
+        if act in ("set_category", "auto_category"):
+            from .categorizer import assign, get_category, guess_category
+
+            cache = {}
+            updated = skipped = 0
+            if act == "set_category":
+                name = str(request.data.get("category_name") or "").strip()
+                category = Category.objects.filter(pk=request.data.get("category")).first() if request.data.get("category") else None
+                if not category and not name:
+                    raise ValidationError({"category": "Choisissez ou saisissez une categorie."})
+                category = category or get_category(name, cache)
+                for product in qs.prefetch_related("stocks"):
+                    assign(product, category)
+                    updated += 1
+                return Response({"updated": updated, "skipped": 0, "category": category.name})
+            only_empty = request.data.get("only_empty", True)
+            for product in qs.prefetch_related("stocks"):
+                if only_empty and product.category_id:
+                    skipped += 1
+                    continue
+                guess = guess_category(product.name)
+                if not guess:
+                    skipped += 1
+                    continue
+                assign(product, get_category(guess, cache))
+                updated += 1
+            return Response({"updated": updated, "skipped": skipped, "skipped_reason": "deja classes ou nom non reconnu" if skipped else ""})
 
         if act == "delete":
             if request.data.get("confirm") is not True:

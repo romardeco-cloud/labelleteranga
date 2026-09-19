@@ -55,7 +55,10 @@ export default function AdminProductsPage() {
   const bulkRef = useRef<HTMLInputElement>(null);
   // --- actions groupees ---
   const [selected, setSelected] = useState<Set<number>>(new Set());
-  const [bulkKind, setBulkKind] = useState<null | "price" | "stock" | "delete">(null);
+  const [bulkKind, setBulkKind] = useState<null | "price" | "stock" | "delete" | "category">(null);
+  const [categoryFilter, setCategoryFilter] = useState<string>(""); // "" = toutes, "none" = sans categorie, sinon id
+  const [bulkCategory, setBulkCategory] = useState("");
+  const [bulkCategoryName, setBulkCategoryName] = useState("");
   const [bulkPrice, setBulkPrice] = useState("");
   const [bulkActivate, setBulkActivate] = useState(true);
   const [bulkQty, setBulkQty] = useState("");
@@ -74,6 +77,7 @@ export default function AdminProductsPage() {
           page_size: 500,
           ...(storeId ? { point_of_sale: storeId } : {}),
           ...(search ? { search } : {}),
+          ...(categoryFilter === "none" ? { no_category: 1 } : categoryFilter ? { category: categoryFilter } : {}),
           ...(statusFilter !== "all" ? { is_active: statusFilter === "active" ? "true" : "false" } : {}),
         },
       })
@@ -90,10 +94,13 @@ export default function AdminProductsPage() {
   }, []);
 
   async function runBulk(action: string, extra: Record<string, unknown> = {}) {
+    return runBulkFor([...selected], action, extra);
+  }
+  async function runBulkFor(ids: number[], action: string, extra: Record<string, unknown> = {}) {
     setBulkBusy(true);
     setBulkMsg(null);
     try {
-      const res = await api.post("/catalog/products/bulk-update/", { ids: [...selected], action, ...extra });
+      const res = await api.post("/catalog/products/bulk-update/", { ids, action, ...extra });
       const { updated, skipped, skipped_reason } = res.data as { updated: number; skipped: number; skipped_reason?: string };
       setBulkMsg({
         ok: true,
@@ -123,7 +130,7 @@ export default function AdminProductsPage() {
     const t = setTimeout(reload, 250);
     return () => clearTimeout(t);
     // eslint-disable-next-line react-hooks/exhaustive-deps
-  }, [storeId, search, statusFilter]);
+  }, [storeId, search, statusFilter, categoryFilter]);
 
   async function handleCreate(e: React.FormEvent) {
     e.preventDefault();
@@ -379,6 +386,23 @@ export default function AdminProductsPage() {
             </button>
           ))}
         </div>
+        <select
+          value={categoryFilter}
+          onChange={(e) => {
+            setCategoryFilter(e.target.value);
+            setSelected(new Set());
+          }}
+          className="border rounded-xl px-3 py-2 text-sm bg-white"
+          aria-label="Filtrer par categorie"
+        >
+          <option value="">Toutes les categories</option>
+          <option value="none">Sans categorie</option>
+          {categories.map((c) => (
+            <option key={c.id} value={c.id}>
+              {c.name}
+            </option>
+          ))}
+        </select>
         {storeId && statusFilter === "hidden" && products.length > 0 && (
           <button
             onClick={async () => {
@@ -527,6 +551,19 @@ export default function AdminProductsPage() {
         <button onClick={toggleAll} disabled={products.length === 0} className="border rounded-lg px-3 py-1.5 text-sm bg-white disabled:opacity-40">
           {allSelected ? "Tout deselectionner" : `Tout selectionner (${products.length})`}
         </button>
+        {products.some((x) => !x.category) && (
+          <button
+            onClick={() => {
+              setSelected(new Set(products.filter((x) => !x.category).map((x) => x.id)));
+              setTimeout(() => runBulkFor(products.filter((x) => !x.category).map((x) => x.id), "auto_category"), 0);
+            }}
+            disabled={bulkBusy}
+            className="border border-brand text-brand rounded-lg px-3 py-1.5 text-sm bg-white"
+            title="Range automatiquement les produits sans categorie d'apres leur nom"
+          >
+            Classer automatiquement ({products.filter((x) => !x.category).length} sans categorie)
+          </button>
+        )}
         {selected.size > 0 && (
           <>
             <span className="text-sm font-medium">{selected.size} selectionne(s) :</span>
@@ -541,6 +578,9 @@ export default function AdminProductsPage() {
             </button>
             <button onClick={() => setBulkKind("stock")} className="border rounded-lg px-3 py-1.5 text-sm bg-white">
               Stock uniforme
+            </button>
+            <button onClick={() => setBulkKind("category")} className="border rounded-lg px-3 py-1.5 text-sm bg-white">
+              Categorie
             </button>
             <button onClick={() => setBulkKind("delete")} className="border border-red-500 text-red-600 rounded-lg px-3 py-1.5 text-sm bg-white">
               Supprimer
@@ -590,6 +630,30 @@ export default function AdminProductsPage() {
                 ) : (
                   <p className="text-sm text-amber-700">Choisissez d&apos;abord un point de vente (boutons en haut de la liste) : le stock se gere par point de vente.</p>
                 )}
+              </>
+            )}
+            {bulkKind === "category" && (
+              <>
+                <h2 className="font-bold text-lg">Categorie pour {selected.size} produit(s)</h2>
+                <select value={bulkCategory} onChange={(e) => { setBulkCategory(e.target.value); setBulkCategoryName(""); }} className="w-full border rounded px-3 py-2">
+                  <option value="">Choisir une categorie...</option>
+                  {categories.map((c) => (
+                    <option key={c.id} value={c.id}>
+                      {c.name}
+                    </option>
+                  ))}
+                </select>
+                <input value={bulkCategoryName} onChange={(e) => { setBulkCategoryName(e.target.value); setBulkCategory(""); }} placeholder="ou creer une nouvelle categorie" className="w-full border rounded px-3 py-2" />
+                <button
+                  disabled={bulkBusy || (!bulkCategory && !bulkCategoryName.trim())}
+                  onClick={async () => {
+                    await runBulk("set_category", bulkCategory ? { category: Number(bulkCategory) } : { category_name: bulkCategoryName.trim() });
+                    fetchCategories().then(setCategories);
+                  }}
+                  className="w-full bg-brand text-white rounded-lg py-2.5 font-medium disabled:opacity-40"
+                >
+                  {bulkBusy ? "Application..." : "Appliquer cette categorie"}
+                </button>
               </>
             )}
             {bulkKind === "delete" && (

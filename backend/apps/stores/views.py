@@ -376,17 +376,26 @@ def _site_payload(store, with_categories=False):
     data["reviews"] = {"count": rev["n"], "overall": round(((rev["s"] or 0) + (rev["q"] or 0)) / 2, 1) if rev["n"] else None}
     data["combos_count"] = Combo.objects.filter(point_of_sale=store, is_active=True).count()
     if with_categories:
-        counts = {
-            r["product__category_id"]: r["n"]
-            for r in Stock.objects.filter(point_of_sale=store, product__is_active=True, quantity__gt=0)
-            .values("product__category_id")
-            .annotate(n=Count("id"))
-        }
-        data["categories"] = [
-            {"id": l.category_id, "name": l.category.name, "order": l.order, "products_count": counts.get(l.category_id, 0)}
-            for l in StoreCategory.objects.filter(point_of_sale=store).select_related("category")
-            if counts.get(l.category_id, 0) > 0
-        ]
+        from .models import tracks_stock
+
+        in_sale = Stock.objects.filter(point_of_sale=store, product__is_active=True, product__category__isnull=False)
+        if tracks_stock(store):
+            in_sale = in_sale.filter(quantity__gt=0)
+        counts = {r["product__category_id"]: r["n"] for r in in_sale.values("product__category_id").annotate(n=Count("id"))}
+        links = {l.category_id: l for l in StoreCategory.objects.filter(point_of_sale=store).select_related("category")}
+        names = {c.pk: c.name for c in Category.objects.filter(pk__in=counts)}
+        data["categories"] = sorted(
+            (
+                {
+                    "id": cid,
+                    "name": links[cid].category.name if cid in links else names.get(cid, ""),
+                    "order": links[cid].order if cid in links else 999,
+                    "products_count": n,
+                }
+                for cid, n in counts.items()
+            ),
+            key=lambda c: (c["order"], c["name"]),
+        )
     return data
 
 

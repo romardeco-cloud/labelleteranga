@@ -32,6 +32,7 @@ from PIL import Image
 from apps.stores.models import PointOfSale, Stock, StockMovement, StoreCategory
 from apps.stores.services import change_stock
 
+from .categorizer import guess_category
 from .models import Category, Product
 
 IMAGE_EXTS = (".jpg", ".jpeg", ".png", ".webp", ".gif", ".jfif", ".bmp")
@@ -454,7 +455,7 @@ def analyze(files, store=None, create_from_images=False):
             "source": it["source"],
             "sku": sku,
             "name": it["name"],
-            "category": str(it.get("category") or "").strip(),
+            "category": str(it.get("category") or "").strip() or (guess_category(it["name"]) or ""),
             "price": str(price) if price is not None else None,
             "compare_at_price": str(parse_price(it.get("compare_at_price"))) if parse_price(it.get("compare_at_price")) is not None else None,
             "unit": str(it.get("unit") or "").strip(),
@@ -485,7 +486,7 @@ def analyze(files, store=None, create_from_images=False):
             existing = by_name.get(norm(title))
             rows.append(
                 {
-                    "line": 0, "source": pool[i]["filename"], "sku": "", "name": title, "category": "", "price": None, "compare_at_price": None,
+                    "line": 0, "source": pool[i]["filename"], "sku": "", "name": title, "category": guess_category(title) or "", "price": None, "compare_at_price": None,
                     "unit": "", "description": "", "is_active": False, "stock": None, "image_url": "", "image_index": i,
                     "action": "update" if existing else "create", "product_id": existing.pk if existing else None,
                     "warning": "Cree a partir de la photo : prix a renseigner (masque en attendant).",
