@@ -4,6 +4,7 @@ import Image from "next/image";
 import Link from "next/link";
 import { useEffect, useState } from "react";
 import InstallApp from "@/components/site/InstallApp";
+import InstallBanner from "@/components/site/InstallBanner";
 import PendingPaymentBanner from "@/components/site/PendingPaymentBanner";
 import { SiteProvider, useSite } from "@/components/site/SiteContext";
 import SocialLinks from "@/components/SocialLinks";
@@ -95,6 +96,7 @@ export default function SiteShell({ site, children }: { site: Site; children: Re
   return (
     <SiteProvider site={site}>
       <Header />
+      <InstallBanner />
       <PendingPaymentBanner />
       <main className="min-h-[70vh]">{children}</main>
       <Footer />

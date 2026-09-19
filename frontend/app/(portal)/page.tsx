@@ -65,6 +65,9 @@ export default async function PortalPage() {
             Ouvrez le site du point de vente de votre choix puis touchez « Installer l&apos;application » : elle s&apos;ajoute a l&apos;ecran
             d&apos;accueil de votre telephone (iPhone et Android).
           </p>
+          <Link href="/app" className="inline-block mt-3 bg-brand text-white text-sm font-medium px-4 py-2 rounded-lg">
+            Telecharger l&apos;application (QR code)
+          </Link>
         </section>
       </div>
     </div>

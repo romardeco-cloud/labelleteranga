@@ -101,6 +101,10 @@ export default function AdminLayout({ children }: { children: React.ReactNode })
           <Icon name="globe" />
           Voir le site
         </Link>
+        <Link href="/app" className="flex items-center gap-3 px-3 py-2 rounded-lg text-sm text-[#a99b96] hover:bg-white/5 hover:text-white">
+          <Icon name="menu" />
+          Liens et QR codes des apps
+        </Link>
         <button
           onClick={logout}
           className="w-full flex items-center gap-3 px-3 py-2 rounded-lg text-sm text-[#f87171] hover:bg-white/5"
