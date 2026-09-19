@@ -87,6 +87,29 @@ class CashierViewSet(viewsets.ModelViewSet):
     serializer_class = CashierSerializer
     permission_classes = [permissions.IsAdminUser]
 
+    @transaction.atomic
+    def perform_destroy(self, instance):
+        """
+        Supprime le compte caissier. Sans historique : compte supprime. Avec ventes ou fermetures de caisse : le compte est retire
+        de la liste et ne peut plus se connecter, mais l'historique (ventes, fermetures, rapports) reste attribue a son nom.
+        """
+        from apps.orders.models import Order
+        from apps.reports.models import DailyClosing
+
+        user = instance.user
+        has_history = Order.objects.filter(cashier=user).exists() or DailyClosing.objects.filter(cashier=user).exists()
+        if user.is_staff or user.is_superuser:
+            instance.delete()  # ne jamais supprimer un compte administrateur
+            return
+        instance.delete()
+        if has_history:
+            user.username = f"supprime-{user.pk}-{user.username}"[:150]
+            user.is_active = False
+            user.set_unusable_password()
+            user.save()
+        else:
+            user.delete()
+
 
 class StaffListView(APIView):
     """GET /api/accounts/staff/ : comptes administrateurs (lecture seule)."""
