@@ -29,6 +29,9 @@ export default function PortalLayout({ children }: { children: React.ReactNode }
             {CONTACT_EMAIL}
           </a>
         </p>
+        <p className="text-xs">
+          <Link href="/confidentialite" className="underline">Confidentialite</Link> &middot; <Link href="/conditions" className="underline">Conditions</Link>
+        </p>
         <SocialLinks />
       </footer>
     </>

@@ -84,6 +84,9 @@ function Footer() {
         </a>
       </p>
       <InstallApp appName={shortName(site.name)} className="sm:hidden text-brand underline" />
+      <p className="text-xs">
+        <Link href="/confidentialite" className="underline">Confidentialite</Link> &middot; <Link href="/conditions" className="underline">Conditions</Link>
+      </p>
       <SocialLinks />
       <p className="text-xs text-gray-400 pt-2">
         &copy; {new Date().getFullYear()} La Belle Teranga &mdash; <span className="italic">L&apos;art du service</span>

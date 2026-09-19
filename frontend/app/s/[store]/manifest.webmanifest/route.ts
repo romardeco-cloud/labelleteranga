@@ -11,8 +11,13 @@ export async function GET(_req: Request, { params }: { params: Promise<{ store: 
     name: site.name,
     short_name: shortName(site.name).slice(0, 16),
     description: site.description || `Commandez en ligne chez ${site.name}.`,
+    // le scope doit contenir start_url (sinon Chrome/Edge refusent l'installation) : pas de "/" final
     start_url: `/s/${store}`,
-    scope: `/s/${store}/`,
+    scope: `/s/${store}`,
+    categories: ["food", "shopping", "business"],
+    shortcuts: [
+      { name: "Mon panier", short_name: "Panier", url: `/s/${store}/cart`, icons: [{ src: `/icons/${icons}-192.png`, sizes: "192x192" }] },
+    ],
     display: "standalone",
     background_color: "#fdf8ee",
     theme_color: "#9c1c1c",
