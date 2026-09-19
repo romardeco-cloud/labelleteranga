@@ -913,8 +913,58 @@ export default function AdminProductsPage() {
                       formatXof(p.price)
                     )}
                   </td>
-                  <td className="p-2">{(store && store.track_stock === false) || (storeId && p.stocks.find((st) => st.point_of_sale === storeId)?.track_stock === false) ? <span className="text-xs text-gray-500">Non suivi</span> : storeId ? (p.stocks.find((st) => st.point_of_sale === storeId)?.quantity ?? 0) : p.total_stock}</td>
-                  <td className="p-2">{p.is_active ? "Actif" : "Inactif"}</td>
+                  <td className="p-2">
+                    {(() => {
+                      const row = storeId ? p.stocks.find((st) => st.point_of_sale === storeId) : undefined;
+                      const storeUntracked = !!store && store.track_stock === false;
+                      const tracked = !storeUntracked && row?.track_stock !== false;
+                      return (
+                        <div className="space-y-1">
+                          <div>{!tracked && storeId ? <span className="text-xs text-gray-500">Non suivi</span> : storeId ? (row?.quantity ?? 0) : p.total_stock}</div>
+                          {storeId && !storeUntracked && (
+                            <select
+                              value={tracked ? "yes" : "no"}
+                              onChange={async (e) => {
+                                try {
+                                  await api.post("/catalog/products/bulk-update/", { ids: [p.id], point_of_sale: storeId, action: "set_tracking", track: e.target.value === "yes" });
+                                  reload();
+                                } catch (err) {
+                                  setPhotoErr(apiErrorMessage(err, "Suivi du stock non modifie."));
+                                }
+                              }}
+                              className="border rounded px-1 py-0.5 text-xs bg-transparent"
+                              aria-label={`Suivi du stock de ${p.name}`}
+                            >
+                              <option value="yes">Stock suivi</option>
+                              <option value="no">Stock non suivi</option>
+                            </select>
+                          )}
+                          {storeUntracked && <div className="text-[10px] text-gray-500">(suivi desactive pour ce point de vente)</div>}
+                        </div>
+                      );
+                    })()}
+                  </td>
+                  <td className="p-2">
+                    <select
+                      value={p.is_active ? "on" : "off"}
+                      onChange={async (e) => {
+                        const active = e.target.value === "on";
+                        if (active && Number(p.price) <= 0 && !confirm(`« ${p.name} » a un prix de 0 FCFA : il serait vendu gratuitement. L'activer quand meme ?`)) return;
+                        if (p.stocks.length > 1 && !confirm(`« ${p.name} » est vendu par ${p.stocks.length} points de vente : le statut change pour tous. Continuer ?`)) return;
+                        try {
+                          await api.patch(`/catalog/products/${p.id}/`, { is_active: active });
+                          reload();
+                        } catch (err) {
+                          setPhotoErr(apiErrorMessage(err, "Statut non modifie."));
+                        }
+                      }}
+                      className={`border rounded px-1 py-0.5 text-xs bg-transparent ${p.is_active ? "text-green-600" : "text-gray-500"}`}
+                      aria-label={`Statut de ${p.name}`}
+                    >
+                      <option value="on">Actif</option>
+                      <option value="off">Desactive</option>
+                    </select>
+                  </td>
                   <td className="p-2 text-right space-x-2">
                     <button
                       onClick={() => setExpanded(expanded === p.id ? null : p.id)}
