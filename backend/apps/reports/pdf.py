@@ -100,11 +100,18 @@ def letterhead(store=None):
     name = store.name if store else "La Belle Teranga"
     lines = [f"<b>{name}</b>"]
     st = get_settings(store) if store else None
-    if store and store.address:
-        lines.append(store.address)
+    from apps.stores.models import CompanySeal
+
+    company = CompanySeal.objects.first()  # coordonnees de l'entreprise (Admin > Cachet et signature) : les memes qu'en pied de page
+    address = (store.address if store and store.address else "") or (company.contact_address if company else "")
+    if address:
+        lines.append(address)
     contact = []
-    if store and store.phone:
-        contact.append(f"Tel : {store.phone}")
+    phone = (store.phone if store and store.phone else "") or (company.contact_phone if company else "")
+    if phone:
+        contact.append(f"Tel : {phone}")
+    if company and company.contact_whatsapp:
+        contact.append(f"WhatsApp : {company.contact_whatsapp}")
     contact.append(f"Email : {(st.email if st and st.email else CONTACT_EMAIL)}")
     lines.append(" - ".join(contact))
     legal = []
@@ -117,6 +124,8 @@ def letterhead(store=None):
             legal.append(f"RCCM {st.rccm}")
     if legal:
         lines.append(" - ".join(legal))
+    elif company and company.legal_line:
+        lines.append(company.legal_line)
     text = Paragraph("<br/>".join(lines), BODY)
     logo_path = Path(settings.BASE_DIR) / "assets" / "logo.jpg"
     cells = [[Image(str(logo_path), 18 * mm, 18 * mm) if logo_path.exists() else "", text]]

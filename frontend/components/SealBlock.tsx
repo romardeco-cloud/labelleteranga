@@ -21,6 +21,22 @@ export type Seal = {
 
 let cache: Seal | null = null;
 
+/** Coordonnees de l'entreprise saisies dans Admin > Cachet et signature (adresse, telephone, WhatsApp, RCCM / NINEA) : meme source pour l'en-tete et le pied de page. */
+export function useCompanyContact(): Seal | null {
+  const [seal, setSeal] = useState<Seal | null>(cache);
+  useEffect(() => {
+    if (cache) return;
+    api
+      .get<Seal>("/stores/company-seal/")
+      .then((r) => {
+        cache = r.data;
+        setSeal(r.data);
+      })
+      .catch(() => {});
+  }, []);
+  return seal;
+}
+
 export function todayFr() {
   return new Date().toLocaleDateString("fr-FR", { day: "numeric", month: "long", year: "numeric" });
 }

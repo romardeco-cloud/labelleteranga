@@ -5,7 +5,7 @@ import Link from "next/link";
 import { useParams, useRouter } from "next/navigation";
 import { Fragment, useCallback, useEffect, useState } from "react";
 import PayBadge from "@/components/documents/PayBadge";
-import SealBlock from "@/components/SealBlock";
+import SealBlock, { useCompanyContact } from "@/components/SealBlock";
 import {
   DOC_CONFIG,
   DocType,
@@ -23,6 +23,7 @@ import {
 const today = () => new Date().toISOString().slice(0, 10);
 
 export default function DocumentDetailPage() {
+  const company = useCompanyContact();
   const { type: rawType, id } = useParams<{ type: string; id: string }>();
   const type = rawType as DocType;
   const cfg = DOC_CONFIG[type];
@@ -158,8 +159,11 @@ export default function DocumentDetailPage() {
             <div className="text-sm">
               <p className="font-bold text-lg">La Belle Teranga</p>
               {doc.point_of_sale_name && <p>{doc.point_of_sale_name}</p>}
-              <p>info@labelleteranga.com</p>
-              {process.env.NEXT_PUBLIC_PHONE && <p>Tel : {process.env.NEXT_PUBLIC_PHONE}</p>}
+              {company?.contact_address && <p>{company.contact_address}</p>}
+              <p>
+                {[company?.contact_phone ? `Tel : ${company.contact_phone}` : process.env.NEXT_PUBLIC_PHONE ? `Tel : ${process.env.NEXT_PUBLIC_PHONE}` : "", company?.contact_whatsapp && `WhatsApp : ${company.contact_whatsapp}`, "info@labelleteranga.com"].filter(Boolean).join(" - ")}
+              </p>
+              {company?.legal_line && <p className="text-xs text-gray-600">{company.legal_line}</p>}
             </div>
           </div>
           <div className="text-right">
