@@ -120,7 +120,11 @@ SETTINGS_FIELDS = [
     "timezone", "email", "legal_form", "share_capital", "ninea", "rccm", "vat_rate", "prices_include_vat",
     "payment_methods", "wave_pay_url", "orange_pay_url", "wave_number", "orange_number", "track_stock", "receipt_slogan", "receipt_footer", "module_hold", "module_history", "module_qr",
     "module_dine_in", "module_customer_orders", "module_drawer", "module_xreport",
+    "social_links", "loyalty_enabled", "loyalty_mode", "loyalty_threshold", "loyalty_min_order", "loyalty_reward_type",
+    "loyalty_reward_value", "loyalty_reward_label", "loyalty_valid_days",
 ]
+
+SOCIAL_KEYS = ["whatsapp", "phone", "facebook", "instagram", "tiktok", "x", "youtube", "telegram", "website"]
 
 
 class StoreSettingsSerializer(serializers.ModelSerializer):
@@ -139,6 +143,28 @@ class StoreSettingsSerializer(serializers.ModelSerializer):
 
     def validate_orange_pay_url(self, value):
         return self._https_only(value)
+
+    def validate_social_links(self, value):
+        if not isinstance(value, dict):
+            raise serializers.ValidationError("Objet attendu.")
+        clean = {}
+        for key, val in value.items():
+            if key not in SOCIAL_KEYS:
+                raise serializers.ValidationError(f"Reseau inconnu : {key}")
+            val = str(val or "").strip()
+            if val:
+                clean[key] = val[:200]
+        return clean
+
+    def validate_loyalty_threshold(self, value):
+        if value < 1:
+            raise serializers.ValidationError("Le seuil doit etre au moins 1.")
+        return value
+
+    def validate(self, attrs):
+        if attrs.get("loyalty_enabled") and attrs.get("loyalty_reward_type") == "gift" and not attrs.get("loyalty_reward_label"):
+            raise serializers.ValidationError({"loyalty_reward_label": "Decrivez le cadeau offert."})
+        return attrs
 
     def validate_payment_methods(self, value):
         allowed = {"cash", "wave", "orange_money", "card"}
@@ -178,6 +204,7 @@ def pos_settings(store):
         },
         "receipt_slogan": st.receipt_slogan,
         "receipt_footer": st.receipt_footer,
+        "loyalty": st.loyalty_enabled,
     }
 
 

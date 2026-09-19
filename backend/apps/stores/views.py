@@ -1,4 +1,4 @@
-from django.db.models import Count, Max, Q, Sum
+from django.db.models import Avg, Count, Max, Q, Sum
 from django.http import HttpResponse
 from rest_framework import permissions, status, viewsets
 from rest_framework.decorators import action
@@ -17,7 +17,8 @@ from .inventory import (
 )
 from apps.catalog.models import Category
 
-from .models import DailyMenu, DailyMenuItem, InventoryCount, PointOfSale, Stock, StockMovement, StoreCategory, get_settings
+from .loyalty import reward_text as loyalty_reward_text
+from .models import Combo, Review, DailyMenu, DailyMenuItem, InventoryCount, PointOfSale, Stock, StockMovement, StoreCategory, get_settings
 from .serializers import (
     InventoryCountDetailSerializer,
     InventoryCountSerializer,
@@ -320,6 +321,20 @@ def _site_payload(store, with_categories=False):
     data["orange_pay_url"] = st.orange_pay_url
     data["wave_number"] = st.wave_number
     data["orange_number"] = st.orange_number
+    data["social_links"] = st.social_links or {}
+    data["loyalty"] = (
+        {
+            "enabled": True,
+            "mode": st.loyalty_mode,
+            "threshold": st.loyalty_threshold,
+            "reward_label": loyalty_reward_text(st),
+        }
+        if st.loyalty_enabled
+        else {"enabled": False}
+    )
+    rev = Review.objects.filter(point_of_sale=store, is_published=True).aggregate(n=Count("id"), s=Avg("service_rating"), q=Avg("quality_rating"))
+    data["reviews"] = {"count": rev["n"], "overall": round(((rev["s"] or 0) + (rev["q"] or 0)) / 2, 1) if rev["n"] else None}
+    data["combos_count"] = Combo.objects.filter(point_of_sale=store, is_active=True).count()
     if with_categories:
         counts = {
             r["product__category_id"]: r["n"]

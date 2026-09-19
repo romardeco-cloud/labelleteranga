@@ -158,6 +158,24 @@ class StoreSettings(models.Model):
     module_customer_orders = models.BooleanField("Commandes client", default=True)
     module_drawer = models.BooleanField("Tiroir-caisse", default=True)
     module_xreport = models.BooleanField("Rapport X", default=True)
+    # reseaux sociaux du point de vente (cle -> lien ou numero) : facebook, instagram, tiktok, x, youtube, telegram, whatsapp, phone, website
+    social_links = models.JSONField("Reseaux sociaux", default=dict, blank=True)
+    # programme de fidelite : recompense apres N commandes OU apres un montant cumule (au choix du gerant)
+    loyalty_enabled = models.BooleanField("Fidelite active", default=False)
+    loyalty_mode = models.CharField(
+        "Critere", max_length=10, choices=[("orders", "Nombre de commandes"), ("amount", "Montant cumule")], default="orders"
+    )
+    loyalty_threshold = models.PositiveIntegerField("Seuil (commandes ou FCFA)", default=10)
+    loyalty_min_order = models.PositiveIntegerField("Montant minimum d'une commande comptee (FCFA)", default=0)
+    loyalty_reward_type = models.CharField(
+        "Type de recompense",
+        max_length=10,
+        choices=[("percent", "Reduction en %"), ("amount", "Reduction en FCFA"), ("gift", "Cadeau offert")],
+        default="percent",
+    )
+    loyalty_reward_value = models.DecimalField("Valeur (% ou FCFA)", max_digits=10, decimal_places=0, default=10)
+    loyalty_reward_label = models.CharField("Texte de la recompense", max_length=120, blank=True)
+    loyalty_valid_days = models.PositiveIntegerField("Validite de la recompense (jours)", default=60)
 
     def __str__(self):
         return f"Parametres de {self.point_of_sale}"
@@ -224,3 +242,110 @@ class DailyMenuItem(models.Model):
     class Meta:
         unique_together = (("menu", "product"), ("menu", "number"))
         ordering = ["number"]
+
+
+def _reward_code():
+    import secrets
+
+    return "".join(secrets.choice("ABCDEFGHJKLMNPQRSTUVWXYZ23456789") for _ in range(6))
+
+
+class LoyaltyMember(models.Model):
+    """Client fidele, identifie par son telephone, pour un point de vente."""
+
+    point_of_sale = models.ForeignKey(PointOfSale, related_name="loyalty_members", on_delete=models.CASCADE)
+    phone = models.CharField(max_length=20, db_index=True)  # chiffres seulement, sans indicatif
+    name = models.CharField(max_length=150, blank=True)
+    orders_count = models.PositiveIntegerField(default=0)
+    total_spent = models.DecimalField(max_digits=14, decimal_places=2, default=0)
+    progress = models.DecimalField("Progression vers la prochaine recompense", max_digits=14, decimal_places=2, default=0)
+    rewards_earned = models.PositiveIntegerField(default=0)
+    created_at = models.DateTimeField(auto_now_add=True)
+    updated_at = models.DateTimeField(auto_now=True)
+
+    class Meta:
+        unique_together = ("point_of_sale", "phone")
+        ordering = ["-updated_at"]
+
+
+class LoyaltyReward(models.Model):
+    member = models.ForeignKey(LoyaltyMember, related_name="rewards", on_delete=models.CASCADE)
+    point_of_sale = models.ForeignKey(PointOfSale, related_name="loyalty_rewards", on_delete=models.CASCADE)
+    code = models.CharField(max_length=8, unique=True, default=_reward_code)
+    reward_type = models.CharField(max_length=10)
+    value = models.DecimalField(max_digits=10, decimal_places=0, default=0)
+    label = models.CharField(max_length=160)
+    created_at = models.DateTimeField(auto_now_add=True)
+    expires_at = models.DateTimeField(null=True, blank=True)
+    used_at = models.DateTimeField(null=True, blank=True)
+    used_on_order = models.CharField(max_length=40, blank=True)
+
+    class Meta:
+        ordering = ["-created_at"]
+
+
+class Review(models.Model):
+    """Avis client : notes 1-5 (service, qualite), sondage de 3 questions et commentaire."""
+
+    point_of_sale = models.ForeignKey(PointOfSale, related_name="reviews", on_delete=models.CASCADE)
+    order_reference = models.CharField(max_length=40, blank=True, db_index=True)
+    customer_name = models.CharField(max_length=100, blank=True)
+    customer_phone = models.CharField(max_length=30, blank=True)
+    service_rating = models.PositiveSmallIntegerField()
+    quality_rating = models.PositiveSmallIntegerField()
+    q_speed = models.PositiveSmallIntegerField("Rapidite du service", null=True, blank=True)
+    q_welcome = models.PositiveSmallIntegerField("Accueil et amabilite", null=True, blank=True)
+    q_recommend = models.CharField("Recommanderait", max_length=10, blank=True)  # yes | maybe | no
+    dish = models.CharField("Plat / produit concerne", max_length=150, blank=True)
+    comment = models.TextField(blank=True)
+    is_published = models.BooleanField(default=True)
+    reply = models.TextField("Reponse du commerce", blank=True)
+    created_at = models.DateTimeField(auto_now_add=True)
+
+    class Meta:
+        ordering = ["-created_at"]
+
+
+class Combo(models.Model):
+    """Formule / combo pour un evenement (anniversaire, soiree entre amis, special week-end...), definie manuellement."""
+
+    point_of_sale = models.ForeignKey(PointOfSale, related_name="combos", on_delete=models.CASCADE)
+    name = models.CharField(max_length=120)
+    occasion = models.CharField("Occasion", max_length=80, blank=True)
+    description = models.TextField(blank=True)
+    includes = models.TextField("Contenu (une ligne par element)", blank=True)
+    serves = models.CharField("Pour combien de personnes", max_length=60, blank=True)
+    price = models.DecimalField(max_digits=12, decimal_places=0, default=0)
+    image = models.ImageField(upload_to="combos/", blank=True)
+    weekend_only = models.BooleanField("Uniquement le week-end", default=False)
+    starts_on = models.DateField(null=True, blank=True)
+    ends_on = models.DateField(null=True, blank=True)
+    min_notice_hours = models.PositiveIntegerField("Delai de reservation (heures)", default=24)
+    is_active = models.BooleanField(default=True)
+    order = models.PositiveIntegerField(default=0)
+    created_at = models.DateTimeField(auto_now_add=True)
+
+    class Meta:
+        ordering = ["order", "-created_at"]
+
+
+class ComboRequest(models.Model):
+    class Status(models.TextChoices):
+        NEW = "new", "Nouvelle"
+        CONFIRMED = "confirmed", "Confirmee"
+        CANCELLED = "cancelled", "Annulee"
+
+    point_of_sale = models.ForeignKey(PointOfSale, related_name="combo_requests", on_delete=models.CASCADE)
+    combo = models.ForeignKey(Combo, related_name="requests", null=True, blank=True, on_delete=models.SET_NULL)
+    combo_name = models.CharField(max_length=120)
+    combo_price = models.DecimalField(max_digits=12, decimal_places=0, default=0)
+    customer_name = models.CharField(max_length=100)
+    customer_phone = models.CharField(max_length=30)
+    event_date = models.DateField()
+    guests = models.PositiveIntegerField(default=1)
+    message = models.TextField(blank=True)
+    status = models.CharField(max_length=12, choices=Status.choices, default=Status.NEW)
+    created_at = models.DateTimeField(auto_now_add=True)
+
+    class Meta:
+        ordering = ["-created_at"]

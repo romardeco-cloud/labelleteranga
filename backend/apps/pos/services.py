@@ -6,6 +6,7 @@ from rest_framework.exceptions import ValidationError
 
 from apps.catalog.models import Product
 from apps.orders.models import Order, OrderItem
+from apps.orders.services import parse_tip
 from apps.reports.models import DailyClosing
 from apps.stores.models import Stock, StockMovement
 from apps.stores.services import change_stock
@@ -14,7 +15,7 @@ POS_PAYMENT_METHODS = {m for m, _ in Order.PaymentMethod.choices}
 
 
 @transaction.atomic
-def create_pos_sale(cashier_profile, items, payment_method, customer_name="", amount_received=None, table_label=""):
+def create_pos_sale(cashier_profile, items, payment_method, customer_name="", amount_received=None, table_label="", customer_phone="", tip_amount=0):
     """
     Enregistre une vente en caisse : commande deja payee, rattachee au point de
     vente du caissier, et decremente le stock de CE point de vente. Tout ou rien :
@@ -43,6 +44,8 @@ def create_pos_sale(cashier_profile, items, payment_method, customer_name="", am
         service_mode=Order.ServiceMode.DINE_IN if table_label else Order.ServiceMode.DIRECT,
         table_label=table_label[:40],
         customer_email="",
+        customer_phone=str(customer_phone or "")[:30],
+        tip_amount=parse_tip(tip_amount),
         payment_method=payment_method,
         status=Order.Status.PAID,
         paid_at=timezone.now(),
@@ -94,6 +97,11 @@ def create_pos_sale(cashier_profile, items, payment_method, customer_name="", am
 
     order.recompute_total()
     order.save(update_fields=["total_amount"])
+
+    if order.customer_phone:
+        from apps.stores.loyalty import record_paid_order
+
+        record_paid_order(order)
 
     received = Decimal(str(amount_received)) if amount_received not in (None, "") else None
     if received is not None and received < order.total_amount and payment_method == Order.PaymentMethod.CASH:

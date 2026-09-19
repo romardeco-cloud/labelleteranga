@@ -214,6 +214,8 @@ export type CustomerInfo = {
   delivery_latitude?: number | null;
   delivery_longitude?: number | null;
   fulfillment?: "delivery" | "pickup";
+  use_reward?: boolean;
+  tip_amount?: number;
 };
 
 export type Order = {
@@ -232,6 +234,9 @@ export type Order = {
   status: "pending" | "paid" | "failed" | "cancelled";
   payment_method: PaymentMethod;
   total_amount: string;
+  discount_amount?: string;
+  tip_amount?: string;
+  reward_label?: string;
   items: CartItem[];
   created_at: string;
   paid_at: string | null;
@@ -434,6 +439,7 @@ export type POSReceipt = {
   payment_method_label: string;
   items: { name: string; quantity: number; unit_price: string; subtotal: string }[];
   total: string;
+  tip_amount?: string;
   amount_received: string | null;
   change: string | null;
 };
@@ -458,6 +464,7 @@ export type POSSettings = {
   };
   receipt_slogan: string;
   receipt_footer: string;
+  loyalty?: boolean;
 };
 
 export type POSCustomerOrder = {
@@ -512,6 +519,8 @@ export async function createPOSSale(input: {
   customer_name?: string;
   amount_received?: number | null;
   table_label?: string;
+  customer_phone?: string;
+  tip_amount?: number;
 }) {
   const { data } = await api.post<POSReceipt>("/pos/sales/", input);
   return data;

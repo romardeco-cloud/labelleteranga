@@ -6,6 +6,17 @@ from apps.cart.models import Cart
 from .models import Order, OrderItem
 
 
+def parse_tip(raw):
+    """Pourboire libre saisi par le client (FCFA entiers, positif, plafonne)."""
+    from decimal import Decimal, InvalidOperation
+
+    try:
+        value = Decimal(str(raw or 0)).quantize(Decimal(1))
+    except (InvalidOperation, ValueError):
+        return Decimal(0)
+    return min(max(value, Decimal(0)), Decimal(1000000))
+
+
 def create_order_from_cart(session_key, customer_data, payment_method, clear_cart=True):
     """
     Cree une Commande (statut PENDING) a partir du panier de la session,
@@ -45,6 +56,13 @@ def create_order_from_cart(session_key, customer_data, payment_method, clear_car
             quantity=cart_item.quantity,
         )
 
+    order.tip_amount = parse_tip(customer_data.get("tip_amount"))
+
+    if str(customer_data.get("use_reward", "")).lower() in ("1", "true", "yes", "on"):
+        from apps.stores.loyalty import apply_reward_to_order
+
+        apply_reward_to_order(order, sum(i.subtotal for i in order.items.all()))
+
     order.recompute_total()
     order.save()
 
@@ -79,6 +97,13 @@ def mark_order_paid(order, **extra_fields):
     order.save()
 
     _decrement_store_stock(order)
+
+    from apps.stores.loyalty import record_paid_order
+
+    try:
+        record_paid_order(order)
+    except Exception:  # la fidelite ne doit jamais bloquer une confirmation de paiement
+        pass
 
     from apps.notifications.whatsapp import send_order_confirmation
 

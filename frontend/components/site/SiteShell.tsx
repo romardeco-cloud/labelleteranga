@@ -7,7 +7,8 @@ import InstallApp from "@/components/site/InstallApp";
 import InstallBanner from "@/components/site/InstallBanner";
 import PendingPaymentBanner from "@/components/site/PendingPaymentBanner";
 import { SiteProvider, useSite } from "@/components/site/SiteContext";
-import SocialLinks from "@/components/SocialLinks";
+import SocialLinks, { socialHref, SocialIcon } from "@/components/SocialLinks";
+import { StarsDisplay } from "@/components/Stars";
 import { fetchCart } from "@/lib/api";
 import { storeImage } from "@/lib/branding";
 import { CONTACT_EMAIL, Site, shortName } from "@/lib/site";
@@ -48,6 +49,14 @@ function Header() {
           <Link href={base || "/"} className="hover:text-brand-accent transition">
             {site.slug === "resto" ? "Menu" : "Boutique"}
           </Link>
+          {(site.combos_count ?? 0) > 0 && (
+            <Link href={`${base}/evenements`} className="hidden sm:inline hover:text-brand-accent transition">
+              Evenements
+            </Link>
+          )}
+          <Link href={`${base}/avis`} className="hidden sm:inline hover:text-brand-accent transition">
+            Avis
+          </Link>
           <Link href={`${base}/cart`} className="relative hover:text-brand-accent transition">
             Panier
             {count > 0 && (
@@ -63,7 +72,7 @@ function Header() {
 }
 
 function Footer() {
-  const { site } = useSite();
+  const { site, base } = useSite();
   return (
     <footer className="border-t-2 border-brand-accent/40 mt-16 py-8 text-center text-sm text-gray-600 space-y-1.5 bg-brand-light">
       <p className="text-brand-dark font-semibold">{site.name}</p>
@@ -87,11 +96,44 @@ function Footer() {
       <p className="text-xs">
         <Link href="/confidentialite" className="underline">Confidentialite</Link> &middot; <Link href="/conditions" className="underline">Conditions</Link>
       </p>
-      <SocialLinks />
+      {site.reviews && site.reviews.count > 0 && (
+        <Link href={`${base}/avis`} className="inline-flex items-center gap-2 hover:underline">
+          <StarsDisplay value={site.reviews.overall} size={15} />
+          <span>
+            {site.reviews.overall?.toFixed(1)} / 5 ({site.reviews.count} avis)
+          </span>
+        </Link>
+      )}
+      <p>
+        <Link href={`${base}/avis`} className="text-brand underline">Donner mon avis</Link>
+        {(site.combos_count ?? 0) > 0 && (
+          <>
+            {" "}&middot; <Link href={`${base}/evenements`} className="text-brand underline">Combos &amp; evenements</Link>
+          </>
+        )}
+      </p>
+      <SocialLinks links={site.social_links} />
       <p className="text-xs text-gray-400 pt-2">
         &copy; {new Date().getFullYear()} La Belle Teranga &mdash; <span className="italic">L&apos;art du service</span>
       </p>
     </footer>
+  );
+}
+
+function WhatsAppButton() {
+  const { site } = useSite();
+  const href = socialHref("whatsapp", site.social_links?.whatsapp);
+  if (!href) return null;
+  return (
+    <a
+      href={href}
+      target="_blank"
+      rel="noopener noreferrer"
+      aria-label="Nous ecrire sur WhatsApp"
+      className="fixed bottom-4 right-4 z-30 w-12 h-12 rounded-full bg-[#25d366] text-white shadow-lg flex items-center justify-center hover:scale-105 transition"
+    >
+      <SocialIcon name="whatsapp" size={26} />
+    </a>
   );
 }
 
@@ -103,6 +145,7 @@ export default function SiteShell({ site, children }: { site: Site; children: Re
       <PendingPaymentBanner />
       <main className="min-h-[70vh]">{children}</main>
       <Footer />
+      <WhatsAppButton />
     </SiteProvider>
   );
 }

@@ -55,9 +55,22 @@ const MODULES: { key: keyof StoreConfig; label: string; hint: string }[] = [
   { key: "module_xreport", label: "Rapport X", hint: "Impression du rapport de caisse du jour (totaux, ecarts)." },
 ];
 
+const SOCIAL_FIELDS: [string, string, string][] = [
+  ["whatsapp", "WhatsApp (numero ou lien)", "221 77 000 00 00"],
+  ["phone", "Telephone", "+221 77 000 00 00"],
+  ["facebook", "Facebook", "https://facebook.com/... ou nom de page"],
+  ["instagram", "Instagram", "@labelleteranga"],
+  ["tiktok", "TikTok", "@labelleteranga"],
+  ["youtube", "YouTube", "https://youtube.com/@..."],
+  ["x", "X (Twitter)", "@labelleteranga"],
+  ["telegram", "Telegram", "@labelleteranga"],
+  ["website", "Autre site web", "https://..."],
+];
+
 const EDITABLE: (keyof StoreConfig)[] = [
   "name", "address", "phone", "slug", "online_enabled", "description", "timezone", "email", "legal_form", "share_capital", "ninea", "rccm", "vat_rate",
-  "prices_include_vat", "payment_methods", "wave_pay_url", "orange_pay_url", "wave_number", "orange_number", "track_stock", "receipt_slogan", "receipt_footer",
+  "prices_include_vat", "payment_methods", "wave_pay_url", "orange_pay_url", "wave_number", "orange_number", "social_links", "loyalty_enabled", "loyalty_mode", "loyalty_threshold", "loyalty_min_order",
+  "loyalty_reward_type", "loyalty_reward_value", "loyalty_reward_label", "loyalty_valid_days", "track_stock", "receipt_slogan", "receipt_footer",
   "module_hold", "module_history", "module_qr", "module_dine_in", "module_customer_orders", "module_drawer", "module_xreport",
 ];
 
@@ -334,6 +347,86 @@ export default function AdminSettingsPage() {
             <Field label="Numero marchand Orange Money (paiement avec le numero)">
               <input value={cfg.orange_number ?? ""} onChange={(e) => set("orange_number", e.target.value)} placeholder="77 000 00 00" className={inputCls} />
             </Field>
+          </Card>
+          <Card icon="globe" title="Reseaux sociaux et WhatsApp (site web)" tone="text-pink-400">
+            <p className="text-sm text-gray-500">
+              Les icones apparaissent en bas du site de ce point de vente ; WhatsApp ajoute aussi un bouton flottant. Vous pouvez saisir un lien complet,
+              un @pseudo ou, pour WhatsApp / telephone, un numero. Laissez vide pour ne pas afficher.
+            </p>
+            <div className="grid sm:grid-cols-2 gap-4">
+              {SOCIAL_FIELDS.map(([key, label, placeholder]) => (
+                <Field key={key} label={label}>
+                  <input
+                    value={cfg.social_links?.[key] ?? ""}
+                    onChange={(e) => set("social_links", { ...(cfg.social_links ?? {}), [key]: e.target.value })}
+                    placeholder={placeholder}
+                    className={inputCls}
+                  />
+                </Field>
+              ))}
+            </div>
+          </Card>
+          <Card icon="heart" title="Programme de fidelite" tone="text-rose-400">
+            <div className="flex items-center justify-between gap-4">
+              <div>
+                <p className="font-medium">Recompenser les clients reguliers</p>
+                <p className="text-sm text-gray-500">Les clients sont reconnus par leur numero de telephone (commande en ligne ou en caisse).</p>
+              </div>
+              <Toggle checked={cfg.loyalty_enabled} onChange={(v) => set("loyalty_enabled", v)} />
+            </div>
+            {cfg.loyalty_enabled && (
+              <div className="grid sm:grid-cols-2 gap-4">
+                <Field label="Recompense declenchee par">
+                  <select value={cfg.loyalty_mode} onChange={(e) => set("loyalty_mode", e.target.value as "orders" | "amount")} className={inputCls}>
+                    <option value="orders">Un nombre de commandes</option>
+                    <option value="amount">Un montant cumule d&apos;achats</option>
+                  </select>
+                </Field>
+                <Field label={cfg.loyalty_mode === "orders" ? "Nombre de commandes necessaires" : "Montant cumule necessaire (FCFA)"}>
+                  <input type="number" min={1} value={cfg.loyalty_threshold} onChange={(e) => set("loyalty_threshold", Number(e.target.value))} className={inputCls} />
+                </Field>
+                <Field label="Montant minimum d'une commande comptee (FCFA, 0 = toutes)">
+                  <input type="number" min={0} value={cfg.loyalty_min_order} onChange={(e) => set("loyalty_min_order", Number(e.target.value))} className={inputCls} />
+                </Field>
+                <Field label="Validite de la recompense (jours, 0 = illimitee)">
+                  <input type="number" min={0} value={cfg.loyalty_valid_days} onChange={(e) => set("loyalty_valid_days", Number(e.target.value))} className={inputCls} />
+                </Field>
+                <Field label="Type de recompense">
+                  <select
+                    value={cfg.loyalty_reward_type}
+                    onChange={(e) => set("loyalty_reward_type", e.target.value as "percent" | "amount" | "gift")}
+                    className={inputCls}
+                  >
+                    <option value="percent">Reduction en %</option>
+                    <option value="amount">Reduction en FCFA</option>
+                    <option value="gift">Cadeau offert (ex. un dessert)</option>
+                  </select>
+                </Field>
+                {cfg.loyalty_reward_type !== "gift" && (
+                  <Field label={cfg.loyalty_reward_type === "percent" ? "Pourcentage de reduction" : "Montant de la reduction (FCFA)"}>
+                    <input type="number" min={0} value={cfg.loyalty_reward_value} onChange={(e) => set("loyalty_reward_value", e.target.value)} className={inputCls} />
+                  </Field>
+                )}
+                <Field label={cfg.loyalty_reward_type === "gift" ? "Cadeau offert (obligatoire)" : "Texte affiche (facultatif)"} className="sm:col-span-2">
+                  <input
+                    value={cfg.loyalty_reward_label}
+                    onChange={(e) => set("loyalty_reward_label", e.target.value)}
+                    placeholder={cfg.loyalty_reward_type === "gift" ? "Ex. Un dessert offert" : "Ex. 10 % de reduction sur votre prochaine commande"}
+                    className={inputCls}
+                  />
+                </Field>
+                <p className="sm:col-span-2 text-sm text-gray-500">
+                  Exemple : {cfg.loyalty_mode === "orders" ? `toutes les ${cfg.loyalty_threshold} commandes` : `chaque tranche de ${cfg.loyalty_threshold} FCFA d'achats`}, le client gagne{" "}
+                  {cfg.loyalty_reward_label ||
+                    (cfg.loyalty_reward_type === "percent"
+                      ? `${cfg.loyalty_reward_value} % de reduction`
+                      : cfg.loyalty_reward_type === "amount"
+                        ? `${cfg.loyalty_reward_value} FCFA de reduction`
+                        : "un cadeau")}
+                  . En ligne, la recompense se deduit automatiquement ; en caisse, le caissier la remet et la marque utilisee.
+                </p>
+              </div>
+            )}
           </Card>
           <Card icon="wallet" title="Moyens de paiement acceptes a la caisse" tone="text-emerald-400">
             {PAYMENTS.map((p) => {

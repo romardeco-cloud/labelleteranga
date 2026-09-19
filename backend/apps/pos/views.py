@@ -100,6 +100,7 @@ def receipt_payload(order, profile, received=None):
         "receipt_slogan": pos_settings(profile.point_of_sale)["receipt_slogan"],
         "receipt_footer": pos_settings(profile.point_of_sale)["receipt_footer"],
         "total": str(total),
+        "tip_amount": str(order.tip_amount),
         "amount_received": str(received) if received is not None else None,
         "change": str(received - total) if received is not None and received >= total else None,
     }
@@ -137,6 +138,8 @@ class POSSaleView(APIView):
             request.data.get("customer_name", ""),
             request.data.get("amount_received"),
             str(request.data.get("table_label") or "").strip(),
+            request.data.get("customer_phone", ""),
+            request.data.get("tip_amount", 0),
         )
         return Response(receipt_payload(order, profile, received), status=201)
 
@@ -263,3 +266,33 @@ class POSDrawerView(APIView):
             point_of_sale=request.user.cashier_profile.point_of_sale, cashier=request.user, reason=reason[:200]
         )
         return Response({"id": row.id, "reason": row.reason, "created_at": row.created_at}, status=201)
+
+
+class POSLoyaltyView(APIView):
+    """
+    GET  /api/pos/loyalty/?phone=... -> progression du client + recompenses disponibles (avec codes)
+    POST /api/pos/loyalty/ {reward}  -> marque une recompense comme remise au client (utilisee)
+    """
+
+    permission_classes = [IsCashier]
+
+    def get(self, request):
+        from apps.stores.loyalty import member_status
+
+        return Response(member_status(request.user.cashier_profile.point_of_sale, request.query_params.get("phone", "")))
+
+    def post(self, request):
+        from rest_framework.exceptions import ValidationError
+
+        from apps.stores.models import LoyaltyReward
+
+        store = request.user.cashier_profile.point_of_sale
+        reward = LoyaltyReward.objects.filter(pk=request.data.get("reward") or 0, point_of_sale=store).first()
+        if not reward:
+            raise ValidationError({"detail": "Recompense introuvable."})
+        if reward.used_at:
+            raise ValidationError({"detail": "Recompense deja utilisee."})
+        reward.used_at = timezone.now()
+        reward.used_on_order = "en caisse"
+        reward.save(update_fields=["used_at", "used_on_order"])
+        return Response({"ok": True})

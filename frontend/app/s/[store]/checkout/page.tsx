@@ -1,8 +1,10 @@
 "use client";
 
-import { useState } from "react";
+import { useEffect, useState } from "react";
 import { useRouter } from "next/navigation";
 import { useSite } from "@/components/site/SiteContext";
+import { LoyaltyProgress, loyaltyRule } from "@/components/site/LoyaltyBanner";
+import { LoyaltyStatus, fetchLoyalty } from "@/lib/engage";
 import { PaymentMethod, createCashOrder, createCheckoutSession, createManualOrder, getBrowserLocation } from "@/lib/api";
 
 const PAYMENT_METHODS: { value: PaymentMethod; label: string; hint: string }[] = [
@@ -28,6 +30,33 @@ export default function CheckoutPage() {
   const [locating, setLocating] = useState(false);
   const [loading, setLoading] = useState(false);
   const [error, setError] = useState("");
+  const [loyalty, setLoyalty] = useState<LoyaltyStatus | null>(null);
+  const [useReward, setUseReward] = useState(true);
+  const [tip, setTip] = useState(0);
+  const [customTip, setCustomTip] = useState("");
+
+  useEffect(() => {
+    try {
+      const saved = localStorage.getItem("lbt_phone");
+      if (saved) setForm((f) => (f.customer_phone ? f : { ...f, customer_phone: saved }));
+    } catch {}
+  }, []);
+
+  // programme de fidelite : on consulte le statut du client des que son numero est complet
+  useEffect(() => {
+    if (!site.loyalty?.enabled || form.customer_phone.replace(/\D/g, "").length < 8) {
+      setLoyalty(null);
+      return;
+    }
+    const t = setTimeout(() => {
+      fetchLoyalty(site.slug, form.customer_phone)
+        .then(setLoyalty)
+        .catch(() => setLoyalty(null));
+    }, 500);
+    return () => clearTimeout(t);
+  }, [form.customer_phone, site.slug, site.loyalty?.enabled]);
+
+  const availableReward = loyalty?.member?.rewards?.[0] ?? null;
 
   async function handleShareLocation() {
     setLocating(true);
@@ -50,6 +79,8 @@ export default function CheckoutPage() {
       delivery_address: fulfillment === "pickup" ? `A emporter - ${site.name}` : form.delivery_address,
       delivery_latitude: location?.lat ?? null,
       delivery_longitude: location?.lng ?? null,
+      use_reward: !!availableReward && useReward,
+      tip_amount: tip > 0 ? tip : undefined,
     };
 
     try {
@@ -135,6 +166,22 @@ export default function CheckoutPage() {
           <p className="text-xs text-gray-400 mt-1">
             Utilise pour Wave / Orange Money et pour vous envoyer la confirmation WhatsApp.
           </p>
+          {site.loyalty?.enabled && (
+            <div className="mt-3 rounded-lg border border-brand-accent/60 bg-brand-light p-3 text-sm">
+              {availableReward ? (
+                <label className="flex items-start gap-2 cursor-pointer">
+                  <input type="checkbox" checked={useReward} onChange={(e) => setUseReward(e.target.checked)} className="mt-1" />
+                  <span>
+                    🎁 <strong>Utiliser ma recompense fidelite</strong> : {availableReward.label}
+                  </span>
+                </label>
+              ) : loyalty ? (
+                <LoyaltyProgress status={loyalty} />
+              ) : (
+                <p className="text-gray-700">💛 Carte fidelite : {loyaltyRule(site.loyalty)}</p>
+              )}
+            </div>
+          )}
         </div>
         {fulfillment === "delivery" && (
         <div>
@@ -176,6 +223,40 @@ export default function CheckoutPage() {
               </button>
             ))}
           </div>
+        </div>
+
+        <div>
+          <label className="block text-sm font-medium mb-1">Pourboire (facultatif)</label>
+          <p className="text-xs text-gray-500 mb-2">Un geste pour remercier l&apos;equipe : vous choisissez librement le montant.</p>
+          <div className="flex flex-wrap gap-2">
+            {[0, 500, 1000, 2000].map((v) => (
+              <button
+                type="button"
+                key={v}
+                onClick={() => {
+                  setTip(v);
+                  setCustomTip("");
+                }}
+                className={`px-3 py-1.5 rounded-full border text-sm ${tip === v && !customTip ? "bg-brand text-white border-brand" : "bg-white hover:border-brand"}`}
+              >
+                {v === 0 ? "Aucun" : `${v.toLocaleString("fr-FR")} FCFA`}
+              </button>
+            ))}
+            <input
+              type="number"
+              min={0}
+              step={100}
+              inputMode="numeric"
+              value={customTip}
+              onChange={(e) => {
+                setCustomTip(e.target.value);
+                setTip(Math.max(0, Math.round(Number(e.target.value) || 0)));
+              }}
+              placeholder="Autre montant"
+              className="w-36 border rounded-full px-3 py-1.5 text-sm"
+            />
+          </div>
+          {tip > 0 && <p className="text-xs text-emerald-700 mt-2">Merci ! {tip.toLocaleString("fr-FR")} FCFA de pourboire seront ajoutes au total a payer.</p>}
         </div>
 
         {error && <p className="text-red-500 text-sm">{error}</p>}

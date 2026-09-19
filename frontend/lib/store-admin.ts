@@ -51,6 +51,15 @@ export type StoreConfig = {
   orange_pay_url: string;
   wave_number: string;
   orange_number: string;
+  social_links: Record<string, string>;
+  loyalty_enabled: boolean;
+  loyalty_mode: "orders" | "amount";
+  loyalty_threshold: number;
+  loyalty_min_order: number;
+  loyalty_reward_type: "percent" | "amount" | "gift";
+  loyalty_reward_value: number | string;
+  loyalty_reward_label: string;
+  loyalty_valid_days: number;
   receipt_slogan: string;
   receipt_footer: string;
   module_hold: boolean;

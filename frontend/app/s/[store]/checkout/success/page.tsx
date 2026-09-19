@@ -7,6 +7,8 @@ import { useSite } from "@/components/site/SiteContext";
 import Image from "next/image";
 import { Order, declarePayment, fetchOrder } from "@/lib/api";
 import { PAYMENT_QR } from "@/lib/branding";
+import { LoyaltyProgress } from "@/components/site/LoyaltyBanner";
+import { LoyaltyStatus, fetchLoyalty } from "@/lib/engage";
 import { merchantPayLink } from "@/lib/site";
 
 const PAYMENT_LABELS: Record<string, string> = {
@@ -28,6 +30,13 @@ function SuccessContent() {
   useEffect(() => {
     setIsMobile(/android|iphone|ipad|ipod|mobile/i.test(navigator.userAgent));
   }, []);
+  const [loyalty, setLoyalty] = useState<LoyaltyStatus | null>(null);
+  useEffect(() => {
+    if (order?.status !== "paid" || !order.customer_phone || !site.loyalty?.enabled) return;
+    fetchLoyalty(site.slug, order.customer_phone)
+      .then(setLoyalty)
+      .catch(() => {});
+  }, [order?.status, order?.customer_phone, site.slug, site.loyalty?.enabled]);
   const [declareError, setDeclareError] = useState("");
   const [declaring, setDeclaring] = useState(false);
 
@@ -123,6 +132,15 @@ function SuccessContent() {
         Commande n° <strong>{order?.order_number ?? reference.slice(0, 8).toUpperCase()}</strong>
       </p>
       {order && <p className="text-gray-600 mb-6">Moyen de paiement : {PAYMENT_LABELS[order.payment_method]}</p>}
+      {order && Number(order.tip_amount ?? 0) > 0 && (
+        <p className="text-sm text-gray-600 -mt-4 mb-6">💚 Pourboire inclus : {new Intl.NumberFormat("fr-SN", { maximumFractionDigits: 0 }).format(Number(order.tip_amount))} FCFA. Merci !</p>
+      )}
+      {order && Number(order.discount_amount ?? 0) > 0 && (
+        <p className="text-sm text-emerald-700 -mt-4 mb-6">🎁 {order.reward_label} : -{new Intl.NumberFormat("fr-SN", { maximumFractionDigits: 0 }).format(Number(order.discount_amount))} FCFA</p>
+      )}
+      {order && Number(order.discount_amount ?? 0) === 0 && order.reward_label && (
+        <p className="text-sm text-emerald-700 -mt-4 mb-6">🎁 Recompense fidelite utilisee : {order.reward_label}</p>
+      )}
 
       {isPaid && (
         <div className="bg-brand-light border border-brand-accent/50 rounded-lg p-4 mb-6">
@@ -141,6 +159,23 @@ function SuccessContent() {
             )}
           </p>
         </div>
+      )}
+
+      {isPaid && loyalty?.enabled && (
+        <div className="bg-white border rounded-lg p-4 mb-6 text-left">
+          <p className="font-medium text-brand-dark mb-2">💛 Votre carte fidelite</p>
+          <LoyaltyProgress status={loyalty} />
+        </div>
+      )}
+
+      {(isPaid || isCash) && order && (
+        <Link
+          href={`${base}/avis?order=${order.reference}`}
+          className="block bg-brand-light border border-brand-accent/60 rounded-lg p-4 mb-6 text-brand-dark hover:bg-white transition"
+        >
+          <span className="font-medium">⭐ Donnez votre avis</span>
+          <span className="block text-sm text-gray-600">Notez le service et la qualite : 1 minute, 3 petites questions.</span>
+        </Link>
       )}
 
       {isCash && isPending && (

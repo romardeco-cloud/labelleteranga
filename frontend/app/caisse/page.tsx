@@ -3,6 +3,7 @@
 import { useCallback, useEffect, useMemo, useRef, useState } from "react";
 import Image from "next/image";
 import Icon from "@/components/admin/Icon";
+import { LoyaltyStatus, fetchPosLoyalty, redeemPosReward } from "@/lib/engage";
 import ProductVisual from "@/components/ProductVisual";
 import { PAYMENT_QR, categoryEmoji, storeImage } from "@/lib/branding";
 import {
@@ -79,6 +80,9 @@ export default function CaissePage() {
   const [historyLoading, setHistoryLoading] = useState(false);
   const [method, setMethod] = useState<PaymentMethod>("cash");
   const [received, setReceived] = useState("");
+  const [custPhone, setCustPhone] = useState("");
+  const [tip, setTip] = useState("");
+  const [loyalty, setLoyalty] = useState<LoyaltyStatus | null>(null);
   const [error, setError] = useState("");
   const [busy, setBusy] = useState(false);
   const [receipt, setReceipt] = useState<POSReceipt | null>(null);
@@ -365,7 +369,23 @@ export default function CaissePage() {
   }, [settings]);
   const dineIn = mode === "dine_in" && settings.modules.dine_in;
 
-  const total = useMemo(() => linesTotal(lines), [lines]);
+  const subtotal = useMemo(() => linesTotal(lines), [lines]);
+  const tipNum = Math.max(0, Math.round(Number(tip) || 0));
+  const total = subtotal + tipNum; // total encaisse = articles + pourboire
+
+  const refreshLoyalty = useCallback(() => {
+    if (!settings.loyalty || custPhone.replace(/\D/g, "").length < 8) {
+      setLoyalty(null);
+      return;
+    }
+    fetchPosLoyalty(custPhone)
+      .then(setLoyalty)
+      .catch(() => setLoyalty(null));
+  }, [custPhone, settings.loyalty]);
+  useEffect(() => {
+    const t = setTimeout(refreshLoyalty, 400);
+    return () => clearTimeout(t);
+  }, [refreshLoyalty]);
   const itemsCount = lines.reduce((n, l) => n + l.quantity, 0);
   const receivedNum = Number(received || 0);
   const change = method === "cash" && received ? receivedNum - total : null;
@@ -388,6 +408,8 @@ export default function CaissePage() {
         items: lines.map((l) => ({ product: l.product.id, quantity: l.quantity })),
         payment_method: method,
         amount_received: method === "cash" && received ? receivedNum : null,
+        ...(custPhone.trim() ? { customer_phone: custPhone.trim() } : {}),
+        ...(tipNum > 0 ? { tip_amount: tipNum } : {}),
         ...(dineIn ? { table_label: table.trim() } : {}),
       });
       setReprint(false);
@@ -395,6 +417,9 @@ export default function CaissePage() {
       setLines([]);
       setTable("");
       setReceived("");
+      setCustPhone("");
+      setTip("");
+      setLoyalty(null);
       loadProducts();
     } catch (e: any) {
       const d = e?.response?.data;
@@ -863,10 +888,66 @@ export default function CaissePage() {
             </div>
 
             <div className="border-t p-4 space-y-3">
+              {tipNum > 0 && (
+                <div className="flex justify-between text-sm text-gray-400">
+                  <span>Articles {xof(subtotal)}</span>
+                  <span>+ Pourboire {xof(tipNum)}</span>
+                </div>
+              )}
               <div className="flex justify-between items-baseline">
                 <span className="text-gray-400">Total</span>
                 <span className="text-2xl font-bold text-[#f5b942]">{xof(total)}</span>
               </div>
+
+              <div className="grid grid-cols-2 gap-2">
+                <input
+                  type="number"
+                  min={0}
+                  step={100}
+                  inputMode="numeric"
+                  value={tip}
+                  onChange={(e) => setTip(e.target.value)}
+                  placeholder="Pourboire (FCFA)"
+                  className="w-full border rounded-xl px-3 py-2 text-sm"
+                />
+                {settings.loyalty ? (
+                  <input
+                    type="tel"
+                    value={custPhone}
+                    onChange={(e) => setCustPhone(e.target.value)}
+                    placeholder="Tel. client (fidelite)"
+                    className="w-full border rounded-xl px-3 py-2 text-sm"
+                  />
+                ) : (
+                  <span />
+                )}
+              </div>
+              {settings.loyalty && loyalty?.enabled && custPhone.replace(/\D/g, "").length >= 8 && (
+                <div className="rounded-xl border border-[#f5b942]/40 bg-[#f5b942]/5 p-2.5 text-xs space-y-1.5">
+                  {loyalty.member ? (
+                    <p className="text-gray-300">
+                      {loyalty.member.name || "Client fidele"} : {loyalty.member.orders_count} commande(s) - progression{" "}
+                      {loyalty.mode === "amount" ? `${xof(loyalty.member.progress)} / ${xof(loyalty.threshold)}` : `${loyalty.member.progress} / ${loyalty.threshold}`}
+                    </p>
+                  ) : (
+                    <p className="text-gray-400">Nouveau client : cette vente ouvre sa carte fidelite.</p>
+                  )}
+                  {loyalty.member?.rewards.map((r) => (
+                    <div key={r.id} className="flex items-center justify-between gap-2 text-emerald-400">
+                      <span>🎁 {r.label}</span>
+                      <button
+                        onClick={async () => {
+                          await redeemPosReward(r.id);
+                          refreshLoyalty();
+                        }}
+                        className="border border-emerald-500/50 rounded-lg px-2 py-0.5"
+                      >
+                        Remettre
+                      </button>
+                    </div>
+                  ))}
+                </div>
+              )}
 
               {dineIn && (
                 <input
@@ -1150,6 +1231,12 @@ export default function CaissePage() {
                 </div>
               ))}
               <hr className="my-2 border-dashed" />
+              {Number(receipt.tip_amount ?? 0) > 0 && (
+                <div className="flex justify-between">
+                  <span>Pourboire</span>
+                  <span>{xof(receipt.tip_amount!)}</span>
+                </div>
+              )}
               <div className="flex justify-between font-bold">
                 <span>TOTAL</span>
                 <span>{xof(receipt.total)}</span>
