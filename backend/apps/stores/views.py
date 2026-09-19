@@ -322,6 +322,8 @@ def _site_payload(store, with_categories=False):
     data["wave_number"] = st.wave_number
     data["orange_number"] = st.orange_number
     data["social_links"] = st.social_links or {}
+    data["rccm"] = st.rccm
+    data["ninea"] = st.ninea
     data["loyalty"] = (
         {
             "enabled": True,

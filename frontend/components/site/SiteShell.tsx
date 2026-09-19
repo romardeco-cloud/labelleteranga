@@ -98,6 +98,13 @@ function Footer() {
           {CONTACT_EMAIL}
         </a>
       </p>
+      {(site.rccm || site.ninea) && (
+        <p className="text-xs text-gray-500">
+          {site.rccm && <>RCCM : {site.rccm}</>}
+          {site.rccm && site.ninea && " \u00b7 "}
+          {site.ninea && <>NINEA : {site.ninea}</>}
+        </p>
+      )}
       <InstallApp appName={shortName(site.name)} className="sm:hidden text-brand underline" />
       <p className="text-xs">
         <Link href="/confidentialite" className="underline">Confidentialite</Link> &middot; <Link href="/conditions" className="underline">Conditions</Link>

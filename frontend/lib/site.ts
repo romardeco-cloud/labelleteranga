@@ -21,6 +21,8 @@ export type Site = {
   loyalty?: { enabled: boolean; mode?: "orders" | "amount"; threshold?: number; reward_label?: string };
   reviews?: { count: number; overall: number | null };
   combos_count?: number;
+  rccm?: string;
+  ninea?: string;
 };
 
 /** Nom court d'un site : "Resto & Fast-food La Belle Teranga" -> "Resto & Fast-food". */
