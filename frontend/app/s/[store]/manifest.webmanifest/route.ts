@@ -7,7 +7,7 @@ export async function GET(req: Request, { params }: { params: Promise<{ store: s
   if (!site) return new Response("Not found", { status: 404 });
   const icons = iconSet(store);
   // resto.labelleteranga.com : le site est servi a la racine du sous-domaine
-  const host = (req.headers.get("host") ?? "").toLowerCase();
+  const host = (req.headers.get("x-forwarded-host") ?? req.headers.get("host") ?? "").toLowerCase();
   const dedicated = host.split(".")[0] === store && host.split(".").length > 2;
   const root = dedicated ? "" : `/s/${store}`;
   const manifest = {
