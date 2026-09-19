@@ -46,6 +46,7 @@ class StockSerializer(serializers.ModelSerializer):
             "point_of_sale",
             "point_of_sale_name",
             "quantity",
+            "track_stock",
             "updated_at",
         ]
 

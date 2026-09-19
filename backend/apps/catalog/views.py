@@ -197,6 +197,13 @@ class ProductViewSet(viewsets.ModelViewSet):
                     updated += 1
             return Response({"updated": updated, "skipped": total - updated, "skipped_reason": f"{not_in_store} hors de ce point de vente" if not_in_store else ""})
 
+        if act == "set_tracking":
+            track = request.data.get("track")
+            if not isinstance(track, bool):
+                raise ValidationError({"track": "true ou false attendu."})
+            n = Stock.objects.filter(point_of_sale=store, product__in=mine).update(track_stock=track)
+            return Response({"updated": n, "skipped": total - n, "skipped_reason": f"{not_in_store} hors de ce point de vente" if not_in_store else ""})
+
         if act in ("set_category", "auto_category"):
             from .categorizer import assign, get_category, guess_category
 

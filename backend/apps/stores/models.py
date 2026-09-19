@@ -24,6 +24,7 @@ class Stock(models.Model):
     product = models.ForeignKey("catalog.Product", related_name="stocks", on_delete=models.CASCADE)
     point_of_sale = models.ForeignKey(PointOfSale, related_name="stocks", on_delete=models.CASCADE)
     quantity = models.PositiveIntegerField(default=0)
+    track_stock = models.BooleanField("Suivre le stock de ce produit", default=True)
     updated_at = models.DateTimeField(auto_now=True)
 
     class Meta:
@@ -184,9 +185,25 @@ class StoreSettings(models.Model):
 UNLIMITED_STOCK = 9999
 
 
-def tracks_stock(store):
-    """False pour un point de vente sans suivi de stock (ex. restaurant) : quantite toujours disponible."""
-    return get_settings(store).track_stock if store else True
+def tracks_stock(store, product=None):
+    """
+    False pour un point de vente sans suivi de stock (ex. restaurant), ou pour un produit dont le suivi est desactive dans
+    ce point de vente (plat prepare, frais de livraison...) : quantite toujours disponible, aucune sortie de stock.
+    """
+    if store is None:
+        return True
+    if not get_settings(store).track_stock:
+        return False
+    if product is not None:
+        flag = Stock.objects.filter(product=product, point_of_sale=store).values_list("track_stock", flat=True).first()
+        if flag is False:
+            return False
+    return True
+
+
+def untracked_product_ids(store):
+    """Produits dont le suivi de stock est desactive dans ce point de vente (une seule requete)."""
+    return set(Stock.objects.filter(point_of_sale=store, track_stock=False).values_list("product_id", flat=True)) if store else set()
 
 
 def get_settings(store):

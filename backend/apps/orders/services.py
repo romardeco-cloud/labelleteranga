@@ -126,7 +126,7 @@ def _decrement_store_stock(order):
     from apps.stores.services import change_stock
 
     for item in order.items.select_related("product"):
-        if not item.product_id:
+        if not item.product_id or not tracks_stock(order.point_of_sale, item.product):
             continue
         kwargs = dict(reason=StockMovement.Reason.ONLINE_ORDER, reference=order.reference[:8].upper())
         try:
@@ -155,7 +155,7 @@ def void_order(order, user, reason):
             from apps.stores.services import change_stock
 
             for item in order.items.select_related("product"):
-                if item.product_id:
+                if item.product_id and tracks_stock(order.point_of_sale, item.product):
                     change_stock(
                         item.product,
                         order.point_of_sale,

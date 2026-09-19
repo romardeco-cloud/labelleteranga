@@ -57,7 +57,10 @@ class ProductSerializer(serializers.ModelSerializer):
 
         if not tracks_stock(store):
             return UNLIMITED_STOCK  # pas de suivi de stock : toujours disponible
-        return next((s.quantity for s in product.stocks.all() if s.point_of_sale_id == store.id), 0)
+        row = next((s for s in product.stocks.all() if s.point_of_sale_id == store.id), None)
+        if row is not None and not row.track_stock:
+            return UNLIMITED_STOCK  # suivi desactive pour ce produit : toujours disponible
+        return row.quantity if row else 0
 
     def get_store_stock(self, product):
         return self._store_quantity(product)

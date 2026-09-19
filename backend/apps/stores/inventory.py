@@ -22,7 +22,7 @@ def create_inventory(store, date, notes="", category=None, user=None):
     if not tracks_stock(store):
         raise ValidationError("Le suivi du stock est desactive pour ce point de vente : pas d'inventaire a faire.")
 
-    products = Product.objects.filter(is_active=True, stocks__point_of_sale=store)
+    products = Product.objects.filter(is_active=True, stocks__point_of_sale=store, stocks__track_stock=True)
     if category:
         products = products.filter(category_id=category)
     if not products.exists():

@@ -586,6 +586,12 @@ export default function AdminProductsPage() {
             <button onClick={() => setBulkKind("stock")} className="border rounded-lg px-3 py-1.5 text-sm bg-white">
               Stock uniforme
             </button>
+            <button onClick={() => runBulk("set_tracking", { track: true })} disabled={bulkBusy} className="border rounded-lg px-3 py-1.5 text-sm bg-white" title="Le stock de ces produits est decompte a chaque vente">
+              Suivre le stock
+            </button>
+            <button onClick={() => runBulk("set_tracking", { track: false })} disabled={bulkBusy} className="border rounded-lg px-3 py-1.5 text-sm bg-white" title="Toujours disponible : jamais de rupture ni de sortie de stock">
+              Ne pas suivre le stock
+            </button>
             <button onClick={() => setBulkKind("category")} className="border rounded-lg px-3 py-1.5 text-sm bg-white">
               Categorie
             </button>
@@ -839,7 +845,7 @@ export default function AdminProductsPage() {
                       formatXof(p.price)
                     )}
                   </td>
-                  <td className="p-2">{store && store.track_stock === false ? <span className="text-xs text-gray-500">Non suivi</span> : storeId ? (p.stocks.find((st) => st.point_of_sale === storeId)?.quantity ?? 0) : p.total_stock}</td>
+                  <td className="p-2">{(store && store.track_stock === false) || (storeId && p.stocks.find((st) => st.point_of_sale === storeId)?.track_stock === false) ? <span className="text-xs text-gray-500">Non suivi</span> : storeId ? (p.stocks.find((st) => st.point_of_sale === storeId)?.quantity ?? 0) : p.total_stock}</td>
                   <td className="p-2">{p.is_active ? "Actif" : "Inactif"}</td>
                   <td className="p-2 text-right space-x-2">
                     <button

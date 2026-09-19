@@ -36,6 +36,7 @@ export type PointOfSale = {
 };
 
 export type Stock = {
+  track_stock?: boolean;
   id: number;
   product: number;
   product_name: string;

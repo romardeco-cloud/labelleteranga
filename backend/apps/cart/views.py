@@ -43,7 +43,7 @@ class CartAddItemView(APIView):
             wanted = quantity + (existing.quantity if existing else 0)
             if not stock:
                 return Response({"detail": "Ce produit n'est pas vendu sur ce site."}, status=status.HTTP_400_BAD_REQUEST)
-            if tracks_stock(cart.point_of_sale) and wanted > stock.quantity:
+            if tracks_stock(cart.point_of_sale) and stock.track_stock and wanted > stock.quantity:
                 return Response(
                     {"detail": f"Stock insuffisant pour {product.name} (disponible : {stock.quantity})."},
                     status=status.HTTP_400_BAD_REQUEST,

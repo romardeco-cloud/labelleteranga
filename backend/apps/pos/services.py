@@ -70,7 +70,8 @@ def create_pos_sale(cashier_profile, items, payment_method, customer_name="", am
         if not product:
             raise ValidationError({"items": f"Produit {product_id} introuvable ou inactif."})
 
-        if tracked:
+        product_tracked = tracked and tracks_stock(store, product)
+        if product_tracked:
             stock = Stock.objects.select_for_update().filter(product=product, point_of_sale=store).first()
             available = stock.quantity if stock else 0
             if available < qty:
@@ -85,7 +86,7 @@ def create_pos_sale(cashier_profile, items, payment_method, customer_name="", am
             unit_price=unit_price,
             quantity=qty,
         )
-        if tracked:
+        if product_tracked:
             change_stock(
                 product,
                 store,

@@ -53,6 +53,7 @@ ALIASES = {
     "image_url": ["imageurl", "image", "lienimage", "urlimage", "photo", "lienphoto", "urlphoto", "lien"],
     "image_file": ["fichierimage", "fichierphoto", "nomimage", "nomphoto", "imagefile", "photofichier"],
     "stock": ["stock", "quantite", "qte", "qty", "quantity", "stockdisponible", "inventaire"],
+    "track": ["suivistock", "suivi", "suividustock", "suivrestock", "gerestock", "gestiondestock"],
     "variants": ["variantes", "variante", "declinaisons", "tailles", "formats", "conditionnements"],
 }
 ALIAS_LOOKUP = {}
@@ -462,6 +463,7 @@ def analyze(files, store=None, create_from_images=False):
             "description": str(it.get("description") or "").strip(),
             "is_active": parse_bool(it.get("is_active"), default=(price is not None and price > 0)),
             "stock": parse_int(it.get("stock")) if it.get("stock") not in (None, "") else None,
+            "track_stock": parse_bool(it.get("track"), default=True),
             "image_url": str(it.get("image_url") or "").strip() if str(it.get("image_url") or "").lower().startswith("http") else "",
             "action": "update" if existing else "create",
             "product_id": existing.pk if existing else None,
@@ -566,7 +568,10 @@ def run_rows(job_id):
                     product.description = row["description"]
                 product.save()
                 if store:
-                    Stock.objects.get_or_create(product=product, point_of_sale=store)
+                    stock_row, _ = Stock.objects.get_or_create(product=product, point_of_sale=store)
+                    if "track_stock" in row and stock_row.track_stock != row["track_stock"]:
+                        stock_row.track_stock = row["track_stock"]
+                        stock_row.save(update_fields=["track_stock"])
                     if product.category_id:
                         StoreCategory.objects.get_or_create(
                             point_of_sale=store,
