@@ -1,5 +1,6 @@
 import { api } from "./api";
 import { getAdminToken } from "./auth";
+import { sealParam } from "@/lib/sealOpts";
 
 export type DocType = "quotes" | "invoices" | "purchase-orders";
 
@@ -162,7 +163,9 @@ export function formatDate(iso: string | null | undefined) {
 export async function openPdf(path: string, params: Record<string, string | number> = {}) {
   const win = window.open("", "_blank"); // ouvert tout de suite pour ne pas etre bloque par le navigateur
   try {
-    const qs = new URLSearchParams(Object.entries(params).map(([k, v]) => [k, String(v)])).toString();
+    const seal = sealParam(); // cachet, signature et mention choisis sur cet appareil
+    const all = seal !== undefined && !("seal" in params) ? { ...params, seal } : params;
+    const qs = new URLSearchParams(Object.entries(all).map(([k, v]) => [k, String(v)])).toString();
     const res = await fetch(`${api.defaults.baseURL}${path}${qs ? `?${qs}` : ""}`, {
       headers: { Authorization: `Bearer ${getAdminToken()}` },
     });

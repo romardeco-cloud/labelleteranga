@@ -407,6 +407,9 @@ def seal_payload(seal):
         "place": seal.place,
         "certified_text": seal.certified_text,
         "show_date": seal.show_date,
+        "show_certified": seal.show_certified,
+        "show_stamp": seal.show_stamp,
+        "show_signature": seal.show_signature,
     }
 
 
@@ -467,5 +470,8 @@ class CompanySealView(APIView):
             seal.enabled = truthy(d.get("enabled"))
         if "show_date" in d:
             seal.show_date = truthy(d.get("show_date"))
+        for f in ("show_certified", "show_stamp", "show_signature"):
+            if f in d:
+                setattr(seal, f, truthy(d.get(f)))
         seal.save()
         return Response(seal_payload(seal))

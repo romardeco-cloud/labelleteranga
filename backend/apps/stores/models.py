@@ -389,6 +389,9 @@ class CompanySeal(models.Model):
     place = models.CharField("Ville", max_length=80, blank=True)
     certified_text = models.CharField("Mention", max_length=80, default="Certifié conforme")
     show_date = models.BooleanField("Date du jour", default=True)
+    show_certified = models.BooleanField("Mention « Document certifié »", default=True)
+    show_stamp = models.BooleanField("Cachet", default=True)
+    show_signature = models.BooleanField("Signature", default=True)
     updated_at = models.DateTimeField(auto_now=True)
 
     @classmethod

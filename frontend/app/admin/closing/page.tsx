@@ -3,6 +3,7 @@
 import { useEffect, useState } from "react";
 import CashierTills from "@/components/admin/CashierTills";
 import StoreGaps from "@/components/admin/StoreGaps";
+import SealOptionsBar from "@/components/SealOptionsBar";
 import { openPdf } from "@/lib/documents";
 import {
   ClosingPreview,
@@ -100,6 +101,7 @@ export default function AdminClosingPage() {
   return (
     <div className="space-y-8">
       <h1 className="text-2xl font-bold">Cloture de caisse</h1>
+      <SealOptionsBar />
 
       <div className="flex flex-wrap items-center gap-3 -mb-4">
         <label className="text-sm font-medium">Journee du</label>

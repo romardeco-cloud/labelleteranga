@@ -1,6 +1,7 @@
 "use client";
 
 import SealBlock from "@/components/SealBlock";
+import SealOptionsBar from "@/components/SealOptionsBar";
 import Link from "next/link";
 import { useParams, useRouter } from "next/navigation";
 import { useEffect, useMemo, useRef, useState } from "react";
@@ -320,6 +321,7 @@ export default function InventoryDetailPage() {
           </button>
         </div>
       )}
+      <SealOptionsBar />
       <SealBlock printOnly />
     </div>
   );

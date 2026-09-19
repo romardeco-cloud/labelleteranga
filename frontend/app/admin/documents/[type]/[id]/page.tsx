@@ -6,6 +6,7 @@ import { useParams, useRouter } from "next/navigation";
 import { Fragment, useCallback, useEffect, useState } from "react";
 import PayBadge from "@/components/documents/PayBadge";
 import SealBlock, { useCompanyContact } from "@/components/SealBlock";
+import SealOptionsBar from "@/components/SealOptionsBar";
 import {
   DOC_CONFIG,
   DocType,
@@ -148,6 +149,8 @@ export default function DocumentDetailPage() {
           )}
         </div>
       </div>
+
+      <SealOptionsBar />
 
       {error && <p className="text-red-600 text-sm bg-red-50 border border-red-200 rounded p-2 print:hidden">{error}</p>}
 

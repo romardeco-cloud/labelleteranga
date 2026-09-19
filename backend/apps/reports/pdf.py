@@ -245,10 +245,21 @@ def seal_block():
     if seal is None or not seal.enabled:
         return []
 
+    from apps.reports import sealopts
+
+    asked = sealopts.current()
+    show = asked or {"mention": seal.show_certified, "stamp": seal.show_stamp, "signature": seal.show_signature}
+    stamp_png = seal.stamp_png if show["stamp"] else None
+    signature_png = seal.signature_png if show["signature"] else None
+    if not (show["mention"] or stamp_png or signature_png):
+        return []
+
     today = timezone.localdate()
-    lines = [f"<b>{seal.certified_text or 'Certifié conforme'}</b>"]
+    lines = [f"<b>{seal.certified_text or 'Certifié conforme'}</b>"] if show["mention"] else []
     where = f"Fait à {seal.place}, le" if seal.place else "Le"
-    if seal.show_date:
+    if not show["mention"]:
+        pass
+    elif seal.show_date:
         lines.append(f"{where} {today.day} {MONTHS_FR[today.month - 1]} {today.year}")
     elif seal.place:
         lines.append(f"Fait à {seal.place}")
@@ -261,9 +272,9 @@ def seal_block():
         right.append(Paragraph(seal.signer_name, name_style))
     if seal.signer_title:
         right.append(Paragraph(seal.signer_title, title_style))
-    if seal.stamp_png or seal.signature_png:
+    if stamp_png or signature_png:
         right.append(Spacer(1, 2 * mm))
-        right.append(SealImages(seal.stamp_png, seal.signature_png, col_w, 34 * mm if seal.stamp_png else 24 * mm))
+        right.append(SealImages(stamp_png, signature_png, col_w, 34 * mm if stamp_png else 24 * mm))
     else:
         right.append(Spacer(1, 22 * mm))
     right_col = Table([[r] for r in right], colWidths=[col_w])

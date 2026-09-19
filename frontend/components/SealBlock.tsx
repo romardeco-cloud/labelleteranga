@@ -2,6 +2,7 @@
 
 import { useEffect, useState } from "react";
 import { api } from "@/lib/api";
+import { useSealOpts } from "@/lib/sealOpts";
 
 export type Seal = {
   enabled: boolean;
@@ -19,6 +20,9 @@ export type Seal = {
   place: string;
   certified_text: string;
   show_date: boolean;
+  show_certified?: boolean;
+  show_stamp?: boolean;
+  show_signature?: boolean;
   stamp_color?: string;
 };
 
@@ -47,6 +51,7 @@ export function todayFr() {
 /** « Certifie conforme », date du jour, cachet et signature de l'entreprise : affiches en bas des documents et rapports (ecran et impression). */
 export default function SealBlock({ printOnly = false, fresh = false }: { printOnly?: boolean; fresh?: boolean }) {
   const [seal, setSeal] = useState<Seal | null>(fresh ? null : cache);
+  const [opts] = useSealOpts({ mention: seal?.show_certified ?? true, stamp: seal?.show_stamp ?? true, signature: seal?.show_signature ?? true });
 
   useEffect(() => {
     if (cache && !fresh) return;
@@ -69,13 +74,17 @@ export default function SealBlock({ printOnly = false, fresh = false }: { printO
     </div>
   );
   if (!seal.enabled) return footer || null;
+  const show = fresh ? { mention: seal.show_certified ?? true, stamp: seal.show_stamp ?? true, signature: seal.show_signature ?? true } : opts;
+  const stamp = show.stamp ? seal.stamp : null;
+  const signature = show.signature ? seal.signature : null;
+  if (!show.mention && !stamp && !signature) return footer || null;
   const where = seal.place ? `Fait à ${seal.place}${seal.show_date ? ", le" : ""}` : seal.show_date ? "Le" : "";
   return (
     <>
     <div className={`mt-10 flex flex-wrap items-start justify-between gap-6 text-sm text-gray-800 break-inside-avoid ${printOnly ? "hidden print:flex" : ""}`}>
       <div>
-        <p className="font-semibold">{seal.certified_text}</p>
-        {(where || seal.show_date) && (
+        {show.mention && <p className="font-semibold">{seal.certified_text}</p>}
+        {show.mention && (where || seal.show_date) && (
           <p>
             {where} {seal.show_date ? todayFr() : ""}
           </p>
@@ -84,12 +93,12 @@ export default function SealBlock({ printOnly = false, fresh = false }: { printO
       <div className="flex flex-col items-center text-center w-72 max-w-full">
         {seal.signer_name && <strong className="text-[15px] text-gray-900">{seal.signer_name}</strong>}
         {seal.signer_title && <span className="text-gray-600 text-[13px]">{seal.signer_title}</span>}
-        {(seal.stamp || seal.signature) && (
+        {(stamp || signature) && (
           <div className="mt-2 grid w-full place-items-center bg-white">
             {/* eslint-disable-next-line @next/next/no-img-element */}
-            {seal.stamp && <img src={seal.stamp} alt="Cachet de l'entreprise" className="col-start-1 row-start-1 h-32 w-auto max-w-[62%] object-contain" />}
+            {stamp && <img src={stamp} alt="Cachet de l'entreprise" className="col-start-1 row-start-1 h-32 w-auto max-w-[62%] object-contain" />}
             {/* eslint-disable-next-line @next/next/no-img-element */}
-            {seal.signature && <img src={seal.signature} alt="Signature" className={`col-start-1 row-start-1 object-contain ${seal.stamp ? "w-[70%] max-h-[70px] translate-y-3" : "w-[90%] max-h-24"}`} />}
+            {signature && <img src={signature} alt="Signature" className={`col-start-1 row-start-1 object-contain ${stamp ? "w-[70%] max-h-[70px] translate-y-3" : "w-[90%] max-h-24"}`} />}
           </div>
         )}
       </div>

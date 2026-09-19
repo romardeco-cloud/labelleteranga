@@ -2,6 +2,7 @@
 
 import MonthlyReports from "@/components/admin/MonthlyReports";
 import Link from "next/link";
+import SealOptionsBar from "@/components/SealOptionsBar";
 import { useEffect, useState } from "react";
 import { PointOfSale, ProductSalesRow, fetchPointsOfSale, fetchProductSales } from "@/lib/api";
 import {
@@ -181,6 +182,7 @@ export default function ReportsPage() {
     <div className="space-y-6">
       <div className="flex flex-wrap items-center justify-between gap-2">
         <h1 className="text-2xl font-bold">Rapports</h1>
+        <SealOptionsBar />
         <div className="flex flex-wrap gap-2">
         <button
           onClick={() =>

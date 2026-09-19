@@ -33,6 +33,9 @@ export default function SealPage() {
       const f = new FormData();
       f.append("enabled", String(seal.enabled));
       f.append("show_date", String(seal.show_date));
+      f.append("show_certified", String(seal.show_certified ?? true));
+      f.append("show_stamp", String(seal.show_stamp ?? true));
+      f.append("show_signature", String(seal.show_signature ?? true));
       f.append("signer_name", seal.signer_name);
       f.append("signer_title", seal.signer_title);
       f.append("legal_line", seal.legal_line ?? "");
@@ -190,6 +193,23 @@ export default function SealPage() {
           <label className="text-sm block sm:col-span-2">
             <span className="block text-gray-400 mb-1">Lignes supplementaires (une information par ligne : 2e telephone, compte bancaire, horaires...)</span>
             <textarea value={seal.contact_extra ?? ""} onChange={(e) => set("contact_extra", e.target.value)} rows={3} maxLength={500} className="w-full border rounded-lg px-3 py-2" />
+          </label>
+        </div>
+      </div>
+      <div className="border rounded-2xl bg-[#1c1514] p-4 space-y-2">
+        <p className="font-medium">Ajoutes par defaut sur les documents</p>
+        <p className="text-xs text-gray-500">
+          Sur chaque devis, facture, bon de commande ou rapport, des cases permettent de choisir, au moment de l&apos;afficher ou de l&apos;imprimer, d&apos;ajouter ou non ces elements. Voici ce qui est coche au depart.
+        </p>
+        <div className="flex flex-wrap gap-x-6 gap-y-1 text-sm">
+          <label className="flex items-center gap-2">
+            <input type="checkbox" checked={seal.show_certified ?? true} onChange={(e) => set("show_certified", e.target.checked)} /> Mention « Document certifie » et date
+          </label>
+          <label className="flex items-center gap-2">
+            <input type="checkbox" checked={seal.show_stamp ?? true} onChange={(e) => set("show_stamp", e.target.checked)} /> Cachet
+          </label>
+          <label className="flex items-center gap-2">
+            <input type="checkbox" checked={seal.show_signature ?? true} onChange={(e) => set("show_signature", e.target.checked)} /> Signature
           </label>
         </div>
       </div>
