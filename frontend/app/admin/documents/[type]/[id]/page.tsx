@@ -163,7 +163,8 @@ export default function DocumentDetailPage() {
               <p className="font-bold text-lg">La Belle Teranga</p>
               {doc.point_of_sale_name && <p>{doc.point_of_sale_name}</p>}
               {company?.contact_address && <p>{company.contact_address}</p>}
-              <p>{[company?.contact_phone ? `Tel : ${company.contact_phone}` : process.env.NEXT_PUBLIC_PHONE ? `Tel : ${process.env.NEXT_PUBLIC_PHONE}` : "", company?.contact_whatsapp && `WhatsApp : ${company.contact_whatsapp}`].filter(Boolean).join(" - ")}</p>
+              {(company?.contact_phone || process.env.NEXT_PUBLIC_PHONE) && <p>Tel : {company?.contact_phone || process.env.NEXT_PUBLIC_PHONE}</p>}
+              {company?.contact_whatsapp && <p>WhatsApp : {company.contact_whatsapp}</p>}
               <p>{[`Email : ${company?.contact_email || "info@labelleteranga.com"}`, company?.contact_website].filter(Boolean).join(" - ")}</p>
               {company?.legal_line && <p className="text-xs text-gray-600">{company.legal_line}</p>}
               {(company?.contact_extra ?? "").split("\n").filter((l) => l.trim()).map((l, i) => (

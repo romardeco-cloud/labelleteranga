@@ -107,14 +107,11 @@ def letterhead(store=None):
     address = (store.address if store and store.address else "") or (company.contact_address if company else "")
     if address:
         lines.append(address)
-    contact = []
     phone = (store.phone if store and store.phone else "") or (company.contact_phone if company else "")
     if phone:
-        contact.append(f"Tel : {phone}")
+        lines.append(f"Tel : {phone}")
     if company and company.contact_whatsapp:
-        contact.append(f"WhatsApp : {company.contact_whatsapp}")
-    if contact:
-        lines.append(" - ".join(contact))  # telephone et WhatsApp sur une ligne
+        lines.append(f"WhatsApp : {company.contact_whatsapp}")  # WhatsApp a la ligne
     web = [f"Email : {(company.contact_email if company and company.contact_email else (st.email if st and st.email else CONTACT_EMAIL))}"]
     if company and company.contact_website:
         web.append(company.contact_website)
