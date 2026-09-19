@@ -69,6 +69,9 @@ class Order(models.Model):
     whatsapp_error = models.CharField(max_length=250, blank=True)
     created_at = models.DateTimeField(auto_now_add=True)
     paid_at = models.DateTimeField(null=True, blank=True)
+    # paiement par QR (Wave / Orange Money) : le client declare avoir paye et donne la reference de sa transaction
+    payment_reference = models.CharField(max_length=60, blank=True)
+    payment_declared_at = models.DateTimeField(null=True, blank=True)
     voided_at = models.DateTimeField(null=True, blank=True)
     voided_by = models.ForeignKey("auth.User", null=True, blank=True, on_delete=models.SET_NULL, related_name="+")
     void_reason = models.CharField(max_length=200, blank=True)

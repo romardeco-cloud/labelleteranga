@@ -184,6 +184,14 @@ export default function AdminOrdersPage() {
               <td className="p-2">{paymentLabel[o.payment_method] ?? o.payment_method}</td>
               <td className="p-2">
                 {statusLabel[o.status] ?? o.status}
+                {o.status === "pending" && o.payment_declared_at && (
+                  <div className="text-xs text-amber-600">
+                    Paiement declare - ref. <strong>{o.payment_reference}</strong> : a verifier
+                  </div>
+                )}
+                {o.status === "pending" && !o.payment_declared_at && o.payment_method !== "cash" && o.payment_method !== "card" && (
+                  <div className="text-xs text-gray-400">Le client n&apos;a pas encore valide son paiement</div>
+                )}
                 {o.status === "cancelled" && o.voided_at && (
                   <div className="text-xs text-gray-400">
                     par {(o as Order & { voided_by_username?: string }).voided_by_username ?? "admin"}

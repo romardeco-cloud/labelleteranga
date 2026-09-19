@@ -247,6 +247,33 @@ class CreateManualOrderView(APIView):
         return Response(OrderSerializer(order).data, status=status.HTTP_201_CREATED)
 
 
+class DeclarePaymentView(APIView):
+    """
+    POST /api/payments/orders/<reference>/declare-payment/  body: {payment_reference}
+    Le client valide son paiement Wave / Orange Money par QR en donnant la reference de sa transaction. La commande
+    est alors signalee "paiement declare" a l'equipe, qui la verifie avant de la confirmer (confirmation WhatsApp).
+    """
+
+    def post(self, request, reference):
+        from django.utils import timezone
+
+        order = get_object_or_404(Order, reference=reference)
+        if order.status != Order.Status.PENDING or order.payment_method not in (
+            Order.PaymentMethod.WAVE,
+            Order.PaymentMethod.ORANGE_MONEY,
+        ):
+            return Response({"detail": "Cette commande n'attend pas de paiement."}, status=status.HTTP_400_BAD_REQUEST)
+        ref = str(request.data.get("payment_reference") or "").strip()
+        if len(ref) < 4:
+            return Response(
+                {"detail": "Indiquez la reference de votre transaction (au moins 4 caracteres)."}, status=status.HTTP_400_BAD_REQUEST
+            )
+        order.payment_reference = ref[:60]
+        order.payment_declared_at = timezone.now()
+        order.save(update_fields=["payment_reference", "payment_declared_at"])
+        return Response(OrderSerializer(order).data)
+
+
 class ResendWhatsAppView(APIView):
     """POST /api/payments/orders/<reference>/resend-whatsapp/ : renvoie la confirmation WhatsApp d'une commande payee."""
 

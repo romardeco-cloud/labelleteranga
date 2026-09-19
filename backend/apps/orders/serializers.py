@@ -47,13 +47,15 @@ class OrderSerializer(serializers.ModelSerializer):
             "voided_by_username",
             "void_reason",
             "order_number",
+            "payment_reference",
+            "payment_declared_at",
             "whatsapp_confirmation_sent_at",
             "whatsapp_status",
             "whatsapp_error",
             "customer_whatsapp_link",
             "shop_whatsapp_link",
         ]
-        read_only_fields = ["reference", "channel", "status", "total_amount", "created_at", "paid_at", "voided_at", "void_reason"]
+        read_only_fields = ["reference", "channel", "status", "total_amount", "created_at", "paid_at", "voided_at", "void_reason", "payment_reference", "payment_declared_at"]
 
     def _whatsapp_message(self, order):
         from apps.notifications.whatsapp import build_confirmation_message

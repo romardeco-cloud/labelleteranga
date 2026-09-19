@@ -5,6 +5,7 @@ from .views import (
     CreateManualOrderView,
     CreateCheckoutSessionView,
     CreateOrangeMoneyCheckoutView,
+    DeclarePaymentView,
     CreateWaveCheckoutView,
     MarkOrderPaidView,
     ResendWhatsAppView,
@@ -24,4 +25,5 @@ urlpatterns = [
     path("manual-order/", CreateManualOrderView.as_view()),
     path("orders/<str:reference>/mark-paid/", MarkOrderPaidView.as_view()),
     path("orders/<str:reference>/resend-whatsapp/", ResendWhatsAppView.as_view()),
+    path("orders/<str:reference>/declare-payment/", DeclarePaymentView.as_view()),
 ]

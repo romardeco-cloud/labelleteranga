@@ -685,10 +685,11 @@ export default function CaissePage() {
                         </p>
                         <span
                           className={`text-xs px-2 py-1 rounded-md ${
-                            o.status === "paid" ? "bg-emerald-500/15 text-emerald-400" : "bg-amber-500/15 text-amber-400"
+                            o.status === "paid" || o.ready_to_prepare ? "bg-emerald-500/15 text-emerald-400" : "bg-amber-500/15 text-amber-400"
                           }`}
                         >
                           {o.status_label}
+                          {o.payment_reference ? ` (ref. ${o.payment_reference})` : ""}
                         </span>
                       </div>
                       <p className="text-sm text-gray-500 mt-1">

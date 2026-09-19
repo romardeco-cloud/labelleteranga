@@ -5,7 +5,7 @@ import { useSearchParams } from "next/navigation";
 import Link from "next/link";
 import { useSite } from "@/components/site/SiteContext";
 import Image from "next/image";
-import { Order, fetchOrder } from "@/lib/api";
+import { Order, declarePayment, fetchOrder } from "@/lib/api";
 import { PAYMENT_QR } from "@/lib/branding";
 
 const PAYMENT_LABELS: Record<string, string> = {
@@ -20,6 +20,23 @@ function SuccessContent() {
   const { site, base } = useSite();
   const reference = params.get("order");
   const [order, setOrder] = useState<Order | null>(null);
+  const [txnRef, setTxnRef] = useState("");
+  const [declareError, setDeclareError] = useState("");
+  const [declaring, setDeclaring] = useState(false);
+
+  async function submitDeclaration(e: React.FormEvent) {
+    e.preventDefault();
+    if (!reference) return;
+    setDeclaring(true);
+    setDeclareError("");
+    try {
+      setOrder(await declarePayment(reference, txnRef));
+    } catch (err: any) {
+      setDeclareError(err?.response?.data?.detail ?? "Validation impossible, reessayez.");
+    } finally {
+      setDeclaring(false);
+    }
+  }
 
   useEffect(() => {
     if (!reference) return;
@@ -69,7 +86,9 @@ function SuccessContent() {
 
   return (
     <div className="max-w-md mx-auto px-4 py-16 text-center">
-      <h1 className="text-2xl font-bold text-brand-dark mb-2">Merci pour votre commande !</h1>
+      <h1 className="text-2xl font-bold text-brand-dark mb-2">
+        {isManual && isPending && !order?.payment_declared_at ? "Finalisez votre paiement" : "Merci pour votre commande !"}
+      </h1>
       <p className="text-gray-600 mb-1">
         Commande n° <strong>{order?.order_number ?? reference.slice(0, 8).toUpperCase()}</strong>
       </p>
@@ -104,7 +123,7 @@ function SuccessContent() {
         </div>
       )}
 
-      {isManual && isPending && order && (
+      {isManual && isPending && order && !order.payment_declared_at && (
         <div className="bg-brand-light border border-brand-accent/50 rounded-lg p-4 mb-6 text-left">
           <p className="text-brand-dark font-medium text-center">Derniere etape : payez {new Intl.NumberFormat("fr-SN", { maximumFractionDigits: 0 }).format(Number(order.total_amount))} FCFA</p>
           <ol className="text-sm text-gray-700 mt-2 list-decimal list-inside space-y-1">
@@ -112,7 +131,7 @@ function SuccessContent() {
             <li>
               Payez exactement le montant indique et indiquez le numero de commande <strong>{order.order_number}</strong> si l&apos;application le permet.
             </li>
-            <li>Nous confirmons votre paiement, puis vous recevez la confirmation par WhatsApp au {order.customer_phone}.</li>
+            <li>Revenez ici et validez votre paiement avec la reference de la transaction.</li>
           </ol>
           {PAYMENT_QR[order.payment_method] && (
             <Image
@@ -122,6 +141,39 @@ function SuccessContent() {
               height={PAYMENT_QR[order.payment_method].height}
               className="mx-auto mt-3 max-h-80 w-auto rounded-lg border"
             />
+          )}
+        </div>
+      )}
+
+      {isManual && isPending && order && (
+        <div className="mb-6 text-left">
+          {order.payment_declared_at ? (
+            <div className="bg-green-50 border border-green-200 rounded-lg p-4 text-center">
+              <p className="text-green-800 font-medium">Paiement declare, merci !</p>
+              <p className="text-sm text-gray-600 mt-1">
+                Reference : <strong>{order.payment_reference}</strong>. Nous verifions votre paiement, puis vous recevez la confirmation par
+                WhatsApp au {order.customer_phone}.
+              </p>
+            </div>
+          ) : (
+            <form onSubmit={submitDeclaration} className="border rounded-lg p-4 bg-white space-y-2">
+              <label className="block text-sm font-medium">Reference de la transaction (recue par SMS ou dans l&apos;application)</label>
+              <input
+                required
+                minLength={4}
+                value={txnRef}
+                onChange={(e) => setTxnRef(e.target.value)}
+                placeholder="Ex. T2409181234AB"
+                className="w-full border rounded px-3 py-2"
+              />
+              {declareError && <p className="text-sm text-red-600">{declareError}</p>}
+              <button disabled={declaring} className="w-full bg-brand text-white py-2.5 rounded-lg font-medium disabled:opacity-50">
+                {declaring ? "Validation..." : "J'ai effectue le paiement - valider"}
+              </button>
+              <p className="text-xs text-gray-500">
+                Votre commande ne sera traitee et la confirmation WhatsApp envoyee qu&apos;apres cette validation et la verification de votre paiement.
+              </p>
+            </form>
           )}
         </div>
       )}

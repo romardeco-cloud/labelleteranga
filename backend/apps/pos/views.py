@@ -190,6 +190,13 @@ class POSClosingView(APIView):
         return Response(DailyClosingSerializer(closing).data, status=201 if created else 200)
 
 
+def _order_state_label(o):
+    """Etat lisible d'une commande du site : le paiement QR doit etre valide par le client puis verifie."""
+    if o.status == Order.Status.PENDING and o.payment_method in ("wave", "orange_money"):
+        return "Paiement declare - a verifier" if o.payment_declared_at else "En attente du paiement du client"
+    return o.get_status_display()
+
+
 class POSCustomerOrdersView(APIView):
     """GET /api/pos/customer-orders/ : commandes des clients (site web) rattachees a ce point de vente, 7 derniers jours."""
 
@@ -209,7 +216,9 @@ class POSCustomerOrdersView(APIView):
                     "reference": o.reference[:8].upper(),
                     "created_at": o.created_at,
                     "status": o.status,
-                    "status_label": o.get_status_display(),
+                    "status_label": _order_state_label(o),
+                    "payment_reference": o.payment_reference,
+                    "ready_to_prepare": o.status == Order.Status.PAID or (o.status == Order.Status.PENDING and o.payment_method == "cash"),
                     "customer_name": o.customer_name,
                     "customer_phone": o.customer_phone,
                     "delivery_address": o.delivery_address,

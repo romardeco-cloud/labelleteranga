@@ -236,6 +236,8 @@ export type Order = {
   voided_at?: string | null;
   order_number?: string;
   whatsapp_status?: string;
+  payment_reference?: string;
+  payment_declared_at?: string | null;
   whatsapp_confirmation_sent_at: string | null;
   customer_whatsapp_link: string | null;
   shop_whatsapp_link: string | null;
@@ -263,6 +265,11 @@ export async function createManualOrder(method: "wave" | "orange_money", custome
   });
   notifyCartChanged();
   return data as Order;
+}
+
+export async function declarePayment(reference: string, paymentReference: string) {
+  const { data } = await api.post<Order>(`/payments/orders/${reference}/declare-payment/`, { payment_reference: paymentReference });
+  return data;
 }
 
 export async function createCashOrder(customer: CustomerInfo) {
@@ -456,6 +463,8 @@ export type POSCustomerOrder = {
   created_at: string;
   status: string;
   status_label: string;
+  payment_reference?: string;
+  ready_to_prepare?: boolean;
   customer_name: string;
   customer_phone: string;
   delivery_address: string;
