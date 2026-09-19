@@ -53,6 +53,16 @@ export default function AdminProductsPage() {
   const [photoMsg, setPhotoMsg] = useState("");
   const [photoErr, setPhotoErr] = useState("");
   const bulkRef = useRef<HTMLInputElement>(null);
+  // --- actions groupees ---
+  const [selected, setSelected] = useState<Set<number>>(new Set());
+  const [bulkKind, setBulkKind] = useState<null | "price" | "stock" | "delete">(null);
+  const [bulkPrice, setBulkPrice] = useState("");
+  const [bulkActivate, setBulkActivate] = useState(true);
+  const [bulkQty, setBulkQty] = useState("");
+  const [bulkMode, setBulkMode] = useState<"set" | "add">("set");
+  const [bulkConfirm, setBulkConfirm] = useState("");
+  const [bulkBusy, setBulkBusy] = useState(false);
+  const [bulkMsg, setBulkMsg] = useState<{ ok: boolean; text: string } | null>(null);
   const [imgStatus, setImgStatus] = useState<{ backend: string; ok: boolean; detail: string } | null>(null);
   const store = stores.find((x) => x.id === storeId) ?? null;
   const storeSlug = store ? store.name.toLowerCase().replace(/[^a-z0-9]+/g, "-").replace(/^-|-$/g, "") : "";
@@ -78,6 +88,36 @@ export default function AdminProductsPage() {
       .then((res) => setImgStatus(res.data))
       .catch(() => setImgStatus(null));
   }, []);
+
+  async function runBulk(action: string, extra: Record<string, unknown> = {}) {
+    setBulkBusy(true);
+    setBulkMsg(null);
+    try {
+      const res = await api.post("/catalog/products/bulk-update/", { ids: [...selected], action, ...extra });
+      const { updated, skipped, skipped_reason } = res.data as { updated: number; skipped: number; skipped_reason?: string };
+      setBulkMsg({
+        ok: true,
+        text: `${updated} produit(s) modifie(s)${skipped ? ` ; ${skipped} ignore(s)${skipped_reason ? ` (${skipped_reason})` : ""}` : ""}.`,
+      });
+      setBulkKind(null);
+      setBulkConfirm("");
+      if (action === "delete") setSelected(new Set());
+      reload();
+    } catch (err) {
+      setBulkMsg({ ok: false, text: apiErrorMessage(err, "Action impossible.") });
+    } finally {
+      setBulkBusy(false);
+    }
+  }
+  const toggleOne = (id: number) =>
+    setSelected((cur) => {
+      const next = new Set(cur);
+      if (next.has(id)) next.delete(id);
+      else next.add(id);
+      return next;
+    });
+  const allSelected = products.length > 0 && products.every((p) => selected.has(p.id));
+  const toggleAll = () => setSelected(allSelected ? new Set() : new Set(products.map((p) => p.id)));
 
   useEffect(() => {
     const t = setTimeout(reload, 250);
@@ -483,9 +523,100 @@ export default function AdminProductsPage() {
           {storeId ? "Aucun produit rattache a ce point de vente : importez son fichier Excel." : "Aucun produit."}
         </p>
       )}
+      <div className="flex flex-wrap items-center gap-2">
+        <button onClick={toggleAll} disabled={products.length === 0} className="border rounded-lg px-3 py-1.5 text-sm bg-white disabled:opacity-40">
+          {allSelected ? "Tout deselectionner" : `Tout selectionner (${products.length})`}
+        </button>
+        {selected.size > 0 && (
+          <>
+            <span className="text-sm font-medium">{selected.size} selectionne(s) :</span>
+            <button onClick={() => runBulk("activate")} disabled={bulkBusy} className="border border-green-600 text-green-700 rounded-lg px-3 py-1.5 text-sm bg-white">
+              Activer
+            </button>
+            <button onClick={() => runBulk("deactivate")} disabled={bulkBusy} className="border rounded-lg px-3 py-1.5 text-sm bg-white">
+              Desactiver
+            </button>
+            <button onClick={() => setBulkKind("price")} className="border rounded-lg px-3 py-1.5 text-sm bg-white">
+              Meme prix pour tous
+            </button>
+            <button onClick={() => setBulkKind("stock")} className="border rounded-lg px-3 py-1.5 text-sm bg-white">
+              Stock uniforme
+            </button>
+            <button onClick={() => setBulkKind("delete")} className="border border-red-500 text-red-600 rounded-lg px-3 py-1.5 text-sm bg-white">
+              Supprimer
+            </button>
+          </>
+        )}
+      </div>
+      {bulkMsg && <p className={`text-sm ${bulkMsg.ok ? "text-green-700" : "text-red-600"}`}>{bulkMsg.text}</p>}
+      {bulkKind && (
+        <div className="fixed inset-0 z-40 bg-black/60 flex items-center justify-center p-4" onClick={() => setBulkKind(null)}>
+          <div onClick={(e) => e.stopPropagation()} className="bg-white text-gray-900 rounded-2xl p-5 w-full max-w-sm space-y-3">
+            {bulkKind === "price" && (
+              <>
+                <h2 className="font-bold text-lg">Meme prix pour {selected.size} produit(s)</h2>
+                <input type="number" min={0} autoFocus value={bulkPrice} onChange={(e) => setBulkPrice(e.target.value)} placeholder="Prix (FCFA)" className="w-full border rounded px-3 py-2" />
+                <label className="flex items-center gap-2 text-sm">
+                  <input type="checkbox" checked={bulkActivate} onChange={(e) => setBulkActivate(e.target.checked)} /> Activer aussi ces produits (visibles en caisse et en ligne)
+                </label>
+                <button disabled={bulkBusy || bulkPrice === ""} onClick={() => runBulk("set_price", { price: bulkPrice, activate: bulkActivate })} className="w-full bg-brand text-white rounded-lg py-2.5 font-medium disabled:opacity-40">
+                  {bulkBusy ? "Application..." : "Appliquer ce prix"}
+                </button>
+              </>
+            )}
+            {bulkKind === "stock" && (
+              <>
+                <h2 className="font-bold text-lg">Stock pour {selected.size} produit(s)</h2>
+                {storeId ? (
+                  <>
+                    <p className="text-sm text-gray-600">Point de vente : <strong>{store?.name}</strong></p>
+                    <div className="flex gap-2 text-sm">
+                      {(
+                        [
+                          ["set", "Mettre le stock a"],
+                          ["add", "Ajouter au stock"],
+                        ] as const
+                      ).map(([k, l]) => (
+                        <button key={k} onClick={() => setBulkMode(k)} className={`flex-1 border rounded-lg py-1.5 ${bulkMode === k ? "bg-brand text-white border-brand" : ""}`}>
+                          {l}
+                        </button>
+                      ))}
+                    </div>
+                    <input type="number" autoFocus value={bulkQty} onChange={(e) => setBulkQty(e.target.value)} placeholder="Quantite" className="w-full border rounded px-3 py-2" />
+                    <button disabled={bulkBusy || bulkQty === ""} onClick={() => runBulk("set_stock", { point_of_sale: storeId, quantity: Number(bulkQty), mode: bulkMode })} className="w-full bg-brand text-white rounded-lg py-2.5 font-medium disabled:opacity-40">
+                      {bulkBusy ? "Application..." : bulkMode === "add" ? "Ajouter cette quantite" : "Appliquer ce stock"}
+                    </button>
+                  </>
+                ) : (
+                  <p className="text-sm text-amber-700">Choisissez d&apos;abord un point de vente (boutons en haut de la liste) : le stock se gere par point de vente.</p>
+                )}
+              </>
+            )}
+            {bulkKind === "delete" && (
+              <>
+                <h2 className="font-bold text-lg text-red-600">Supprimer {selected.size} produit(s) ?</h2>
+                <p className="text-sm text-gray-600">Suppression definitive de ces produits, de leur stock et de leurs photos. Les ventes passees restent dans les rapports.</p>
+                <label className="block text-sm">
+                  Tapez <strong>SUPPRIMER</strong> pour confirmer
+                  <input value={bulkConfirm} onChange={(e) => setBulkConfirm(e.target.value)} className="w-full border rounded px-3 py-2 mt-1" />
+                </label>
+                <button disabled={bulkBusy || bulkConfirm.trim().toUpperCase() !== "SUPPRIMER"} onClick={() => runBulk("delete", { confirm: true })} className="w-full bg-red-600 text-white rounded-lg py-2.5 font-medium disabled:opacity-40">
+                  {bulkBusy ? "Suppression..." : "Supprimer definitivement"}
+                </button>
+              </>
+            )}
+            <button onClick={() => setBulkKind(null)} className="w-full border rounded-lg py-2 text-sm">
+              Annuler
+            </button>
+          </div>
+        </div>
+      )}
       <table className="w-full text-sm bg-white border rounded-lg overflow-hidden">
         <thead className="bg-gray-50 text-left">
           <tr>
+            <th className="p-2 w-8">
+              <input type="checkbox" checked={allSelected} onChange={toggleAll} aria-label="Tout selectionner" />
+            </th>
             <th className="p-2">Photo</th>
             <th className="p-2">SKU</th>
             <th className="p-2">Nom</th>
@@ -501,7 +632,7 @@ export default function AdminProductsPage() {
             <React.Fragment key={p.id}>
               {editingId === p.id && editForm ? (
                 <tr className="border-t bg-brand-light/40">
-                  <td className="p-2" colSpan={8}>
+                  <td className="p-2" colSpan={9}>
                     <div className="grid sm:grid-cols-6 gap-2 mb-2">
                       <input
                         value={editForm.sku}
@@ -600,7 +731,10 @@ export default function AdminProductsPage() {
                   </td>
                 </tr>
               ) : (
-                <tr className="border-t">
+                <tr className={`border-t ${selected.has(p.id) ? "bg-brand-light/60" : ""}`}>
+                  <td className="p-2 w-8">
+                    <input type="checkbox" checked={selected.has(p.id)} onChange={() => toggleOne(p.id)} aria-label={`Selectionner ${p.name}`} />
+                  </td>
                   <td className="p-2 w-16">
                     <label
                       className="relative block w-12 h-12 rounded-lg overflow-hidden cursor-pointer group bg-[#251c1a]"
@@ -654,7 +788,7 @@ export default function AdminProductsPage() {
               )}
               {expanded === p.id && (
                 <tr className="bg-brand-light/40 border-t">
-                  <td colSpan={8} className="p-3">
+                  <td colSpan={9} className="p-3">
                     <p className="text-xs font-medium text-brand-dark mb-2">Stock par point de vente</p>
                     <div className="flex flex-wrap gap-3">
                       {stores.map((s) => {

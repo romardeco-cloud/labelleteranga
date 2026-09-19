@@ -119,6 +119,78 @@ class ProductViewSet(viewsets.ModelViewSet):
         skipped = Product.objects.filter(is_active=False, price__lte=0, stocks__point_of_sale=store).distinct().count()
         return Response({"activated": updated, "still_hidden_without_price": skipped})
 
+    @action(detail=False, methods=["post"], permission_classes=[permissions.IsAdminUser], url_path="bulk-update")
+    def bulk_update(self, request):
+        """
+        Action groupee sur une liste de produits : {ids: [...], action, ...}
+          action = activate | deactivate        (activate ignore les produits sans prix, sauf include_unpriced=true)
+          action = set_price   price, activate?  meme prix pour toute la liste
+          action = set_stock   point_of_sale, quantity, mode = set | add   meme stock pour toute la liste
+          action = delete      confirm=true      suppression definitive (les ventes passees sont conservees)
+        """
+        from decimal import Decimal, InvalidOperation
+
+        from django.db import transaction
+
+        from apps.stores.models import StockMovement
+        from apps.stores.services import change_stock
+
+        ids = request.data.get("ids")
+        if not isinstance(ids, list) or not ids:
+            raise ValidationError({"ids": "Selectionnez au moins un produit."})
+        act = request.data.get("action")
+        qs = Product.objects.filter(pk__in=[int(i) for i in ids])
+        total = qs.count()
+
+        if act in ("activate", "deactivate"):
+            if act == "deactivate":
+                n = qs.update(is_active=False)
+                return Response({"updated": n, "skipped": total - n})
+            target = qs if request.data.get("include_unpriced") else qs.filter(price__gt=0)
+            n = target.update(is_active=True)
+            return Response({"updated": n, "skipped": total - n, "skipped_reason": "prix a 0" if n < total else ""})
+
+        if act == "set_price":
+            try:
+                price = Decimal(str(request.data.get("price")))
+            except (InvalidOperation, TypeError):
+                raise ValidationError({"price": "Prix invalide."})
+            if price < 0:
+                raise ValidationError({"price": "Le prix ne peut pas etre negatif."})
+            fields = {"price": price}
+            if request.data.get("activate") and price > 0:
+                fields["is_active"] = True
+            n = qs.update(**fields)
+            return Response({"updated": n, "skipped": total - n})
+
+        if act == "set_stock":
+            store = self._store_from(request.data.get("point_of_sale"))
+            if not store:
+                raise ValidationError({"point_of_sale": "Choisissez le point de vente dont on modifie le stock."})
+            try:
+                quantity = int(request.data.get("quantity"))
+            except (TypeError, ValueError):
+                raise ValidationError({"quantity": "Quantite invalide."})
+            add = request.data.get("mode") == "add"
+            if quantity < 0 and not add:
+                raise ValidationError({"quantity": "Le stock ne peut pas etre negatif."})
+            updated = 0
+            with transaction.atomic():
+                for product in qs.filter(stocks__point_of_sale=store).distinct():
+                    kwargs = {"delta": quantity} if add else {"set_to": quantity}
+                    change_stock(product, store, reason=StockMovement.Reason.MANUAL, user=request.user, **kwargs)
+                    updated += 1
+            return Response({"updated": updated, "skipped": total - updated})
+
+        if act == "delete":
+            if request.data.get("confirm") is not True:
+                raise ValidationError({"confirm": "Confirmation requise."})
+            n = qs.count()
+            qs.delete()
+            return Response({"updated": n, "skipped": 0})
+
+        raise ValidationError({"action": "Action inconnue."})
+
     @staticmethod
     def _store_from(value):
         if not value:
