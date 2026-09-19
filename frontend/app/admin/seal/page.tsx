@@ -35,6 +35,7 @@ export default function SealPage() {
       f.append("show_date", String(seal.show_date));
       f.append("signer_name", seal.signer_name);
       f.append("signer_title", seal.signer_title);
+      f.append("legal_line", seal.legal_line ?? "");
       f.append("place", seal.place);
       f.append("certified_text", seal.certified_text);
       f.append("keep_background", String(keepBg));
@@ -140,6 +141,10 @@ export default function SealPage() {
         <label className="text-sm block">
           <span className="block text-gray-400 mb-1">Fonction</span>
           <input value={seal.signer_title} onChange={(e) => set("signer_title", e.target.value)} placeholder="Ex. Gerant" className="w-full border rounded-lg px-3 py-2" />
+        </label>
+        <label className="text-sm block sm:col-span-2">
+          <span className="block text-gray-400 mb-1">Identifiants legaux (sous la fonction)</span>
+          <input value={seal.legal_line ?? ""} onChange={(e) => set("legal_line", e.target.value)} placeholder="RCCM ... · NINEA ..." className="w-full border rounded-lg px-3 py-2" />
         </label>
         <label className="text-sm block">
           <span className="block text-gray-400 mb-1">Ville (Fait a ...)</span>

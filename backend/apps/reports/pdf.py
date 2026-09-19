@@ -217,6 +217,8 @@ def seal_block():
         right.append(Paragraph(seal.signer_name, name_style))
     if seal.signer_title:
         right.append(Paragraph(seal.signer_title, title_style))
+    if seal.legal_line:
+        right.append(Paragraph(seal.legal_line, ParagraphStyle("SealLegal", parent=title_style, fontSize=7.2, leading=9, textColor=colors.HexColor("#777777"))))
     if seal.stamp_png or seal.signature_png:
         right.append(Spacer(1, 2 * mm))
         right.append(SealImages(seal.stamp_png, seal.signature_png, col_w, 34 * mm if seal.stamp_png else 24 * mm))

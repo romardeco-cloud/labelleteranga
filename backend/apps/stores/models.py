@@ -379,6 +379,7 @@ class CompanySeal(models.Model):
     stamp_color = models.CharField("Couleur du cachet", max_length=12, default="original")
     signer_name = models.CharField("Nom du signataire", max_length=120, blank=True)
     signer_title = models.CharField("Fonction", max_length=120, blank=True)
+    legal_line = models.CharField("Identifiants légaux (RCCM, NINEA)", max_length=160, blank=True, default="RCCM SN ZGR 2023 A 2946 · NINEA 010903103 1P1")
     place = models.CharField("Ville", max_length=80, blank=True)
     certified_text = models.CharField("Mention", max_length=80, default="Certifié conforme")
     show_date = models.BooleanField("Date du jour", default=True)
