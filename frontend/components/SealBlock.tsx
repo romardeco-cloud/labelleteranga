@@ -12,6 +12,7 @@ export type Seal = {
   place: string;
   certified_text: string;
   show_date: boolean;
+  stamp_color?: string;
 };
 
 let cache: Seal | null = null;
@@ -53,7 +54,7 @@ export default function SealBlock({ printOnly = false, fresh = false }: { printO
         {(seal.stamp || seal.signature) && (
           <div className="relative mt-2 h-32 w-full bg-white">
             {/* eslint-disable-next-line @next/next/no-img-element */}
-            {seal.stamp && <img src={seal.stamp} alt="Cachet de l'entreprise" className="absolute top-0 h-32 w-auto object-contain" style={{ left: seal.signature ? "16%" : "50%", transform: seal.signature ? "none" : "translateX(-50%)" }} />}
+            {seal.stamp && <img src={seal.stamp} alt="Cachet de l'entreprise" className="absolute top-0 h-32 w-auto max-w-[66%] object-contain" style={{ left: seal.signature ? "16%" : "50%", transform: seal.signature ? "none" : "translateX(-50%)" }} />}
             {/* eslint-disable-next-line @next/next/no-img-element */}
             {seal.signature && <img src={seal.signature} alt="Signature" className="absolute w-[80%] object-contain" style={{ left: seal.stamp ? "18%" : "10%", top: seal.stamp ? "22%" : "0" }} />}
           </div>

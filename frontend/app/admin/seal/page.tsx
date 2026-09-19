@@ -19,7 +19,10 @@ export default function SealPage() {
   const signRef = useRef<HTMLInputElement>(null);
 
   useEffect(() => {
-    api.get<Seal>("/stores/company-seal/").then((r) => setSeal(r.data));
+    api.get<Seal>("/stores/company-seal/").then((r) => {
+      setSeal(r.data);
+      if (r.data.stamp_color) setStampColor(r.data.stamp_color);
+    });
   }, []);
 
   async function save(extra: Record<string, string> = {}) {
@@ -104,8 +107,10 @@ export default function SealPage() {
                 onChange={(e) => (s.removeKey === "remove_stamp" ? setStampColor(e.target.value) : setSignColor(e.target.value))}
                 className="mt-1 w-full border rounded-lg px-2 py-1.5 text-sm"
               >
-                {s.removeKey === "remove_stamp" && <option value="original">Couleurs d&apos;origine du cachet</option>}
-                <option value="blue">Bleu encre (recommande)</option>
+                {s.removeKey === "remove_stamp" && <option value="original">Couleurs d&apos;origine du cachet (recommande)</option>}
+                {s.removeKey === "remove_stamp" && <option value="burgundy">Bordeaux (encre, une couleur)</option>}
+                {s.removeKey === "remove_stamp" && <option value="forest">Vert foret (encre, une couleur)</option>}
+                <option value="blue">{s.removeKey === "remove_stamp" ? "Bleu encre (une couleur)" : "Bleu encre (recommande)"}</option>
                 <option value="navy">Bleu marine</option>
                 <option value="black">Noir</option>
                 {s.removeKey !== "remove_stamp" && <option value="original">Couleur d&apos;origine de la photo</option>}

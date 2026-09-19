@@ -394,6 +394,7 @@ def seal_payload(seal):
         "enabled": seal.enabled,
         "stamp": _data_url(seal.stamp_png),
         "signature": _data_url(seal.signature_png),
+        "stamp_color": seal.stamp_color,
         "signer_name": seal.signer_name,
         "signer_title": seal.signer_title,
         "place": seal.place,
@@ -425,18 +426,31 @@ class CompanySealView(APIView):
         d = request.data
         truthy = lambda v: str(v).lower() in ("1", "true", "yes", "on")
         keep_bg = truthy(d.get("keep_background", ""))
+        from .seal import INK_COLORS, tint_stamp
+
+        stamp_color = str(d.get("stamp_color") or seal.stamp_color or "original")
+        if stamp_color != "original" and stamp_color not in INK_COLORS:
+            stamp_color = "original"
         for field, attr in (("stamp", "stamp_png"), ("signature", "signature_png")):
             upload = request.FILES.get(field)
             if upload:
                 if upload.size > 12 * 1024 * 1024:
                     raise ValidationError({field: "Image trop lourde (12 Mo maximum)."})
                 try:
-                    color = str(d.get(f"{field}_color") or ("blue" if field == "signature" else "original"))
-                    setattr(seal, attr, process_seal_image(upload, remove_background=not keep_bg, color=color))
+                    if field == "stamp":
+                        # on garde le cachet d'origine : sa couleur peut ensuite etre changee sans renvoyer la photo
+                        seal.stamp_source = process_seal_image(upload, remove_background=not keep_bg, color="original")
+                    else:
+                        seal.signature_png = process_seal_image(upload, remove_background=not keep_bg, color=str(d.get("signature_color") or "blue"))
                 except Exception:
                     raise ValidationError({field: "Image illisible : envoyez une photo JPG ou PNG."})
             elif truthy(d.get(f"remove_{field}", "")):
                 setattr(seal, attr, None)
+                if field == "stamp":
+                    seal.stamp_source = None
+        seal.stamp_color = stamp_color
+        if seal.stamp_source:
+            seal.stamp_png = tint_stamp(seal.stamp_source, stamp_color)
         for f, mx in (("signer_name", 120), ("signer_title", 120), ("place", 80), ("certified_text", 80)):
             if f in d:
                 setattr(seal, f, str(d.get(f) or "").strip()[:mx])

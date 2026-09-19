@@ -375,6 +375,8 @@ class CompanySeal(models.Model):
     enabled = models.BooleanField("Afficher sur les documents", default=True)
     stamp_png = models.BinaryField("Cachet", null=True, blank=True, editable=False)
     signature_png = models.BinaryField("Signature", null=True, blank=True, editable=False)
+    stamp_source = models.BinaryField("Cachet (couleurs d'origine)", null=True, blank=True, editable=False)
+    stamp_color = models.CharField("Couleur du cachet", max_length=12, default="original")
     signer_name = models.CharField("Nom du signataire", max_length=120, blank=True)
     signer_title = models.CharField("Fonction", max_length=120, blank=True)
     place = models.CharField("Ville", max_length=80, blank=True)
