@@ -15,9 +15,14 @@ from .models import (
 
 
 class PointOfSaleSerializer(serializers.ModelSerializer):
+    track_stock = serializers.SerializerMethodField()
+
     class Meta:
         model = PointOfSale
-        fields = ["id", "name", "slug", "online_enabled", "description", "address", "phone", "is_active", "created_at"]
+        fields = ["id", "name", "slug", "online_enabled", "description", "address", "phone", "is_active", "created_at", "track_stock"]
+
+    def get_track_stock(self, store):
+        return get_settings(store).track_stock
 
 
 class StockSerializer(serializers.ModelSerializer):

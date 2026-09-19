@@ -23,6 +23,7 @@ export type Category = {
 };
 
 export type PointOfSale = {
+  track_stock?: boolean;
   id: number;
   name: string;
   slug?: string | null;

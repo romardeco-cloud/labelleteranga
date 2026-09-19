@@ -634,7 +634,7 @@ export default function AdminProductsPage() {
                       formatXof(p.price)
                     )}
                   </td>
-                  <td className="p-2">{storeId ? (p.stocks.find((st) => st.point_of_sale === storeId)?.quantity ?? 0) : p.total_stock}</td>
+                  <td className="p-2">{store && store.track_stock === false ? <span className="text-xs text-gray-500">Non suivi</span> : storeId ? (p.stocks.find((st) => st.point_of_sale === storeId)?.quantity ?? 0) : p.total_stock}</td>
                   <td className="p-2">{p.is_active ? "Actif" : "Inactif"}</td>
                   <td className="p-2 text-right space-x-2">
                     <button

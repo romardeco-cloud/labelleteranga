@@ -17,6 +17,10 @@ from .services import change_stock
 def create_inventory(store, date, notes="", category=None, user=None):
     """Cree un inventaire et fige le stock theorique de tous les produits actifs."""
     from apps.documents.models import next_number  # import tardif : evite un cycle d'apps
+    from .models import tracks_stock
+
+    if not tracks_stock(store):
+        raise ValidationError("Le suivi du stock est desactive pour ce point de vente : pas d'inventaire a faire.")
 
     products = Product.objects.filter(is_active=True, stocks__point_of_sale=store)
     if category:
