@@ -1,3 +1,4 @@
+from django.db import transaction
 from django.db.models import Avg, Count, Max, Q, Sum
 from django.http import HttpResponse
 from rest_framework import permissions, status, viewsets
@@ -44,6 +45,43 @@ class PointOfSaleViewSet(viewsets.ModelViewSet):
     queryset = PointOfSale.objects.all()
     serializer_class = PointOfSaleSerializer
     permission_classes = [IsAdminOrReadOnly]
+
+    def perform_create(self, serializer):
+        from .services import bootstrap_store
+
+        store = serializer.save()
+        bootstrap_store(store)
+
+    def destroy(self, request, *args, **kwargs):
+        """
+        Suppression complete d'un point de vente (stocks, categories, parametres, menus, avis, fidelite, combos, caissiers).
+        Les ventes passees sont conservees mais ne sont plus rattachees a un point de vente.
+        Il faut renvoyer le nom exact du point de vente (?confirm_name=...) ; sans cela, la reponse decrit ce qui sera supprime.
+        """
+        from django.contrib.auth.models import User
+
+        from apps.accounts.models import CashierProfile
+        from apps.orders.models import Order
+
+        store = self.get_object()
+        impact = {
+            "products": store.stocks.count(),
+            "cashiers": store.cashiers.count(),
+            "orders": Order.objects.filter(point_of_sale=store).count(),
+            "reviews": store.reviews.count(),
+            "loyalty_members": store.loyalty_members.count(),
+        }
+        if request.query_params.get("confirm_name", "").strip() != store.name:
+            return Response(
+                {"detail": "Confirmation requise : saisissez le nom exact du point de vente.", "impact": impact},
+                status=status.HTTP_409_CONFLICT,
+            )
+        with transaction.atomic():
+            cashier_ids = list(store.cashiers.values_list("user_id", flat=True))
+            CashierProfile.objects.filter(point_of_sale=store).delete()
+            User.objects.filter(pk__in=cashier_ids, is_staff=False, is_superuser=False).delete()
+            store.delete()
+        return Response(status=status.HTTP_204_NO_CONTENT)
 
     @action(detail=True, methods=["get", "patch"], permission_classes=[permissions.IsAdminUser], url_path="settings")
     def config(self, request, pk=None):

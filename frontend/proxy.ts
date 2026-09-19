@@ -9,6 +9,7 @@ const HOSTS: Record<string, string> = {
   restaurant: "resto",
   quincaillerie: "quincaillerie",
   depot: "depot",
+  ferme: "ferme",
 };
 
 // Espaces professionnels : admin.labelleteranga.com (administration) et caisse.labelleteranga.com (caisse).

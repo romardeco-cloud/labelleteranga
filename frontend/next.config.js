@@ -17,7 +17,7 @@ const nextConfig = {
         destination: "https://labelleteranga.com/:path*",
         permanent: true,
       },
-      ...["resto", "supermarche", "quincaillerie", "depot"].map((slug) => ({
+      ...["resto", "supermarche", "quincaillerie", "depot", "ferme"].map((slug) => ({
         source: `/${slug}`,
         destination: `/s/${slug}`,
         permanent: false,

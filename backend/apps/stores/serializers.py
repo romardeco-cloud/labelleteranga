@@ -24,6 +24,12 @@ class PointOfSaleSerializer(serializers.ModelSerializer):
     def get_track_stock(self, store):
         return get_settings(store).track_stock
 
+    def validate_name(self, value):
+        value = value.strip()
+        if not value:
+            raise serializers.ValidationError("Le nom est obligatoire.")
+        return value
+
 
 class StockSerializer(serializers.ModelSerializer):
     product_name = serializers.CharField(source="product.name", read_only=True)

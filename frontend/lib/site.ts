@@ -46,10 +46,11 @@ export function merchantPayLink(site: Site, method: "wave" | "orange_money", amo
 
 /** Domaine officiel et points de vente qui ont leur propre sous-domaine (resto.labelleteranga.com...). */
 export const ROOT_URL = "https://labelleteranga.com";
-export const SUBDOMAIN_SITES = ["resto", "supermarche", "quincaillerie", "depot"];
+export const SUBDOMAIN_SITES = ["resto", "supermarche", "quincaillerie", "depot", "ferme"];
 
 /** Adresse publique definitive d'un site (utilisee pour les QR codes, affiches et liens a partager). */
-export function siteUrl(site: Pick<Site, "slug">): string {
+export function siteUrl(site: { slug?: string | null }): string {
+  if (!site.slug) return ROOT_URL;
   return SUBDOMAIN_SITES.includes(site.slug) ? `https://${site.slug}.labelleteranga.com` : `${ROOT_URL}/s/${site.slug}`;
 }
 

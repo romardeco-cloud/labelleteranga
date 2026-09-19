@@ -65,3 +65,55 @@ def change_stock(product, store, *, reason, delta=None, set_to=None, reference="
         reference=reference[:60],
         user=user,
     )
+
+
+COPIED_SETTINGS = [
+    "timezone", "email", "legal_form", "share_capital", "ninea", "rccm", "vat_rate", "prices_include_vat", "payment_methods",
+    "receipt_slogan", "receipt_footer", "module_hold", "module_history", "module_qr", "module_dine_in", "module_customer_orders",
+    "module_drawer", "module_xreport", "loyalty_mode", "loyalty_threshold", "loyalty_min_order", "loyalty_reward_type",
+    "loyalty_reward_value", "loyalty_reward_label", "loyalty_valid_days",
+]
+
+
+def unique_slug(name, exclude_pk=None):
+    """Identifiant de site a partir du nom : 'Ferme La Belle Teranga' -> 'ferme'."""
+    import re
+
+    from django.utils.text import slugify
+
+    from .models import PointOfSale
+
+    base = slugify(re.sub(r"\s+La Belle Teranga$", "", name.strip(), flags=re.I)) or "site"
+    slug, i = base, 2
+    while PointOfSale.objects.filter(slug=slug).exclude(pk=exclude_pk).exists():
+        slug, i = f"{base}-{i}", i + 1
+    return slug
+
+
+def bootstrap_store(store):
+    """
+    Donne a un nouveau point de vente tout ce que les autres ont : parametres (infos legales RCCM / NINEA, TVA,
+    moyens de paiement, ticket, modules de caisse, fidelite, reseaux sociaux) copies du premier point de vente configure,
+    identifiant de site, adresse web officielle.
+    """
+    from .models import PointOfSale, get_settings
+
+    if not store.slug:
+        store.slug = unique_slug(store.name, store.pk)
+        store.save(update_fields=["slug"])
+    st = get_settings(store)
+    ref = (
+        PointOfSale.objects.exclude(pk=store.pk).exclude(settings__rccm="").order_by("id").first()
+        or PointOfSale.objects.exclude(pk=store.pk).order_by("id").first()
+    )
+    if ref:
+        ref_st = get_settings(ref)
+        for f in COPIED_SETTINGS:
+            setattr(st, f, getattr(ref_st, f))
+        links = {k: v for k, v in (ref_st.social_links or {}).items() if k != "website"}
+        st.social_links = links
+    links = dict(st.social_links or {})
+    links.setdefault("website", f"https://{store.slug}.labelleteranga.com")
+    st.social_links = links
+    st.save()
+    return store

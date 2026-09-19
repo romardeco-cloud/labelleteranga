@@ -28,6 +28,7 @@ export type PointOfSale = {
   name: string;
   slug?: string | null;
   online_enabled?: boolean;
+  description?: string;
   address: string;
   phone: string;
   is_active: boolean;
@@ -123,7 +124,7 @@ export async function fetchPointsOfSale() {
   return (data.results ?? data) as PointOfSale[];
 }
 
-export async function createPointOfSale(input: { name: string; address?: string; phone?: string }) {
+export async function createPointOfSale(input: { name: string; address?: string; phone?: string; description?: string; slug?: string; online_enabled?: boolean; is_active?: boolean }) {
   const { data } = await api.post<PointOfSale>("/stores/points-of-sale/", input);
   return data;
 }
