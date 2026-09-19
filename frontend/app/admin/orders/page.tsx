@@ -76,7 +76,7 @@ export default function AdminOrdersPage() {
   }
 
   async function handleMarkPaid(reference: string) {
-    if (!confirm("Confirmer la reception du paiement especes pour cette commande ?")) return;
+    if (!confirm("Confirmer la reception du paiement pour cette commande ? Le client recevra sa confirmation WhatsApp.")) return;
     setBusyRef(reference);
     try {
       const order = await markOrderPaid(reference);
@@ -194,7 +194,7 @@ export default function AdminOrdersPage() {
               <td className="p-2">{formatXof(o.total_amount)}</td>
               <td className="p-2">{new Date(o.created_at).toLocaleString("fr-SN")}</td>
               <td className="p-2 space-y-1">
-                {o.status === "pending" && o.payment_method === "cash" && (
+                {o.status === "pending" && o.payment_method !== "card" && (
                   <button
                     onClick={() => handleMarkPaid(o.reference)}
                     disabled={busyRef === o.reference}

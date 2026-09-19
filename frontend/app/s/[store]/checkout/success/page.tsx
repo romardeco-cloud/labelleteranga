@@ -4,7 +4,9 @@ import { Suspense, useEffect, useState } from "react";
 import { useSearchParams } from "next/navigation";
 import Link from "next/link";
 import { useSite } from "@/components/site/SiteContext";
+import Image from "next/image";
 import { Order, fetchOrder } from "@/lib/api";
+import { PAYMENT_QR } from "@/lib/branding";
 
 const PAYMENT_LABELS: Record<string, string> = {
   card: "Carte bancaire",
@@ -61,6 +63,7 @@ function SuccessContent() {
   }
 
   const isCash = order?.payment_method === "cash";
+  const isManual = !!order && (site.manual_payment_methods as string[] | undefined)?.includes(order.payment_method);
   const isPaid = order?.status === "paid";
   const isPending = !order || order.status === "pending";
 
@@ -101,7 +104,29 @@ function SuccessContent() {
         </div>
       )}
 
-      {!isCash && isPending && (
+      {isManual && isPending && order && (
+        <div className="bg-brand-light border border-brand-accent/50 rounded-lg p-4 mb-6 text-left">
+          <p className="text-brand-dark font-medium text-center">Derniere etape : payez {new Intl.NumberFormat("fr-SN", { maximumFractionDigits: 0 }).format(Number(order.total_amount))} FCFA</p>
+          <ol className="text-sm text-gray-700 mt-2 list-decimal list-inside space-y-1">
+            <li>Ouvrez {PAYMENT_LABELS[order.payment_method]} et scannez le code ci-dessous.</li>
+            <li>
+              Payez exactement le montant indique et indiquez le numero de commande <strong>{order.order_number}</strong> si l&apos;application le permet.
+            </li>
+            <li>Nous confirmons votre paiement, puis vous recevez la confirmation par WhatsApp au {order.customer_phone}.</li>
+          </ol>
+          {PAYMENT_QR[order.payment_method] && (
+            <Image
+              src={PAYMENT_QR[order.payment_method].src}
+              alt={PAYMENT_QR[order.payment_method].alt}
+              width={PAYMENT_QR[order.payment_method].width}
+              height={PAYMENT_QR[order.payment_method].height}
+              className="mx-auto mt-3 max-h-80 w-auto rounded-lg border"
+            />
+          )}
+        </div>
+      )}
+
+      {!isCash && !isManual && isPending && (
         <p className="text-gray-500 mb-6">En attente de confirmation du paiement...</p>
       )}
 

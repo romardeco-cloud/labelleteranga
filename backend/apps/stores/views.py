@@ -299,7 +299,9 @@ def _available_online_methods(enabled):
         "wave": bool(dj.WAVE_API_KEY),
         "orange_money": bool(dj.ORANGE_MONEY_CLIENT_ID and dj.ORANGE_MONEY_CLIENT_SECRET and dj.ORANGE_MONEY_MERCHANT_KEY),
     }
-    return [m for m in enabled if configured.get(m)]
+    # Wave / Orange Money sans API marchand : paiement par QR code, confirme a la main par l'equipe
+    manual = [m for m in ("wave", "orange_money") if m in enabled and not configured[m]]
+    return [m for m in enabled if configured.get(m) or m in manual], manual
 
 
 def _site_payload(store, with_categories=False):
@@ -312,8 +314,8 @@ def _site_payload(store, with_categories=False):
         "address": store.address,
         "phone": store.phone,
         "email": st.email or "info@labelleteranga.com",
-        "payment_methods": _available_online_methods(st.payment_methods),
     }
+    data["payment_methods"], data["manual_payment_methods"] = _available_online_methods(st.payment_methods)
     if with_categories:
         counts = {
             r["product__category_id"]: r["n"]

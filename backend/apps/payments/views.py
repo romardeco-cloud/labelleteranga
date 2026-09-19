@@ -224,6 +224,29 @@ class CreateCashOrderView(APIView):
         return Response(OrderSerializer(order).data, status=status.HTTP_201_CREATED)
 
 
+class CreateManualOrderView(APIView):
+    """
+    POST /api/payments/manual-order/  body: {payment_method: wave | orange_money, session_key, ...client}
+    Paiement Wave / Orange Money par QR code (sans API marchand) : la commande reste en attente jusqu'a ce que
+    l'equipe confirme la reception du paiement (Admin > Commandes > Marquer payee), ce qui envoie la
+    confirmation WhatsApp.
+    """
+
+    def post(self, request):
+        method = request.data.get("payment_method")
+        if method not in (Order.PaymentMethod.WAVE, Order.PaymentMethod.ORANGE_MONEY):
+            return Response({"detail": "Moyen de paiement invalide."}, status=status.HTTP_400_BAD_REQUEST)
+        api_configured = settings.WAVE_API_KEY if method == Order.PaymentMethod.WAVE else settings.ORANGE_MONEY_CLIENT_ID
+        if api_configured:
+            return Response(
+                {"detail": "Utilisez le paiement en ligne pour ce moyen de paiement."}, status=status.HTTP_400_BAD_REQUEST
+            )
+        order = create_order_from_cart(request.data.get("session_key"), request.data, method)
+        if order is None:
+            return Response({"detail": "Le panier est vide."}, status=status.HTTP_400_BAD_REQUEST)
+        return Response(OrderSerializer(order).data, status=status.HTTP_201_CREATED)
+
+
 class ResendWhatsAppView(APIView):
     """POST /api/payments/orders/<reference>/resend-whatsapp/ : renvoie la confirmation WhatsApp d'une commande payee."""
 

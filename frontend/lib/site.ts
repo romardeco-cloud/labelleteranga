@@ -11,6 +11,7 @@ export type Site = {
   phone: string;
   email: string;
   payment_methods: ("cash" | "wave" | "orange_money" | "card")[];
+  manual_payment_methods: ("wave" | "orange_money")[];
   categories?: SiteCategory[];
 };
 

@@ -2,6 +2,7 @@ from django.urls import path
 
 from .views import (
     CreateCashOrderView,
+    CreateManualOrderView,
     CreateCheckoutSessionView,
     CreateOrangeMoneyCheckoutView,
     CreateWaveCheckoutView,
@@ -20,6 +21,7 @@ urlpatterns = [
     path("orange-money/create-checkout/", CreateOrangeMoneyCheckoutView.as_view()),
     path("orange-money/webhook/", orange_money_webhook),
     path("cash-order/", CreateCashOrderView.as_view()),
+    path("manual-order/", CreateManualOrderView.as_view()),
     path("orders/<str:reference>/mark-paid/", MarkOrderPaidView.as_view()),
     path("orders/<str:reference>/resend-whatsapp/", ResendWhatsAppView.as_view()),
 ]

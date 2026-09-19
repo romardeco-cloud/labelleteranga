@@ -3,12 +3,12 @@
 import { useState } from "react";
 import { useRouter } from "next/navigation";
 import { useSite } from "@/components/site/SiteContext";
-import { PaymentMethod, createCashOrder, createCheckoutSession, getBrowserLocation } from "@/lib/api";
+import { PaymentMethod, createCashOrder, createCheckoutSession, createManualOrder, getBrowserLocation } from "@/lib/api";
 
 const PAYMENT_METHODS: { value: PaymentMethod; label: string; hint: string }[] = [
   { value: "card", label: "Carte bancaire", hint: "Visa, Mastercard via Stripe" },
-  { value: "wave", label: "Wave", hint: "Paiement mobile Wave" },
-  { value: "orange_money", label: "Orange Money", hint: "Paiement mobile Orange" },
+  { value: "wave", label: "Wave", hint: "Payez avec le QR code Wave" },
+  { value: "orange_money", label: "Orange Money", hint: "Payez avec le QR code Orange Money" },
   { value: "cash", label: "Especes", hint: "Paiement a la livraison ou au retrait" },
 ];
 
@@ -55,6 +55,11 @@ export default function CheckoutPage() {
     try {
       if (method === "cash") {
         const order = await createCashOrder(customer);
+        router.push(`${base}/checkout/success?order=${order.reference}`);
+        return;
+      }
+      if (method !== "card" && site.manual_payment_methods?.includes(method)) {
+        const order = await createManualOrder(method, customer);
         router.push(`${base}/checkout/success?order=${order.reference}`);
         return;
       }
@@ -183,7 +188,9 @@ export default function CheckoutPage() {
               ? fulfillment === "pickup"
                 ? "Valider la commande (paiement au retrait)"
                 : "Valider la commande (paiement a la livraison)"
-              : `Payer avec ${PAYMENT_METHODS.find((m) => m.value === method)?.label}`}
+              : site.manual_payment_methods?.includes(method as "wave" | "orange_money")
+                ? `Commander et payer par ${PAYMENT_METHODS.find((m) => m.value === method)?.label}`
+                : `Payer avec ${PAYMENT_METHODS.find((m) => m.value === method)?.label}`}
         </button>
       </form>
     </div>

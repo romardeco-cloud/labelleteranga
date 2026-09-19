@@ -255,6 +255,16 @@ export async function createCheckoutSession(method: Exclude<PaymentMethod, "cash
   return data as { checkout_url: string; order_reference: string };
 }
 
+export async function createManualOrder(method: "wave" | "orange_money", customer: CustomerInfo) {
+  const { data } = await api.post("/payments/manual-order/", {
+    session_key: getSessionKey(),
+    payment_method: method,
+    ...customer,
+  });
+  notifyCartChanged();
+  return data as Order;
+}
+
 export async function createCashOrder(customer: CustomerInfo) {
   const { data } = await api.post("/payments/cash-order/", {
     session_key: getSessionKey(),
