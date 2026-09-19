@@ -99,7 +99,7 @@ def letterhead(store=None):
     from apps.stores.models import get_settings
 
     name = store.name if store else "La Belle Teranga"
-    lines = [f"<b>{name}</b>"]
+    lines = []
     st = get_settings(store) if store else None
     from apps.stores.models import CompanySeal
 
@@ -130,10 +130,11 @@ def letterhead(store=None):
         lines.append(company.legal_line)
     if company and company.contact_extra:
         lines += [escape(x.strip()) for x in company.contact_extra.splitlines() if x.strip()]
-    text = Paragraph("<br/>".join(lines), BODY)
+    name_style = ParagraphStyle("LetterheadName", parent=BODY, fontName="Helvetica-Bold", fontSize=16, leading=19, textColor=BRAND_DARK, spaceAfter=2)
+    text = [Paragraph(escape(name), name_style), Paragraph("<br/>".join(lines), BODY)]
     logo_path = Path(settings.BASE_DIR) / "assets" / "logo.jpg"
-    cells = [[Image(str(logo_path), 18 * mm, 18 * mm) if logo_path.exists() else "", text]]
-    t = Table(cells, colWidths=[22 * mm, 150 * mm])
+    cells = [[Image(str(logo_path), 22 * mm, 22 * mm) if logo_path.exists() else "", text]]
+    t = Table(cells, colWidths=[27 * mm, 145 * mm])
     t.setStyle(TableStyle([("VALIGN", (0, 0), (-1, -1), "MIDDLE"), ("LINEBELOW", (0, 0), (-1, 0), 1.2, BRAND), ("BOTTOMPADDING", (0, 0), (-1, -1), 6)]))
     return t
 

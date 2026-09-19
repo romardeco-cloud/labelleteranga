@@ -160,8 +160,7 @@ export default function DocumentDetailPage() {
           <div className="flex items-center gap-3">
             <Image src="/logo.jpg" alt="La Belle Teranga" width={64} height={64} className="rounded-full" />
             <div className="text-sm">
-              <p className="font-bold text-lg">La Belle Teranga</p>
-              {doc.point_of_sale_name && <p>{doc.point_of_sale_name}</p>}
+              <p className="font-bold text-2xl leading-tight text-brand-dark">{doc.point_of_sale_name || "La Belle Teranga"}</p>
               {company?.contact_address && <p>{company.contact_address}</p>}
               {(company?.contact_phone || process.env.NEXT_PUBLIC_PHONE) && <p>Tel : {company?.contact_phone || process.env.NEXT_PUBLIC_PHONE}</p>}
               {company?.contact_whatsapp && <p>WhatsApp : {company.contact_whatsapp}</p>}
