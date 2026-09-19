@@ -17,6 +17,48 @@ export default function AdminStoresPage() {
   const [busy, setBusy] = useState(false);
   const [msg, setMsg] = useState<{ ok: boolean; text: string } | null>(null);
   const [del, setDel] = useState<{ store: PointOfSale; impact: Impact | null; typed: string } | null>(null);
+  type Reset = { store: PointOfSale; counts: Record<string, { label: string; count: number }>; backedUp: boolean; typed: string; pin: string; stock: boolean };
+  const [reset, setReset] = useState<Reset | null>(null);
+
+  async function openReset(s: PointOfSale) {
+    setMsg(null);
+    try {
+      const res = await api.get(`/stores/points-of-sale/${s.id}/reset-preview/`);
+      setReset({ store: s, counts: res.data.counts, backedUp: false, typed: "", pin: "", stock: false });
+    } catch (err) {
+      setMsg({ ok: false, text: apiErrorMessage(err, "Impossible de charger l'apercu.") });
+    }
+  }
+  async function downloadBackup() {
+    if (!reset) return;
+    try {
+      const res = await api.get(`/stores/points-of-sale/${reset.store.id}/reset-backup/`, { responseType: "blob" });
+      const url = URL.createObjectURL(res.data);
+      const a = document.createElement("a");
+      a.href = url;
+      a.download = `sauvegarde_${reset.store.slug ?? reset.store.id}_${new Date().toISOString().slice(0, 10)}.xlsx`;
+      a.click();
+      URL.revokeObjectURL(url);
+      setReset({ ...reset, backedUp: true });
+    } catch (err) {
+      setMsg({ ok: false, text: apiErrorMessage(err, "Sauvegarde impossible.") });
+    }
+  }
+  async function confirmReset() {
+    if (!reset) return;
+    setBusy(true);
+    try {
+      const res = await api.post(`/stores/points-of-sale/${reset.store.id}/reset-data/`, { pin: reset.pin, confirm_name: reset.typed, include_stock_levels: reset.stock });
+      const n = Object.values(res.data.deleted as Record<string, number>).reduce((a, b) => a + b, 0);
+      setMsg({ ok: true, text: `« ${reset.store.name} » remis a zero : ${n} enregistrement(s) supprime(s). Le point de vente demarre proprement.` });
+      setReset(null);
+    } catch (err) {
+      setMsg({ ok: false, text: apiErrorMessage(err, "Remise a zero impossible.") });
+      setReset((r) => (r ? { ...r, pin: "" } : r));
+    } finally {
+      setBusy(false);
+    }
+  }
 
   const reload = () => fetchPointsOfSale().then(setStores);
   useEffect(() => {
@@ -126,6 +168,9 @@ export default function AdminStoresPage() {
               <button onClick={() => toggleActive(s)} className="border rounded-lg px-3 py-1">
                 {s.is_active ? "Desactiver" : "Reactiver"}
               </button>
+              <button onClick={() => openReset(s)} className="border border-amber-500/40 text-amber-400 rounded-lg px-3 py-1" title="Efface les transactions de test avant le demarrage officiel">
+                Remettre a zero
+              </button>
               <button onClick={() => askDelete(s)} className="border border-red-500/40 text-red-400 rounded-lg px-3 py-1">
                 Supprimer
               </button>
@@ -186,6 +231,69 @@ export default function AdminStoresPage() {
               </button>
             </div>
           </form>
+        </div>
+      )}
+
+      {reset && (
+        <div className="fixed inset-0 z-40 bg-black/70 flex items-center justify-center p-4 overflow-y-auto" onClick={() => setReset(null)}>
+          <div onClick={(e) => e.stopPropagation()} className="bg-[#1c1514] border border-amber-500/50 rounded-2xl w-full max-w-lg p-6 space-y-4 my-8">
+            <h2 className="text-lg font-semibold text-amber-400">Remettre « {reset.store.name} » a zero</h2>
+            <p className="text-sm text-gray-300">
+              Efface toutes les transactions de test pour un demarrage officiel propre : ventes, clotures de caisse, devis / factures / bons de commande, mouvements de
+              stock, avis, points de fidelite. Les produits, prix, categories, parametres, caissiers et menus sont <strong>conserves</strong>.
+            </p>
+            <ul className="text-sm text-gray-400 list-disc list-inside">
+              {Object.values(reset.counts)
+                .filter((c) => c.count > 0)
+                .map((c) => (
+                  <li key={c.label}>
+                    {c.count} {c.label.toLowerCase()}
+                  </li>
+                ))}
+              {Object.values(reset.counts).every((c) => c.count === 0) && <li>Rien a supprimer : ce point de vente est deja a zero.</li>}
+            </ul>
+            <div className="border rounded-xl p-3 space-y-2">
+              <p className="text-sm font-medium">1. Telechargez d&apos;abord la sauvegarde</p>
+              <button onClick={downloadBackup} className={`w-full rounded-lg py-2 text-sm font-medium ${reset.backedUp ? "bg-emerald-600 text-white" : "border border-[#f5b942] text-[#f5b942]"}`}>
+                {reset.backedUp ? "Sauvegarde telechargee (Excel) - a conserver" : "Telecharger la sauvegarde (Excel)"}
+              </button>
+            </div>
+            <label className="flex items-center gap-2 text-sm">
+              <input type="checkbox" checked={reset.stock} onChange={(e) => setReset({ ...reset, stock: e.target.checked })} /> Remettre aussi les quantites en stock a 0
+            </label>
+            <div className="grid sm:grid-cols-2 gap-3">
+              <label className="text-sm block sm:col-span-2">
+                <span className="block text-gray-400 mb-1">
+                  2. Saisissez exactement : <strong className="text-white">{reset.store.name}</strong>
+                </span>
+                <input value={reset.typed} onChange={(e) => setReset({ ...reset, typed: e.target.value })} className="w-full border rounded-lg px-3 py-2" />
+              </label>
+              <label className="text-sm block">
+                <span className="block text-gray-400 mb-1">3. Code secret (4 chiffres)</span>
+                <input
+                  type="password"
+                  inputMode="numeric"
+                  maxLength={4}
+                  value={reset.pin}
+                  onChange={(e) => setReset({ ...reset, pin: e.target.value.replace(/\D/g, "") })}
+                  className="w-full border rounded-lg px-3 py-2 tracking-[0.5em] text-center"
+                />
+              </label>
+            </div>
+            <p className="text-xs text-red-400">Irreversible. Les autres points de vente ne sont pas touches.</p>
+            <div className="flex justify-end gap-2">
+              <button onClick={() => setReset(null)} className="border rounded-lg px-4 py-2">
+                Annuler
+              </button>
+              <button
+                onClick={confirmReset}
+                disabled={busy || !reset.backedUp || reset.typed.trim() !== reset.store.name || reset.pin.length !== 4}
+                className="bg-red-600 text-white rounded-lg px-5 py-2 font-medium disabled:opacity-40"
+              >
+                {busy ? "Remise a zero..." : "Remettre a zero definitivement"}
+              </button>
+            </div>
+          </div>
         </div>
       )}
 

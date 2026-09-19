@@ -83,6 +83,46 @@ class PointOfSaleViewSet(viewsets.ModelViewSet):
             store.delete()
         return Response(status=status.HTTP_204_NO_CONTENT)
 
+    # ---- remise a zero avant le demarrage officiel ------------------------------------------------
+    @action(detail=True, methods=["get"], permission_classes=[permissions.IsAdminUser], url_path="reset-preview")
+    def reset_preview(self, request, pk=None):
+        """GET : ce que la remise a zero supprimerait pour ce point de vente (aucune modification)."""
+        from .reset import counts
+
+        return Response({"name": self.get_object().name, "counts": counts(self.get_object())})
+
+    @action(detail=True, methods=["get"], permission_classes=[permissions.IsAdminUser], url_path="reset-backup")
+    def reset_backup(self, request, pk=None):
+        """GET : sauvegarde Excel des transactions du point de vente (a telecharger avant la remise a zero)."""
+        from django.utils import timezone
+
+        from .reset import backup_xlsx
+
+        store = self.get_object()
+        response = HttpResponse(
+            backup_xlsx(store), content_type="application/vnd.openxmlformats-officedocument.spreadsheetml.sheet"
+        )
+        response["Content-Disposition"] = f'attachment; filename="sauvegarde_{store.slug or store.pk}_{timezone.localdate():%Y%m%d}.xlsx"'
+        return response
+
+    @action(detail=True, methods=["post"], permission_classes=[permissions.IsAdminUser], url_path="reset-data")
+    def reset_data(self, request, pk=None):
+        """
+        POST {pin, confirm_name, include_stock_levels?} : supprime TOUTES les transactions du point de vente (ventes, clotures, documents,
+        mouvements de stock, avis, fidelite...). Produits, prix, categories, parametres, caissiers et menus sont conserves.
+        Exige le code secret a 4 chiffres et la saisie exacte du nom du point de vente.
+        """
+        from apps.accounts.models import AdminSecurityCode
+
+        from .reset import reset_store
+
+        store = self.get_object()
+        if str(request.data.get("confirm_name", "")).strip() != store.name:
+            raise ValidationError({"confirm_name": "Saisissez exactement le nom du point de vente."})
+        AdminSecurityCode.current().verify(str(request.data.get("pin") or ""))
+        done = reset_store(store, include_stock_levels=str(request.data.get("include_stock_levels", "")).lower() in ("1", "true", "yes"))
+        return Response({"reset": True, "deleted": done})
+
     @action(detail=True, methods=["get", "patch"], permission_classes=[permissions.IsAdminUser], url_path="settings")
     def config(self, request, pk=None):
         """GET/PATCH /api/stores/points-of-sale/<id>/settings/ : identite, coordonnees, legal, finances, ticket, modules."""
