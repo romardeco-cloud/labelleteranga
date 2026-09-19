@@ -1,9 +1,12 @@
 import Image from "next/image";
 import Link from "next/link";
 import SocialLinks from "@/components/SocialLinks";
-import { CONTACT_EMAIL } from "@/lib/site";
+import { CONTACT_EMAIL, fetchSites } from "@/lib/site";
 
-export default function PortalLayout({ children }: { children: React.ReactNode }) {
+export default async function PortalLayout({ children }: { children: React.ReactNode }) {
+  const sites = await fetchSites();
+  const main = sites.find((s) => s.slug === "resto" && s.phone) ?? sites.find((s) => s.phone);
+  const links = main ? { ...(main.social_links ?? {}), whatsapp: main.social_links?.whatsapp || main.phone, phone: main.social_links?.phone || main.phone } : undefined;
   return (
     <>
       <header className="bg-brand text-white sticky top-0 z-20 shadow-md border-b-2 border-brand-accent">
@@ -32,7 +35,7 @@ export default function PortalLayout({ children }: { children: React.ReactNode }
         <p className="text-xs">
           <Link href="/confidentialite" className="underline">Confidentialite</Link> &middot; <Link href="/conditions" className="underline">Conditions</Link>
         </p>
-        <SocialLinks />
+        <SocialLinks links={links} />
       </footer>
     </>
   );

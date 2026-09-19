@@ -71,6 +71,12 @@ function Header() {
   );
 }
 
+/** Comptes saisis dans Parametres ; a defaut, le numero du point de vente sert pour WhatsApp et le telephone. */
+function siteSocials(site: Site) {
+  const phone = site.phone?.trim();
+  return { ...(phone ? { whatsapp: phone, phone } : {}), ...(site.social_links ?? {}) };
+}
+
 function Footer() {
   const { site, base } = useSite();
   return (
@@ -112,7 +118,7 @@ function Footer() {
           </>
         )}
       </p>
-      <SocialLinks links={site.social_links} />
+      <SocialLinks links={siteSocials(site)} />
       <p className="text-xs text-gray-400 pt-2">
         &copy; {new Date().getFullYear()} La Belle Teranga &mdash; <span className="italic">L&apos;art du service</span>
       </p>
@@ -122,7 +128,7 @@ function Footer() {
 
 function WhatsAppButton() {
   const { site } = useSite();
-  const href = socialHref("whatsapp", site.social_links?.whatsapp);
+  const href = socialHref("whatsapp", siteSocials(site).whatsapp);
   if (!href) return null;
   return (
     <a
