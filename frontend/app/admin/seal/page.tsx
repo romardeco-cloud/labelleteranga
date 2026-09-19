@@ -10,6 +10,8 @@ export default function SealPage() {
   const [stamp, setStamp] = useState<File | null>(null);
   const [signature, setSignature] = useState<File | null>(null);
   const [keepBg, setKeepBg] = useState(false);
+  const [stampColor, setStampColor] = useState("original");
+  const [signColor, setSignColor] = useState("blue");
   const [busy, setBusy] = useState(false);
   const [version, setVersion] = useState(0);
   const [msg, setMsg] = useState<{ ok: boolean; text: string } | null>(null);
@@ -33,6 +35,8 @@ export default function SealPage() {
       f.append("place", seal.place);
       f.append("certified_text", seal.certified_text);
       f.append("keep_background", String(keepBg));
+      f.append("stamp_color", stampColor);
+      f.append("signature_color", signColor);
       if (stamp) f.append("stamp", stamp);
       if (signature) f.append("signature", signature);
       Object.entries(extra).forEach(([k, v]) => f.append(k, v));
@@ -93,6 +97,20 @@ export default function SealPage() {
               )}
             </div>
             <input ref={s.ref} type="file" accept="image/*" onChange={(e) => s.setPicked(e.target.files?.[0] ?? null)} className="text-xs w-full" />
+            <label className="block text-xs text-gray-400">
+              Couleur de l&apos;encre
+              <select
+                value={s.removeKey === "remove_stamp" ? stampColor : signColor}
+                onChange={(e) => (s.removeKey === "remove_stamp" ? setStampColor(e.target.value) : setSignColor(e.target.value))}
+                className="mt-1 w-full border rounded-lg px-2 py-1.5 text-sm"
+              >
+                {s.removeKey === "remove_stamp" && <option value="original">Couleurs d&apos;origine du cachet</option>}
+                <option value="blue">Bleu encre (recommande)</option>
+                <option value="navy">Bleu marine</option>
+                <option value="black">Noir</option>
+                {s.removeKey !== "remove_stamp" && <option value="original">Couleur d&apos;origine de la photo</option>}
+              </select>
+            </label>
             {s.current && !s.picked && (
               <button onClick={() => save({ [s.removeKey]: "true" })} disabled={busy} className="text-xs text-red-400 underline">
                 Retirer

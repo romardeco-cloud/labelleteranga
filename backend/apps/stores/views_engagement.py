@@ -405,7 +405,7 @@ def seal_payload(seal):
 class CompanySealView(APIView):
     """
     GET  /api/stores/company-seal/ -> cachet, signature et textes (administrateurs)
-    POST /api/stores/company-seal/ (multipart) : stamp, signature (photos), remove_stamp, remove_signature, keep_background,
+    POST /api/stores/company-seal/ (multipart) : stamp, signature (photos), stamp_color / signature_color (original | blue | navy | black), remove_stamp, remove_signature, keep_background,
          enabled, signer_name, signer_title, place, certified_text, show_date
     """
 
@@ -431,7 +431,8 @@ class CompanySealView(APIView):
                 if upload.size > 12 * 1024 * 1024:
                     raise ValidationError({field: "Image trop lourde (12 Mo maximum)."})
                 try:
-                    setattr(seal, attr, process_seal_image(upload, remove_background=not keep_bg))
+                    color = str(d.get(f"{field}_color") or ("blue" if field == "signature" else "original"))
+                    setattr(seal, attr, process_seal_image(upload, remove_background=not keep_bg, color=color))
                 except Exception:
                     raise ValidationError({field: "Image illisible : envoyez une photo JPG ou PNG."})
             elif truthy(d.get(f"remove_{field}", "")):
