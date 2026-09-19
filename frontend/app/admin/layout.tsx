@@ -51,6 +51,11 @@ export default function AdminLayout({ children }: { children: React.ReactNode })
   const router = useRouter();
   const [ready, setReady] = useState(false);
   const [menuOpen, setMenuOpen] = useState(false);
+  // sur admin.labelleteranga.com, « / » ouvre l'administration : le site public est l'adresse principale
+  const [siteHome, setSiteHome] = useState("/");
+  useEffect(() => {
+    if (/(^|\.)labelleteranga\.com$/i.test(window.location.hostname)) setSiteHome("https://labelleteranga.com");
+  }, []);
   const isLoginPage = pathname === "/admin/login";
 
   useEffect(() => {
@@ -104,10 +109,10 @@ export default function AdminLayout({ children }: { children: React.ReactNode })
       </nav>
 
       <div className="px-3 py-4 border-t space-y-1">
-        <Link href="/" className="flex items-center gap-3 px-3 py-2 rounded-lg text-sm text-[#a99b96] hover:bg-white/5 hover:text-white">
+        <a href={siteHome} target="_blank" rel="noopener noreferrer" className="flex items-center gap-3 px-3 py-2 rounded-lg text-sm text-[#a99b96] hover:bg-white/5 hover:text-white">
           <Icon name="globe" />
           Voir le site
-        </Link>
+        </a>
         <Link href="/app" className="flex items-center gap-3 px-3 py-2 rounded-lg text-sm text-[#a99b96] hover:bg-white/5 hover:text-white">
           <Icon name="menu" />
           Liens et QR codes des apps
