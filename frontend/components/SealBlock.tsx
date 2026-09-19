@@ -48,18 +48,18 @@ export default function SealBlock({ printOnly = false, fresh = false }: { printO
         )}
       </div>
       <div className="flex flex-col items-end">
+        {(seal.signer_name || seal.signer_title) && (
+          <p className="text-right mb-2">
+            {seal.signer_name && <strong className="block">{seal.signer_name}</strong>}
+            {seal.signer_title}
+          </p>
+        )}
         <div className="flex items-center gap-3">
           {/* eslint-disable-next-line @next/next/no-img-element */}
           {seal.stamp && <img src={seal.stamp} alt="Cachet de l'entreprise" className="h-24 w-auto object-contain" />}
           {/* eslint-disable-next-line @next/next/no-img-element */}
           {seal.signature && <img src={seal.signature} alt="Signature" className="h-16 w-auto object-contain" />}
         </div>
-        {(seal.signer_name || seal.signer_title) && (
-          <p className="text-right mt-1">
-            {seal.signer_name && <strong className="block">{seal.signer_name}</strong>}
-            {seal.signer_title}
-          </p>
-        )}
       </div>
     </div>
   );

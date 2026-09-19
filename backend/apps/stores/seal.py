@@ -25,7 +25,17 @@ def process_seal_image(uploaded, remove_background=True, color="original"):
     reduit (900 px max) et, au choix, recolore (bleu encre, bleu marine, noir) ou garde ses couleurs d'origine.
     """
     im = ImageOps.exif_transpose(Image.open(uploaded)).convert("RGBA")
-    if remove_background:
+    if im.getchannel("A").getextrema()[0] < 250:
+        # image deja detouree (fond transparent) : on garde sa transparence, au besoin on la recolore
+        alpha = im.getchannel("A")
+        if color in INK_COLORS:
+            solid = Image.new("RGBA", im.size, INK_COLORS[color] + (255,))
+            solid.putalpha(alpha)
+            im = solid
+        bbox = alpha.point(lambda v: 255 if v > 40 else 0).getbbox()
+        if bbox:
+            im = im.crop(bbox)
+    elif remove_background:
         alpha = _ink_alpha(im)
         if color in INK_COLORS:
             solid = Image.new("RGBA", im.size, INK_COLORS[color] + (255,))

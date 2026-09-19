@@ -180,17 +180,17 @@ def seal_block():
     elif seal.place:
         lines.append(f"Fait à {seal.place}")
     cells = []
+    both = bool(seal.stamp_png and seal.signature_png)
     if seal.stamp_png:
-        cells.append(img(seal.stamp_png, 42 * mm, 34 * mm))
+        cells.append(img(seal.stamp_png, 34 * mm if both else 42 * mm, 30 * mm if both else 34 * mm))
     if seal.signature_png:
-        cells.append(img(seal.signature_png, 46 * mm, 26 * mm))
+        cells.append(img(seal.signature_png, 52 * mm if both else 72 * mm, 22 * mm if both else 26 * mm))
     signer = "<br/>".join(x for x in (seal.signer_name and f"<b>{seal.signer_name}</b>", seal.signer_title) if x)
     right = [cells] if cells else [[Spacer(1, 22 * mm)]]
     inner = Table(right, hAlign="RIGHT")
     inner.setStyle(TableStyle([("VALIGN", (0, 0), (-1, -1), "MIDDLE"), ("LEFTPADDING", (0, 0), (-1, -1), 4), ("RIGHTPADDING", (0, 0), (-1, -1), 4)]))
-    rows = [[Paragraph("<br/>".join(lines), BODY), inner]]
-    if signer:
-        rows.append(["", Paragraph(signer, RIGHT)])
+    # nom et fonction du signataire AU-DESSUS du cachet et de la signature
+    rows = [[Paragraph("<br/>".join(lines), BODY), Paragraph(signer, RIGHT) if signer else ""], ["", inner]]
     box = Table(rows, colWidths=[85 * mm, 89 * mm])
     box.setStyle(TableStyle([("VALIGN", (0, 0), (-1, -1), "TOP"), ("ALIGN", (1, 0), (1, -1), "RIGHT"), ("LEFTPADDING", (0, 0), (-1, -1), 0), ("RIGHTPADDING", (0, 0), (-1, -1), 0)]))
     return [BottomAligned(box)]
