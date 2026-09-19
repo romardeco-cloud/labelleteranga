@@ -20,7 +20,7 @@ from reportlab.lib.enums import TA_RIGHT
 from reportlab.lib.pagesizes import A4
 from reportlab.lib.styles import ParagraphStyle, getSampleStyleSheet
 from reportlab.lib.units import mm
-from reportlab.platypus import Image, KeepTogether, Paragraph, SimpleDocTemplate, Spacer, Table, TableStyle
+from reportlab.platypus import Flowable, Image, KeepTogether, Paragraph, SimpleDocTemplate, Spacer, Table, TableStyle
 
 BRAND = colors.HexColor("#9c1c1c")
 BRAND_DARK = colors.HexColor("#6e1212")
@@ -134,7 +134,73 @@ def _footer(canvas, doc):
     canvas.restoreState()
 
 
+class BottomAligned(Flowable):
+    """Place son contenu tout en bas de la derniere page (fin du document) ; passe a la page suivante s'il ne tient pas."""
+
+    def __init__(self, content):
+        super().__init__()
+        self.content = content
+        self._h = 0
+
+    def wrap(self, availWidth, availHeight):
+        _w, h = self.content.wrap(availWidth, availHeight)
+        self._h = h
+        self.width = availWidth
+        if h > availHeight:
+            self.height = h
+        else:
+            self.height = availHeight - 1  # occupe tout l'espace restant : le bloc se pose en bas de page
+        return self.width, self.height
+
+    def draw(self):
+        self.content.drawOn(self.canv, 0, 0)
+
+
+def seal_block():
+    """Mention « Certifie conforme », date du jour, cachet et signature (si actives) : ajoutes automatiquement a chaque PDF."""
+    from apps.stores.models import CompanySeal
+
+    seal = CompanySeal.objects.first()
+    if seal is None or not seal.enabled:
+        return []
+
+    def img(blob, max_w, max_h):
+        from PIL import Image as PILImage
+
+        with PILImage.open(io.BytesIO(bytes(blob))) as im:
+            w, h = im.size
+        scale = min(max_w / w, max_h / h)
+        return Image(io.BytesIO(bytes(blob)), width=w * scale, height=h * scale)
+
+    today = timezone.localdate()
+    lines = [f"<b>{seal.certified_text or 'Certifié conforme'}</b>"]
+    where = f"Fait à {seal.place}, le" if seal.place else "Le"
+    if seal.show_date:
+        lines.append(f"{where} {today.day} {MONTHS_FR[today.month - 1]} {today.year}")
+    elif seal.place:
+        lines.append(f"Fait à {seal.place}")
+    cells = []
+    if seal.stamp_png:
+        cells.append(img(seal.stamp_png, 42 * mm, 34 * mm))
+    if seal.signature_png:
+        cells.append(img(seal.signature_png, 46 * mm, 26 * mm))
+    signer = "<br/>".join(x for x in (seal.signer_name and f"<b>{seal.signer_name}</b>", seal.signer_title) if x)
+    right = [cells] if cells else [[Spacer(1, 22 * mm)]]
+    inner = Table(right, hAlign="RIGHT")
+    inner.setStyle(TableStyle([("VALIGN", (0, 0), (-1, -1), "MIDDLE"), ("LEFTPADDING", (0, 0), (-1, -1), 4), ("RIGHTPADDING", (0, 0), (-1, -1), 4)]))
+    rows = [[Paragraph("<br/>".join(lines), BODY), inner]]
+    if signer:
+        rows.append(["", Paragraph(signer, RIGHT)])
+    box = Table(rows, colWidths=[85 * mm, 89 * mm])
+    box.setStyle(TableStyle([("VALIGN", (0, 0), (-1, -1), "TOP"), ("ALIGN", (1, 0), (1, -1), "RIGHT"), ("LEFTPADDING", (0, 0), (-1, -1), 0), ("RIGHTPADDING", (0, 0), (-1, -1), 0)]))
+    return [BottomAligned(box)]
+
+
 def render(story, filename, title):
+    try:
+        story = list(story) + seal_block()
+    except Exception:  # le cachet ne doit jamais empecher l'impression d'un document
+        pass
     buf = io.BytesIO()
     doc = SimpleDocTemplate(buf, pagesize=A4, leftMargin=18 * mm, rightMargin=18 * mm, topMargin=14 * mm, bottomMargin=18 * mm, title=title, author="La Belle Teranga")
     doc.build(story, onFirstPage=_footer, onLaterPages=_footer)

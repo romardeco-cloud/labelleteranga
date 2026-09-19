@@ -367,3 +367,21 @@ class ComboRequest(models.Model):
 
     class Meta:
         ordering = ["-created_at"]
+
+
+class CompanySeal(models.Model):
+    """Cachet et signature de l'entreprise, ajoutes automatiquement sur les documents et rapports (une seule fiche)."""
+
+    enabled = models.BooleanField("Afficher sur les documents", default=True)
+    stamp_png = models.BinaryField("Cachet", null=True, blank=True, editable=False)
+    signature_png = models.BinaryField("Signature", null=True, blank=True, editable=False)
+    signer_name = models.CharField("Nom du signataire", max_length=120, blank=True)
+    signer_title = models.CharField("Fonction", max_length=120, blank=True)
+    place = models.CharField("Ville", max_length=80, blank=True)
+    certified_text = models.CharField("Mention", max_length=80, default="Certifié conforme")
+    show_date = models.BooleanField("Date du jour", default=True)
+    updated_at = models.DateTimeField(auto_now=True)
+
+    @classmethod
+    def current(cls):
+        return cls.objects.first() or cls.objects.create()

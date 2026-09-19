@@ -37,6 +37,7 @@ const MAIN_NAV: NavItem[] = [
   { href: "/admin/loyalty", label: "Fidelite", icon: "heart" },
   { href: "/admin/cashiers", label: "Caissiers", icon: "users" },
   { href: "/admin/stores", label: "Points de vente", icon: "store" },
+  { href: "/admin/seal", label: "Cachet et signature", icon: "receipt" },
   { href: "/admin/settings", label: "Parametres", icon: "settings" },
 ];
 

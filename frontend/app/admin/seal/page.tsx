@@ -1,0 +1,147 @@
+"use client";
+
+import { useEffect, useRef, useState } from "react";
+import SealBlock, { Seal } from "@/components/SealBlock";
+import { api } from "@/lib/api";
+import { apiErrorMessage } from "@/lib/documents";
+
+export default function SealPage() {
+  const [seal, setSeal] = useState<Seal | null>(null);
+  const [stamp, setStamp] = useState<File | null>(null);
+  const [signature, setSignature] = useState<File | null>(null);
+  const [keepBg, setKeepBg] = useState(false);
+  const [busy, setBusy] = useState(false);
+  const [version, setVersion] = useState(0);
+  const [msg, setMsg] = useState<{ ok: boolean; text: string } | null>(null);
+  const stampRef = useRef<HTMLInputElement>(null);
+  const signRef = useRef<HTMLInputElement>(null);
+
+  useEffect(() => {
+    api.get<Seal>("/stores/company-seal/").then((r) => setSeal(r.data));
+  }, []);
+
+  async function save(extra: Record<string, string> = {}) {
+    if (!seal) return;
+    setBusy(true);
+    setMsg(null);
+    try {
+      const f = new FormData();
+      f.append("enabled", String(seal.enabled));
+      f.append("show_date", String(seal.show_date));
+      f.append("signer_name", seal.signer_name);
+      f.append("signer_title", seal.signer_title);
+      f.append("place", seal.place);
+      f.append("certified_text", seal.certified_text);
+      f.append("keep_background", String(keepBg));
+      if (stamp) f.append("stamp", stamp);
+      if (signature) f.append("signature", signature);
+      Object.entries(extra).forEach(([k, v]) => f.append(k, v));
+      const res = await api.post<Seal>("/stores/company-seal/", f);
+      setSeal(res.data);
+      setStamp(null);
+      setSignature(null);
+      if (stampRef.current) stampRef.current.value = "";
+      if (signRef.current) signRef.current.value = "";
+      setVersion((v) => v + 1);
+      setMsg({ ok: true, text: "Enregistre. Le cachet et la signature apparaissent en bas de tous les documents et rapports." });
+    } catch (err) {
+      setMsg({ ok: false, text: apiErrorMessage(err, "Enregistrement impossible.") });
+    } finally {
+      setBusy(false);
+    }
+  }
+
+  if (!seal) return <p className="text-gray-500">Chargement...</p>;
+  const set = <K extends keyof Seal>(k: K, v: Seal[K]) => setSeal({ ...seal, [k]: v });
+
+  const slots = [
+    { label: "Cachet de l'entreprise", current: seal.stamp, picked: stamp, setPicked: setStamp, ref: stampRef, removeKey: "remove_stamp" },
+    { label: "Signature", current: seal.signature, picked: signature, setPicked: setSignature, ref: signRef, removeKey: "remove_signature" },
+  ];
+
+  return (
+    <div className="space-y-6 max-w-3xl">
+      <div>
+        <h1 className="text-2xl font-bold">Cachet et signature</h1>
+        <p className="text-sm text-gray-500">
+          Ajoutes automatiquement en bas, a la fin de tous les documents (devis, factures, bons de commande) et rapports (ventes, clotures, inventaires), avec la mention
+          « Certifie conforme » et la date du jour.
+        </p>
+      </div>
+
+      <label className="flex items-center gap-3 border rounded-2xl bg-[#1c1514] p-4">
+        <input type="checkbox" checked={seal.enabled} onChange={(e) => set("enabled", e.target.checked)} />
+        <span>
+          <strong>Ajouter automatiquement sur les documents et rapports</strong>
+          <span className="block text-xs text-gray-500">Desactivez pour retirer la mention, le cachet et la signature de toutes les impressions.</span>
+        </span>
+      </label>
+
+      <div className="grid sm:grid-cols-2 gap-4">
+        {slots.map((s) => (
+          <div key={s.label} className="border rounded-2xl bg-[#1c1514] p-4 space-y-3">
+            <p className="font-medium">{s.label}</p>
+            <div className="h-32 rounded-xl bg-white flex items-center justify-center overflow-hidden">
+              {s.picked ? (
+                // eslint-disable-next-line @next/next/no-img-element
+                <img src={URL.createObjectURL(s.picked)} alt="" className="max-h-full max-w-full object-contain" />
+              ) : s.current ? (
+                // eslint-disable-next-line @next/next/no-img-element
+                <img src={s.current} alt={s.label} className="max-h-full max-w-full object-contain" />
+              ) : (
+                <span className="text-xs text-gray-400">Pas encore de photo</span>
+              )}
+            </div>
+            <input ref={s.ref} type="file" accept="image/*" onChange={(e) => s.setPicked(e.target.files?.[0] ?? null)} className="text-xs w-full" />
+            {s.current && !s.picked && (
+              <button onClick={() => save({ [s.removeKey]: "true" })} disabled={busy} className="text-xs text-red-400 underline">
+                Retirer
+              </button>
+            )}
+          </div>
+        ))}
+      </div>
+      <label className="flex items-start gap-2 text-sm">
+        <input type="checkbox" checked={keepBg} onChange={(e) => setKeepBg(e.target.checked)} className="mt-1" />
+        <span>
+          Garder le fond de la photo
+          <span className="block text-xs text-gray-500">Par defaut, le fond blanc ou papier est retire automatiquement pour que le cachet et la signature se posent comme un vrai tampon.</span>
+        </span>
+      </label>
+
+      <div className="grid sm:grid-cols-2 gap-4">
+        <label className="text-sm block">
+          <span className="block text-gray-400 mb-1">Nom du signataire</span>
+          <input value={seal.signer_name} onChange={(e) => set("signer_name", e.target.value)} className="w-full border rounded-lg px-3 py-2" />
+        </label>
+        <label className="text-sm block">
+          <span className="block text-gray-400 mb-1">Fonction</span>
+          <input value={seal.signer_title} onChange={(e) => set("signer_title", e.target.value)} placeholder="Ex. Gerant" className="w-full border rounded-lg px-3 py-2" />
+        </label>
+        <label className="text-sm block">
+          <span className="block text-gray-400 mb-1">Ville (Fait a ...)</span>
+          <input value={seal.place} onChange={(e) => set("place", e.target.value)} placeholder="Ex. Ziguinchor" className="w-full border rounded-lg px-3 py-2" />
+        </label>
+        <label className="text-sm block">
+          <span className="block text-gray-400 mb-1">Mention</span>
+          <input value={seal.certified_text} onChange={(e) => set("certified_text", e.target.value)} className="w-full border rounded-lg px-3 py-2" />
+        </label>
+      </div>
+      <label className="flex items-center gap-2 text-sm">
+        <input type="checkbox" checked={seal.show_date} onChange={(e) => set("show_date", e.target.checked)} /> Afficher la date du jour (mise a jour automatiquement a chaque impression)
+      </label>
+
+      {msg && <p className={`text-sm ${msg.ok ? "text-emerald-400" : "text-red-400"}`}>{msg.text}</p>}
+      <button onClick={() => save()} disabled={busy} className="bg-[#b3261e] text-white rounded-lg px-6 py-2.5 font-medium disabled:opacity-50">
+        {busy ? "Enregistrement..." : "Enregistrer"}
+      </button>
+
+      <div>
+        <p className="text-sm text-gray-400 mb-2">Apercu en bas d&apos;un document :</p>
+        <div className="bg-white rounded-xl p-4 min-h-[8rem]">
+          <SealBlock key={version} fresh />
+        </div>
+      </div>
+    </div>
+  );
+}

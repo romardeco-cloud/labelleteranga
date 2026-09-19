@@ -1,5 +1,6 @@
 "use client";
 
+import SealBlock from "@/components/SealBlock";
 import Link from "next/link";
 import { useParams, useRouter } from "next/navigation";
 import { useEffect, useMemo, useRef, useState } from "react";
@@ -319,6 +320,7 @@ export default function InventoryDetailPage() {
           </button>
         </div>
       )}
+      <SealBlock printOnly />
     </div>
   );
 }

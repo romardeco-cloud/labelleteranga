@@ -378,3 +378,72 @@ class ComboRequestAdminViewSet(viewsets.ModelViewSet):
         qs = ComboRequest.objects.select_related("point_of_sale")
         store = self.request.query_params.get("point_of_sale")
         return qs.filter(point_of_sale_id=store) if store else qs
+
+
+# ------------------------------------------------------------------ cachet et signature
+
+
+def _data_url(blob):
+    import base64
+
+    return "data:image/png;base64," + base64.b64encode(bytes(blob)).decode() if blob else None
+
+
+def seal_payload(seal):
+    return {
+        "enabled": seal.enabled,
+        "stamp": _data_url(seal.stamp_png),
+        "signature": _data_url(seal.signature_png),
+        "signer_name": seal.signer_name,
+        "signer_title": seal.signer_title,
+        "place": seal.place,
+        "certified_text": seal.certified_text,
+        "show_date": seal.show_date,
+    }
+
+
+class CompanySealView(APIView):
+    """
+    GET  /api/stores/company-seal/ -> cachet, signature et textes (administrateurs)
+    POST /api/stores/company-seal/ (multipart) : stamp, signature (photos), remove_stamp, remove_signature, keep_background,
+         enabled, signer_name, signer_title, place, certified_text, show_date
+    """
+
+    permission_classes = [permissions.IsAdminUser]
+    parser_classes = [MultiPartParser, FormParser, JSONParser]
+
+    def get(self, request):
+        from .models import CompanySeal
+
+        return Response(seal_payload(CompanySeal.current()))
+
+    def post(self, request):
+        from .models import CompanySeal
+        from .seal import process_seal_image
+
+        seal = CompanySeal.current()
+        d = request.data
+        truthy = lambda v: str(v).lower() in ("1", "true", "yes", "on")
+        keep_bg = truthy(d.get("keep_background", ""))
+        for field, attr in (("stamp", "stamp_png"), ("signature", "signature_png")):
+            upload = request.FILES.get(field)
+            if upload:
+                if upload.size > 12 * 1024 * 1024:
+                    raise ValidationError({field: "Image trop lourde (12 Mo maximum)."})
+                try:
+                    setattr(seal, attr, process_seal_image(upload, remove_background=not keep_bg))
+                except Exception:
+                    raise ValidationError({field: "Image illisible : envoyez une photo JPG ou PNG."})
+            elif truthy(d.get(f"remove_{field}", "")):
+                setattr(seal, attr, None)
+        for f, mx in (("signer_name", 120), ("signer_title", 120), ("place", 80), ("certified_text", 80)):
+            if f in d:
+                setattr(seal, f, str(d.get(f) or "").strip()[:mx])
+        if not seal.certified_text:
+            seal.certified_text = "Certifié conforme"
+        if "enabled" in d:
+            seal.enabled = truthy(d.get("enabled"))
+        if "show_date" in d:
+            seal.show_date = truthy(d.get("show_date"))
+        seal.save()
+        return Response(seal_payload(seal))

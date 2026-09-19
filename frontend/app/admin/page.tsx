@@ -1,5 +1,6 @@
 "use client";
 
+import SealBlock from "@/components/SealBlock";
 import Link from "next/link";
 import { useCallback, useEffect, useMemo, useState } from "react";
 import { Area, AreaChart, CartesianGrid, Cell, Pie, PieChart, ResponsiveContainer, Tooltip, XAxis, YAxis } from "recharts";
@@ -402,6 +403,7 @@ export default function AdminDashboardPage() {
       <section className="border rounded-xl bg-[#1c1514] p-5 print:hidden">
         <ProductSalesReport />
       </section>
+      <SealBlock printOnly />
     </div>
   );
 }

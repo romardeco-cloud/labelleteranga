@@ -5,6 +5,7 @@ import Link from "next/link";
 import { useParams, useRouter } from "next/navigation";
 import { Fragment, useCallback, useEffect, useState } from "react";
 import PayBadge from "@/components/documents/PayBadge";
+import SealBlock from "@/components/SealBlock";
 import {
   DOC_CONFIG,
   DocType,
@@ -302,6 +303,8 @@ export default function DocumentDetailPage() {
             </table>
           </div>
         )}
+
+        <SealBlock />
       </div>
 
       {/* ---------- Actions (non imprimees) ---------- */}
