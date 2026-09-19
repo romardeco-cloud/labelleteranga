@@ -58,6 +58,7 @@ export type AdminReview = {
   dish: string;
   comment: string;
   is_published: boolean;
+  comment_hidden: boolean;
   reply: string;
   created_at: string;
 };
@@ -68,7 +69,7 @@ export async function fetchAdminReviews(storeId?: number | null) {
     })
   ).data;
 }
-export async function updateReview(id: number, patch: { is_published?: boolean; reply?: string }) {
+export async function updateReview(id: number, patch: { is_published?: boolean; comment_hidden?: boolean; reply?: string }) {
   return (await api.patch<AdminReview>(`/stores/reviews/${id}/`, patch)).data;
 }
 export async function deleteReview(id: number) {

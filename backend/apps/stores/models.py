@@ -299,6 +299,7 @@ class Review(models.Model):
     dish = models.CharField("Plat / produit concerne", max_length=150, blank=True)
     comment = models.TextField(blank=True)
     is_published = models.BooleanField(default=True)
+    comment_hidden = models.BooleanField("Commentaire retire du site (la note reste comptee)", default=False)
     reply = models.TextField("Reponse du commerce", blank=True)
     created_at = models.DateTimeField(auto_now_add=True)
 

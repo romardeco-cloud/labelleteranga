@@ -104,7 +104,7 @@ class SiteReviewsView(APIView):
     def get(self, request, slug):
         store = _site_store(slug)
         qs = Review.objects.filter(point_of_sale=store, is_published=True)
-        shown = qs.exclude(comment="")[:30]
+        shown = qs.exclude(comment="").filter(comment_hidden=False)[:30]
         return Response({"summary": review_summary(qs), "reviews": [_public_review(r) for r in shown]})
 
     def post(self, request, slug):
@@ -149,13 +149,13 @@ class ReviewAdminSerializer(serializers.ModelSerializer):
         model = Review
         fields = [
             "id", "point_of_sale", "point_of_sale_name", "order_reference", "customer_name", "customer_phone", "service_rating",
-            "quality_rating", "q_speed", "q_welcome", "q_recommend", "dish", "comment", "is_published", "reply", "created_at",
+            "quality_rating", "q_speed", "q_welcome", "q_recommend", "dish", "comment", "is_published", "comment_hidden", "reply", "created_at",
         ]
-        read_only_fields = [f for f in fields if f not in ("is_published", "reply")]
+        read_only_fields = [f for f in fields if f not in ("is_published", "comment_hidden", "reply")]
 
 
 class ReviewAdminViewSet(viewsets.ModelViewSet):
-    """GET /api/stores/reviews/?point_of_sale=<id>&rating=<1-5> -> {summary, results} ; PATCH {is_published, reply} ; DELETE."""
+    """GET /api/stores/reviews/?point_of_sale=<id>&rating=<1-5> -> {summary, results} ; PATCH {is_published, comment_hidden, reply} ; DELETE."""
 
     permission_classes = [permissions.IsAdminUser]
     serializer_class = ReviewAdminSerializer

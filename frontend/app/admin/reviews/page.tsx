@@ -44,7 +44,7 @@ export default function ReviewsAdminPage() {
   const shown = rating ? rows.filter((r) => r.service_rating === rating || r.quality_rating === rating) : rows;
   const recTotal = summary ? summary.recommend.yes + summary.recommend.maybe + summary.recommend.no : 0;
 
-  async function patch(id: number, data: { is_published?: boolean; reply?: string }) {
+  async function patch(id: number, data: { is_published?: boolean; comment_hidden?: boolean; reply?: string }) {
     try {
       const updated = await updateReview(id, data);
       setRows((l) => l.map((r) => (r.id === id ? updated : r)));
@@ -135,7 +135,10 @@ export default function ReviewsAdminPage() {
                 {r.q_recommend && <span className="text-gray-400">{REC[r.q_recommend]}</span>}
               </div>
               {r.dish && <p className="text-xs text-[#f5b942] mt-1">Plat / produit : {r.dish}</p>}
-              {r.comment && <p className="text-sm mt-2 whitespace-pre-line">{r.comment}</p>}
+              {r.comment && (
+                <p className={`text-sm mt-2 whitespace-pre-line ${r.comment_hidden ? "line-through text-gray-500" : ""}`}>{r.comment}</p>
+              )}
+              {r.comment_hidden && <p className="text-xs text-amber-400 mt-1">Commentaire retire du site (la note reste comptee).</p>}
               {r.reply && replying !== r.id && <p className="text-sm mt-2 border-l-2 border-[#f5b942] pl-3 text-gray-300">Reponse : {r.reply}</p>}
 
               {replying === r.id ? (
@@ -161,8 +164,13 @@ export default function ReviewsAdminPage() {
                   >
                     {r.reply ? "Modifier la reponse" : "Repondre"}
                   </button>
+                  {r.comment && (
+                    <button onClick={() => patch(r.id, { comment_hidden: !r.comment_hidden })} className="border rounded-lg px-3 py-1">
+                      {r.comment_hidden ? "Remettre le commentaire" : "Retirer le commentaire"}
+                    </button>
+                  )}
                   <button onClick={() => patch(r.id, { is_published: !r.is_published })} className="border rounded-lg px-3 py-1">
-                    {r.is_published ? "Masquer du site" : "Afficher sur le site"}
+                    {r.is_published ? "Masquer l'avis entier" : "Afficher l'avis"}
                   </button>
                   <button
                     onClick={async () => {
