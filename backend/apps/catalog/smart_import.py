@@ -52,6 +52,7 @@ ALIASES = {
     "image_url": ["imageurl", "image", "lienimage", "urlimage", "photo", "lienphoto", "urlphoto", "lien"],
     "image_file": ["fichierimage", "fichierphoto", "nomimage", "nomphoto", "imagefile", "photofichier"],
     "stock": ["stock", "quantite", "qte", "qty", "quantity", "stockdisponible", "inventaire"],
+    "variants": ["variantes", "variante", "declinaisons", "tailles", "formats", "conditionnements"],
 }
 ALIAS_LOOKUP = {}
 for field, names in ALIASES.items():
@@ -279,6 +280,32 @@ def read_document(name, data, warnings):
 
 
 # ------------------------------------------------------------------ etape 1 : analyse
+def expand_variants(products):
+    """« 1kg:500;5kg:2400 » -> un produit par taille (« Riz parfume 1kg », code RIZ-001-1KG), qui partage la photo du produit de base."""
+    out = []
+    for it in products:
+        raw = str(it.get("variants") or "").strip()
+        parts = [p.strip() for p in re.split(r"[;|]", raw) if p.strip()]
+        if not parts:
+            out.append(it)
+            continue
+        for part in parts:
+            label, _, price = part.partition(":")
+            label = label.strip()
+            if not label:
+                continue
+            v = dict(it)
+            v.pop("variants", None)
+            v["base_name"] = it["name"]
+            v["name"] = f"{it['name']} {label}"
+            if it.get("sku"):
+                v["sku"] = f"{it['sku']}-{re.sub(r'[^A-Z0-9]', '', label.upper())}"
+            if price.strip():
+                v["price"] = price.strip()
+            out.append(v)
+    return out
+
+
 def _cleanup_old_jobs():
     if not os.path.isdir(JOB_ROOT):
         return
@@ -323,7 +350,7 @@ def match_image(item, pool, used):
         for i, stem, _ in stems:
             if compact(stem) == sku:
                 return i
-    names = {compact(item["name"]), compact(re.sub(r"\(.*?\)", "", item["name"]))}
+    names = {compact(item["name"]), compact(re.sub(r"\(.*?\)", "", item["name"])), compact(item.get("base_name", ""))}
     names.discard("")
     for i, stem, _ in stems:
         if compact(stem) in names:
@@ -406,6 +433,7 @@ def analyze(files, store=None, create_from_images=False):
         handle(name, data)
 
     # associer chaque ligne a un produit existant (SKU puis nom) et a une photo
+    products = expand_variants(products)
     by_sku = {p.sku.lower(): p for p in Product.objects.all()}
     # avec un point de vente choisi, un nom identique ne rapproche que les produits DE CE point de vente (pas ceux des autres)
     scope = Product.objects.filter(stocks__point_of_sale=store).distinct() if store else Product.objects.all()
