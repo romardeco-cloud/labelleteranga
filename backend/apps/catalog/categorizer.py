@@ -45,6 +45,9 @@ def guess_category(name):
     for ref_base, _ref_full, category in reference():
         if len(ref_base) >= 4 and (base.startswith(ref_base) or ref_base in base) and len(ref_base) / max(len(base), 1) >= 0.6:
             return category
+    for ref_base, _ref_full, category in reference():  # « Couches jetables Petit paquet » : le nom de reference en debut de nom
+        if len(ref_base) >= 8 and base.startswith(ref_base):
+            return category
     return None
 
 
