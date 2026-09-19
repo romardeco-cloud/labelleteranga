@@ -475,6 +475,16 @@ export type POSCustomerOrder = {
   status_label: string;
   payment_reference?: string;
   ready_to_prepare?: boolean;
+  discount_amount?: string;
+  reward_label?: string;
+  tip_amount?: string;
+  loyalty?: {
+    orders_count: number;
+    progress: number;
+    threshold: number;
+    mode: "orders" | "amount";
+    rewards: { id: number; label: string }[];
+  } | null;
   customer_name: string;
   customer_phone: string;
   delivery_address: string;

@@ -3,7 +3,7 @@
 import { useCallback, useEffect, useMemo, useRef, useState } from "react";
 import Image from "next/image";
 import Icon from "@/components/admin/Icon";
-import { LoyaltyStatus, fetchPosLoyalty, redeemPosReward } from "@/lib/engage";
+import { LoyaltyStatus, PosMember, PosMenus, fetchPosLoyalty, fetchPosMenus, redeemPosReward, savePosMenu, searchPosMembers } from "@/lib/engage";
 import ProductVisual from "@/components/ProductVisual";
 import { PAYMENT_QR, categoryEmoji, storeImage } from "@/lib/branding";
 import {
@@ -64,7 +64,7 @@ export default function CaissePage() {
   const [lines, setLines] = useState<Line[]>([]);
   const [held, setHeld] = useState<Held[]>([]);
   const heldLoaded = useRef(false);
-  const [panel, setPanel] = useState<"held" | "history" | "drawer" | null>(null);
+  const [panel, setPanel] = useState<"held" | "history" | "drawer" | "menu" | null>(null);
   const [mode, setMode] = useState<Mode>("direct");
   const [table, setTable] = useState("");
   const [settings, setSettings] = useState<POSSettings>(DEFAULT_SETTINGS);
@@ -81,6 +81,15 @@ export default function CaissePage() {
   const [method, setMethod] = useState<PaymentMethod>("cash");
   const [received, setReceived] = useState("");
   const [custPhone, setCustPhone] = useState("");
+  const [custName, setCustName] = useState("");
+  const [suggestions, setSuggestions] = useState<PosMember[]>([]);
+  const [menus, setMenus] = useState<PosMenus>({ lunch: null, special: null });
+  const [menuKind, setMenuKind] = useState<"lunch" | "special">("lunch");
+  const [menuPicked, setMenuPicked] = useState<number[]>([]);
+  const [menuPublished, setMenuPublished] = useState(true);
+  const [menuSearch, setMenuSearch] = useState("");
+  const [menuNumber, setMenuNumber] = useState("");
+  const [menuMsg, setMenuMsg] = useState<{ ok: boolean; text: string } | null>(null);
   const [tip, setTip] = useState("");
   const [loyalty, setLoyalty] = useState<LoyaltyStatus | null>(null);
   const [error, setError] = useState("");
@@ -373,6 +382,77 @@ export default function CaissePage() {
   const tipNum = Math.max(0, Math.round(Number(tip) || 0));
   const total = subtotal + tipNum; // total encaisse = articles + pourboire
 
+  // suggestions de clients fideles : on tape un nom ou un debut de telephone
+  useEffect(() => {
+    const q = (custName.trim().length >= 2 ? custName : custPhone).trim();
+    if (!settings.loyalty || q.length < 2 || (custName.trim().length < 2 && custPhone.replace(/\D/g, "").length < 3)) {
+      setSuggestions([]);
+      return;
+    }
+    const t = setTimeout(() => {
+      searchPosMembers(q)
+        .then(setSuggestions)
+        .catch(() => setSuggestions([]));
+    }, 300);
+    return () => clearTimeout(t);
+  }, [custName, custPhone, settings.loyalty]);
+
+  const pickFromMenus = (m: PosMenus, kind: "lunch" | "special") => {
+    setMenuPicked((m[kind]?.items ?? []).map((i) => i.product));
+    setMenuPublished(m[kind] ? m[kind]!.is_published : true);
+  };
+  async function openMenuPanel() {
+    setMenuMsg(null);
+    setMenuSearch("");
+    setMenuNumber("");
+    setPanel("menu");
+    try {
+      const m = await fetchPosMenus();
+      setMenus(m);
+      pickFromMenus(m, menuKind);
+    } catch {
+      setMenuMsg({ ok: false, text: "Impossible de charger le menu du jour." });
+    }
+  }
+  function switchMenuKind(kind: "lunch" | "special") {
+    setMenuKind(kind);
+    setMenuMsg(null);
+    pickFromMenus(menus, kind);
+  }
+  const moveMenu = (idx: number, dir: -1 | 1) =>
+    setMenuPicked((l) => {
+      const next = [...l];
+      const j = idx + dir;
+      if (j < 0 || j >= next.length) return l;
+      [next[idx], next[j]] = [next[j], next[idx]];
+      return next;
+    });
+  async function saveMenu() {
+    setMenuMsg(null);
+    try {
+      await savePosMenu({ kind: menuKind, items: menuPicked, is_published: menuPublished });
+      const m = await fetchPosMenus();
+      setMenus(m);
+      setMenuMsg({ ok: true, text: menuPicked.length ? "Menu enregistre." : "Menu vide : rien n'est affiche aux clients." });
+      loadProducts();
+    } catch (e: any) {
+      setMenuMsg({ ok: false, text: e?.response?.data?.items ?? e?.response?.data?.detail ?? "Enregistrement impossible." });
+    }
+  }
+  function addByNumber(e: React.FormEvent) {
+    e.preventDefault();
+    const n = Number(menuNumber);
+    const item = menus.lunch?.items.find((i) => i.number === n);
+    const prod = item && products.find((p) => p.id === item.product);
+    if (!prod) {
+      setMenuMsg({ ok: false, text: `Aucun plat n°${menuNumber} dans le menu du midi.` });
+      return;
+    }
+    addProduct(prod);
+    setMenuMsg({ ok: true, text: `${prod.name} ajoute a la vente.` });
+    setMenuNumber("");
+  }
+
   const refreshLoyalty = useCallback(() => {
     if (!settings.loyalty || custPhone.replace(/\D/g, "").length < 8) {
       setLoyalty(null);
@@ -409,6 +489,7 @@ export default function CaissePage() {
         payment_method: method,
         amount_received: method === "cash" && received ? receivedNum : null,
         ...(custPhone.trim() ? { customer_phone: custPhone.trim() } : {}),
+        ...(custName.trim() ? { customer_name: custName.trim() } : {}),
         ...(tipNum > 0 ? { tip_amount: tipNum } : {}),
         ...(dineIn ? { table_label: table.trim() } : {}),
       });
@@ -418,6 +499,8 @@ export default function CaissePage() {
       setTable("");
       setReceived("");
       setCustPhone("");
+      setCustName("");
+      setSuggestions([]);
       setTip("");
       setLoyalty(null);
       loadProducts();
@@ -526,6 +609,14 @@ export default function CaissePage() {
           </div>
 
           <div className="flex flex-wrap items-center gap-2 ml-auto">
+            <button
+              onClick={openMenuPanel}
+              className={`flex items-center gap-2 border rounded-xl px-3 py-2 text-sm ${
+                dailyMenu.lunch.length || dailyMenu.special.length ? "border-[#f5b942]/60 text-[#f5b942]" : "text-gray-300 hover:bg-white/5"
+              }`}
+            >
+              <Icon name="utensils" className="w-4 h-4" /> Menu du jour
+            </button>
             {settings.modules.hold && (
               <button
                 onClick={() => setPanel(panel === "held" ? null : "held")}
@@ -736,6 +827,35 @@ export default function CaissePage() {
                         ))}
                       </ul>
                       {o.delivery_address && <p className="text-sm text-gray-400 mt-2">Livraison : {o.delivery_address}</p>}
+                      {o.reward_label && (
+                        <p className="text-sm text-emerald-400 mt-2">
+                          🎁 Recompense fidelite utilisee : {o.reward_label}
+                          {Number(o.discount_amount ?? 0) > 0 ? ` (-${xof(o.discount_amount!)})` : ""}
+                        </p>
+                      )}
+                      {Number(o.tip_amount ?? 0) > 0 && <p className="text-sm text-gray-400">Pourboire inclus : {xof(o.tip_amount!)}</p>}
+                      {o.loyalty && (
+                        <div className="mt-2 rounded-xl border border-[#f5b942]/40 bg-[#f5b942]/5 p-2 text-xs space-y-1">
+                          <p className="text-gray-300">
+                            💛 Client fidele : {o.loyalty.orders_count} commande(s) - progression{" "}
+                            {o.loyalty.mode === "amount" ? `${xof(o.loyalty.progress)} / ${xof(o.loyalty.threshold)}` : `${o.loyalty.progress} / ${o.loyalty.threshold}`}
+                          </p>
+                          {o.loyalty.rewards.map((r) => (
+                            <div key={r.id} className="flex items-center justify-between gap-2 text-emerald-400">
+                              <span>🎁 {r.label} a remettre</span>
+                              <button
+                                onClick={async () => {
+                                  await redeemPosReward(r.id);
+                                  openCustomerOrders();
+                                }}
+                                className="border border-emerald-500/50 rounded-lg px-2 py-0.5"
+                              >
+                                Remettre
+                              </button>
+                            </div>
+                          ))}
+                        </div>
+                      )}
                       <div className="flex items-center justify-between mt-2">
                         <p className="font-bold text-[#f5b942]">{xof(o.total)}</p>
                         {o.maps_url && (
@@ -922,6 +1042,43 @@ export default function CaissePage() {
                   <span />
                 )}
               </div>
+              {settings.loyalty && (
+                <>
+                  <input
+                    value={custName}
+                    onChange={(e) => setCustName(e.target.value)}
+                    placeholder="Nom du client (ou tapez pour retrouver un client)"
+                    className="w-full border rounded-xl px-3 py-2 text-sm"
+                  />
+                  {suggestions.length > 0 && (
+                    <ul className="border rounded-xl divide-y text-sm">
+                      {suggestions.map((m) => (
+                        <li key={m.phone}>
+                          <button
+                            type="button"
+                            onClick={() => {
+                              setCustName(m.name);
+                              setCustPhone(m.phone);
+                              setSuggestions([]);
+                            }}
+                            className="w-full flex items-center justify-between px-3 py-2 text-left hover:bg-white/5"
+                          >
+                            <span>
+                              {m.name || "Client"} <span className="text-gray-500">· {m.phone}</span>
+                            </span>
+                            <span className="text-xs text-gray-400">
+                              {m.orders_count} cmd{m.rewards > 0 && <span className="text-emerald-400"> · 🎁 {m.rewards}</span>}
+                            </span>
+                          </button>
+                        </li>
+                      ))}
+                    </ul>
+                  )}
+                  {custName.trim() && !custPhone.trim() && (
+                    <p className="text-xs text-amber-400">Renseignez aussi le telephone pour cumuler les points de fidelite de ce client.</p>
+                  )}
+                </>
+              )}
               {settings.loyalty && loyalty?.enabled && custPhone.replace(/\D/g, "").length >= 8 && (
                 <div className="rounded-xl border border-[#f5b942]/40 bg-[#f5b942]/5 p-2.5 text-xs space-y-1.5">
                   {loyalty.member ? (
@@ -1029,12 +1186,116 @@ export default function CaissePage() {
           <div className="w-full max-w-md h-full bg-[#170f0e] border-l overflow-y-auto" onClick={(e) => e.stopPropagation()}>
             <div className="flex items-center justify-between px-4 py-3 border-b sticky top-0 bg-[#170f0e]">
               <h2 className="font-semibold">
-                {panel === "held" ? "Ventes en attente" : panel === "drawer" ? "Tiroir-caisse" : "Historique du jour"}
+                {panel === "held" ? "Ventes en attente" : panel === "drawer" ? "Tiroir-caisse" : panel === "menu" ? "Menu du jour" : "Historique du jour"}
               </h2>
               <button onClick={() => setPanel(null)} className="text-gray-500 text-sm">
                 Fermer
               </button>
             </div>
+
+            {panel === "menu" && (
+              <div className="p-4 space-y-4">
+                <div className="grid grid-cols-2 gap-2">
+                  {(
+                    [
+                      ["lunch", "Menu du midi"],
+                      ["special", "Speciaux du jour"],
+                    ] as const
+                  ).map(([k, label]) => (
+                    <button
+                      key={k}
+                      onClick={() => switchMenuKind(k)}
+                      className={`py-2 rounded-xl border text-sm ${menuKind === k ? "bg-[#b3261e] text-white border-[#b3261e]" : "text-gray-300 hover:border-[#f5b942]/60"}`}
+                    >
+                      {label}
+                    </button>
+                  ))}
+                </div>
+
+                {menuKind === "lunch" && (menus.lunch?.items.length ?? 0) > 0 && (
+                  <form onSubmit={addByNumber} className="flex gap-2">
+                    <input
+                      type="number"
+                      min={1}
+                      value={menuNumber}
+                      onChange={(e) => setMenuNumber(e.target.value)}
+                      placeholder="N° choisi par le client"
+                      className="flex-1 border rounded-xl px-3 py-2 text-sm"
+                    />
+                    <button disabled={!menuNumber} className="bg-brand text-white rounded-xl px-4 text-sm font-medium disabled:opacity-40">
+                      Ajouter a la vente
+                    </button>
+                  </form>
+                )}
+
+                <div>
+                  <p className="text-sm text-gray-400 mb-2">
+                    Plats affiches aux clients ({menuPicked.length}) : le numero de choix suit l&apos;ordre de la liste.
+                  </p>
+                  {menuPicked.length === 0 ? (
+                    <p className="text-sm text-gray-500 border rounded-xl py-6 text-center">Aucun plat : ajoutez-en ci-dessous.</p>
+                  ) : (
+                    <ul className="space-y-1.5">
+                      {menuPicked.map((id, idx) => {
+                        const prod = products.find((p) => p.id === id);
+                        const special = menus.special?.items.find((i) => i.product === id)?.special_price;
+                        return (
+                          <li key={id} className="flex items-center gap-2 border rounded-xl px-2 py-1.5">
+                            <span className="w-7 h-7 rounded-full bg-[#b3261e] text-white text-sm font-bold flex items-center justify-center shrink-0">{idx + 1}</span>
+                            <span className="flex-1 min-w-0 text-sm truncate">
+                              {prod?.name ?? `Produit ${id}`}
+                              {menuKind === "special" && special && <span className="text-[#f5b942] ml-2">{xof(special)}</span>}
+                            </span>
+                            {prod && (
+                              <button onClick={() => addProduct(prod)} className="text-xs border rounded-lg px-2 py-1 text-[#f5b942]">
+                                + Vente
+                              </button>
+                            )}
+                            <button onClick={() => moveMenu(idx, -1)} className="text-gray-500 hover:text-white" aria-label="Monter">▲</button>
+                            <button onClick={() => moveMenu(idx, 1)} className="text-gray-500 hover:text-white" aria-label="Descendre">▼</button>
+                            <button onClick={() => setMenuPicked((l) => l.filter((x) => x !== id))} className="text-gray-500 hover:text-red-400" aria-label="Retirer">
+                              <Icon name="trash" className="w-4 h-4" />
+                            </button>
+                          </li>
+                        );
+                      })}
+                    </ul>
+                  )}
+                </div>
+
+                <div>
+                  <input
+                    value={menuSearch}
+                    onChange={(e) => setMenuSearch(e.target.value)}
+                    placeholder="Ajouter un plat : rechercher..."
+                    className="w-full border rounded-xl px-3 py-2 text-sm"
+                  />
+                  <ul className="mt-2 max-h-52 overflow-y-auto divide-y border rounded-xl">
+                    {products
+                      .filter((p) => !menuPicked.includes(p.id) && (!menuSearch.trim() || p.name.toLowerCase().includes(menuSearch.trim().toLowerCase())))
+                      .slice(0, 40)
+                      .map((p) => (
+                        <li key={p.id}>
+                          <button onClick={() => setMenuPicked((l) => [...l, p.id])} className="w-full flex justify-between px-3 py-2 text-sm text-left hover:bg-white/5">
+                            <span className="truncate">{p.name}</span>
+                            <span className="text-gray-500 ml-2 shrink-0">{xof(p.price)}</span>
+                          </button>
+                        </li>
+                      ))}
+                  </ul>
+                </div>
+
+                <label className="flex items-center gap-2 text-sm">
+                  <input type="checkbox" checked={menuPublished} onChange={(e) => setMenuPublished(e.target.checked)} />
+                  Afficher aux clients (site, application et caisse)
+                </label>
+                {menuKind === "special" && <p className="text-xs text-gray-500">Les prix speciaux sont fixes par l&apos;administrateur (Admin &gt; Menu du jour).</p>}
+                {menuMsg && <p className={`text-sm ${menuMsg.ok ? "text-emerald-400" : "text-red-400"}`}>{menuMsg.text}</p>}
+                <button onClick={saveMenu} className="w-full bg-[#b3261e] text-white rounded-xl py-3 font-semibold">
+                  Enregistrer le menu
+                </button>
+              </div>
+            )}
 
             {panel === "drawer" && (
               <div className="p-4 space-y-4">

@@ -219,11 +219,31 @@ class POSCustomerOrdersView(APIView):
             .prefetch_related("items")
             .order_by("-created_at")
         )
+        from apps.stores.loyalty import member_status
+
+        def loyalty_of(o):
+            """Fidelite du client de la commande (par telephone) : progression et recompenses a remettre."""
+            info = member_status(store, o.customer_phone)
+            if not info["enabled"] or not info["member"]:
+                return None
+            m = info["member"]
+            return {
+                "orders_count": m["orders_count"],
+                "progress": m["progress"],
+                "threshold": info["threshold"],
+                "mode": info["mode"],
+                "rewards": [{"id": r["id"], "label": r["label"]} for r in m["rewards"]],
+            }
+
         return Response(
             [
                 {
                     "reference": o.reference[:8].upper(),
                     "created_at": o.created_at,
+                    "discount_amount": str(o.discount_amount),
+                    "reward_label": o.reward_label,
+                    "tip_amount": str(o.tip_amount),
+                    "loyalty": loyalty_of(o),
                     "status": o.status,
                     "status_label": _order_state_label(o),
                     "payment_reference": o.payment_reference,
@@ -277,9 +297,29 @@ class POSLoyaltyView(APIView):
     permission_classes = [IsCashier]
 
     def get(self, request):
-        from apps.stores.loyalty import member_status
+        from apps.stores.loyalty import member_status, normalize_phone
+        from apps.stores.models import LoyaltyMember
 
-        return Response(member_status(request.user.cashier_profile.point_of_sale, request.query_params.get("phone", "")))
+        store = request.user.cashier_profile.point_of_sale
+        q = (request.query_params.get("q") or "").strip()
+        if q:  # suggestions : clients de ce point de vente dont le nom ou le telephone correspond
+            digits = "".join(c for c in q if c.isdigit())
+            cond = Q(name__icontains=q)
+            if len(digits) >= 3:
+                cond |= Q(phone__icontains=digits[-9:])
+            found = LoyaltyMember.objects.filter(cond, point_of_sale=store).order_by("-updated_at")[:6]
+            return Response(
+                [
+                    {
+                        "name": m.name,
+                        "phone": m.phone,
+                        "orders_count": m.orders_count,
+                        "rewards": len([r for r in m.rewards.filter(used_at__isnull=True)]),
+                    }
+                    for m in found
+                ]
+            )
+        return Response(member_status(store, request.query_params.get("phone", "")))
 
     def post(self, request):
         from rest_framework.exceptions import ValidationError
@@ -296,3 +336,86 @@ class POSLoyaltyView(APIView):
         reward.used_on_order = "en caisse"
         reward.save(update_fields=["used_at", "used_on_order"])
         return Response({"ok": True})
+
+
+class POSDailyMenuView(APIView):
+    """
+    Menu du midi et speciaux du jour, geres par le caissier pour SON point de vente (aujourd'hui).
+    GET  /api/pos/daily-menu/ -> {lunch: {...} | null, special: {...} | null}
+    POST /api/pos/daily-menu/ {kind: lunch|special, items: [product_id, ...], is_published?, title?, note?}
+         remplace la selection ; les numeros de choix suivent l'ordre de la liste ; les prix speciaux deja fixes par
+         l'administrateur sont conserves (le caissier ne modifie pas les prix).
+    """
+
+    permission_classes = [IsCashier]
+
+    @staticmethod
+    def _payload(menu):
+        if not menu:
+            return None
+        return {
+            "kind": menu.kind,
+            "title": menu.title,
+            "note": menu.note,
+            "is_published": menu.is_published,
+            "items": [
+                {
+                    "product": i.product_id,
+                    "name": i.product.name,
+                    "number": i.number,
+                    "price": str(i.product.price),
+                    "special_price": str(i.special_price) if i.special_price is not None else None,
+                }
+                for i in menu.items.select_related("product")
+            ],
+        }
+
+    def get(self, request):
+        from apps.stores.models import DailyMenu
+
+        store = request.user.cashier_profile.point_of_sale
+        out = {"lunch": None, "special": None}
+        for menu in DailyMenu.objects.filter(point_of_sale=store, date=timezone.localdate()):
+            out[menu.kind] = self._payload(menu)
+        return Response(out)
+
+    def post(self, request):
+        from rest_framework.exceptions import ValidationError
+
+        from apps.stores.models import DailyMenu, DailyMenuItem
+
+        store = request.user.cashier_profile.point_of_sale
+        kind = request.data.get("kind")
+        if kind not in ("lunch", "special"):
+            raise ValidationError({"kind": "Type inconnu."})
+        raw = request.data.get("items") or []
+        if not isinstance(raw, list):
+            raise ValidationError({"items": "Liste attendue."})
+        ids = []
+        for x in raw:
+            try:
+                pid = int(x)
+            except (TypeError, ValueError):
+                raise ValidationError({"items": "Produit invalide."})
+            if pid not in ids:
+                ids.append(pid)
+        valid = set(Product.objects.filter(pk__in=ids, is_active=True, stocks__point_of_sale=store).values_list("pk", flat=True))
+        if any(pid not in valid for pid in ids):
+            raise ValidationError({"items": "Certains produits ne sont pas vendus dans ce point de vente."})
+        today = timezone.localdate()
+        menu, _ = DailyMenu.objects.get_or_create(point_of_sale=store, date=today, kind=kind)
+        previous = {i.product_id: i.special_price for i in menu.items.all()}
+        if "title" in request.data:
+            menu.title = str(request.data.get("title") or "")[:80]
+        if "note" in request.data:
+            menu.note = str(request.data.get("note") or "")[:160]
+        menu.is_published = bool(request.data.get("is_published", True))
+        menu.save()
+        menu.items.all().delete()
+        DailyMenuItem.objects.bulk_create(
+            [
+                DailyMenuItem(menu=menu, product_id=pid, number=n, special_price=previous.get(pid) if kind == "special" else None)
+                for n, pid in enumerate(ids, start=1)
+            ]
+        )
+        return Response(self._payload(menu))

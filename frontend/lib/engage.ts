@@ -188,3 +188,24 @@ export async function fetchComboRequests(storeId: number | null) {
 export async function setComboRequestStatus(id: number, status: ComboRequestRow["status"]) {
   return (await api.patch<ComboRequestRow>(`/stores/combo-requests/${id}/`, { status })).data;
 }
+
+/* ---------- Caisse : recherche de clients fideles et menu du jour ---------- */
+export type PosMember = { name: string; phone: string; orders_count: number; rewards: number };
+export async function searchPosMembers(q: string) {
+  return (await api.get<PosMember[]>("/pos/loyalty/", { params: { q } })).data;
+}
+
+export type PosMenu = {
+  kind: "lunch" | "special";
+  title: string;
+  note: string;
+  is_published: boolean;
+  items: { product: number; name: string; number: number; price: string; special_price: string | null }[];
+};
+export type PosMenus = { lunch: PosMenu | null; special: PosMenu | null };
+export async function fetchPosMenus() {
+  return (await api.get<PosMenus>("/pos/daily-menu/")).data;
+}
+export async function savePosMenu(payload: { kind: "lunch" | "special"; items: number[]; is_published: boolean; note?: string }) {
+  return (await api.post<PosMenu>("/pos/daily-menu/", payload)).data;
+}
