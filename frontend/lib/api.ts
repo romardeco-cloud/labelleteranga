@@ -223,6 +223,7 @@ export type CustomerInfo = {
 export type Order = {
   id: number;
   reference: string;
+  channel?: "online" | "pos";
   fulfillment?: "delivery" | "pickup";
   point_of_sale: number | null;
   point_of_sale_name: string | null;

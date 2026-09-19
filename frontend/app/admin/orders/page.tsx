@@ -61,8 +61,68 @@ export default function AdminOrdersPage() {
     }
   }
 
-  function reload() {
-    api.get("/orders/", { params: { page_size: 100 } }).then((res) => setOrders(res.data.results ?? res.data));
+  const [filter, setFilter] = useState<"all" | "unfinished" | "paid" | "cancelled">("all");
+  const [selected, setSelected] = useState<Set<string>>(new Set());
+  const [bulkMsg, setBulkMsg] = useState<{ ok: boolean; text: string } | null>(null);
+  const [bulkConfirm, setBulkConfirm] = useState(false);
+  const [bulkBusy, setBulkBusy] = useState(false);
+
+  // charge jusqu'a 5 pages de 100 commandes
+  async function reload() {
+    const all: Order[] = [];
+    let url: string | null = "/orders/";
+    let params: Record<string, unknown> | undefined = { page_size: 100 };
+    for (let i = 0; i < 5 && url; i++) {
+      const res: { data: { results?: Order[]; next?: string | null } | Order[] } = await api.get(url, params ? { params } : undefined);
+      const d = res.data;
+      if (Array.isArray(d)) {
+        all.push(...d);
+        break;
+      }
+      all.push(...(d.results ?? []));
+      url = d.next ? d.next : null;
+      params = undefined;
+    }
+    setOrders(all);
+    setSelected((cur) => new Set([...cur].filter((r) => all.some((o) => o.reference === r))));
+  }
+
+  // commande en ligne non finalisee : en attente ou echouee (jamais une vente payee ou annulee)
+  const isUnfinished = (o: Order) => (o.status === "pending" || o.status === "failed") && (o as Order & { channel?: string }).channel !== "pos";
+  const isDeclared = (o: Order) => o.status === "pending" && !!o.payment_declared_at;
+  const shown = orders.filter((o) =>
+    filter === "all" ? true : filter === "unfinished" ? isUnfinished(o) : filter === "paid" ? o.status === "paid" : o.status === "cancelled"
+  );
+  // "Tout selectionner" ne prend pas les commandes dont le client dit avoir paye (a verifier avant de supprimer)
+  const selectable = shown.filter((o) => isUnfinished(o) && !isDeclared(o));
+  const allSelected = selectable.length > 0 && selectable.every((o) => selected.has(o.reference));
+  const toggleAll = () => setSelected(allSelected ? new Set() : new Set(selectable.map((o) => o.reference)));
+  const toggleOne = (ref: string) =>
+    setSelected((cur) => {
+      const next = new Set(cur);
+      if (next.has(ref)) next.delete(ref);
+      else next.add(ref);
+      return next;
+    });
+  const selectedDeclared = orders.filter((o) => selected.has(o.reference) && isDeclared(o)).length;
+
+  async function deleteSelected() {
+    setBulkBusy(true);
+    setBulkMsg(null);
+    try {
+      const res = await api.post("/orders/bulk-delete/", { references: [...selected], include_declared: selectedDeclared > 0 });
+      setBulkMsg({
+        ok: true,
+        text: `${res.data.deleted} commande(s) non finalisee(s) supprimee(s)${res.data.skipped ? ` ; ${res.data.skipped} conservee(s) (payees, annulees ou paiement declare).` : "."}`,
+      });
+      setSelected(new Set());
+      setBulkConfirm(false);
+      await reload();
+    } catch (err) {
+      setBulkMsg({ ok: false, text: apiErrorMessage(err, "Suppression impossible.") });
+    } finally {
+      setBulkBusy(false);
+    }
   }
 
   useEffect(() => {
@@ -134,9 +194,68 @@ export default function AdminOrdersPage() {
           </form>
         </div>
       )}
+      <div className="flex flex-wrap items-center gap-2">
+        {(
+          [
+            ["all", `Toutes (${orders.length})`],
+            ["unfinished", `Non finalisees (${orders.filter(isUnfinished).length})`],
+            ["paid", "Payees"],
+            ["cancelled", "Annulees"],
+          ] as const
+        ).map(([key, label]) => (
+          <button
+            key={key}
+            onClick={() => {
+              setFilter(key);
+              setSelected(new Set());
+            }}
+            className={`px-3 py-1.5 rounded-full border text-sm ${filter === key ? "bg-brand text-white border-brand" : "text-gray-600 hover:border-brand"}`}
+          >
+            {label}
+          </button>
+        ))}
+        <span className="flex-1" />
+        {selectable.length > 0 && (
+          <button onClick={toggleAll} className="border rounded-lg px-3 py-1.5 text-sm">
+            {allSelected ? "Tout deselectionner" : `Tout selectionner (${selectable.length})`}
+          </button>
+        )}
+        {selected.size > 0 && (
+          <button onClick={() => setBulkConfirm(true)} className="bg-red-600 text-white rounded-lg px-4 py-1.5 text-sm font-medium">
+            Supprimer la selection ({selected.size})
+          </button>
+        )}
+      </div>
+      {bulkMsg && <p className={`text-sm ${bulkMsg.ok ? "text-green-600" : "text-red-600"}`}>{bulkMsg.text}</p>}
+      {bulkConfirm && (
+        <div className="fixed inset-0 z-40 bg-black/60 flex items-center justify-center p-4" onClick={() => setBulkConfirm(false)}>
+          <div onClick={(e) => e.stopPropagation()} className="bg-white rounded-2xl p-5 w-full max-w-sm space-y-3">
+            <h2 className="font-bold text-lg">Supprimer {selected.size} commande(s) non finalisee(s) ?</h2>
+            <p className="text-sm text-gray-600">
+              Ces commandes en ligne n&apos;ont pas ete payees : elles sont supprimees definitivement. Les ventes payees ou annulees ne sont jamais touchees.
+            </p>
+            {selectedDeclared > 0 && (
+              <p className="text-sm text-amber-700 bg-amber-50 rounded p-2">
+                Attention : {selectedDeclared} commande(s) selectionnee(s) ont un paiement declare par le client. Verifiez qu&apos;aucun paiement n&apos;a ete recu avant de continuer.
+              </p>
+            )}
+            <div className="flex gap-2">
+              <button onClick={deleteSelected} disabled={bulkBusy} className="flex-1 bg-red-600 text-white rounded-lg py-2.5 font-medium disabled:opacity-50">
+                {bulkBusy ? "Suppression..." : "Supprimer definitivement"}
+              </button>
+              <button onClick={() => setBulkConfirm(false)} className="border rounded-lg px-4">
+                Annuler
+              </button>
+            </div>
+          </div>
+        </div>
+      )}
       <table className="w-full text-sm bg-white border rounded-lg overflow-hidden">
         <thead className="bg-gray-50 text-left">
           <tr>
+            <th className="p-2 w-8">
+              <input type="checkbox" checked={allSelected} onChange={toggleAll} disabled={selectable.length === 0} aria-label="Tout selectionner" />
+            </th>
             <th className="p-2">Reference</th>
             <th className="p-2">Client</th>
             <th className="p-2">Adresse</th>
@@ -149,8 +268,26 @@ export default function AdminOrdersPage() {
           </tr>
         </thead>
         <tbody>
-          {orders.map((o) => (
-            <tr key={o.id} className="border-t align-top">
+          {shown.length === 0 && (
+            <tr>
+              <td colSpan={10} className="p-8 text-center text-gray-500">
+                Aucune commande.
+              </td>
+            </tr>
+          )}
+          {shown.map((o) => (
+            <tr key={o.id} className={`border-t align-top ${selected.has(o.reference) ? "bg-red-50" : ""}`}>
+              <td className="p-2">
+                {isUnfinished(o) && (
+                  <input
+                    type="checkbox"
+                    checked={selected.has(o.reference)}
+                    onChange={() => toggleOne(o.reference)}
+                    aria-label={`Selectionner ${o.reference.slice(0, 8)}`}
+                    title={isDeclared(o) ? "Paiement declare par le client : a verifier avant suppression" : undefined}
+                  />
+                )}
+              </td>
               <td className="p-2 font-mono text-xs">{o.reference.slice(0, 8)}</td>
               <td className="p-2">
                 {o.customer_name}

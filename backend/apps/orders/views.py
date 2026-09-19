@@ -18,9 +18,37 @@ class OrderViewSet(
     lookup_field = "reference"
 
     def get_permissions(self):
-        if self.action in ("list", "update", "partial_update", "void"):
+        if self.action in ("list", "update", "partial_update", "void", "bulk_delete"):
             return [permissions.IsAdminUser()]
         return [permissions.AllowAny()]
+
+    @action(detail=False, methods=["post"], permission_classes=[permissions.IsAdminUser], url_path="bulk-delete")
+    def bulk_delete(self, request):
+        """
+        POST /api/orders/bulk-delete/ {references: [...], include_declared?: bool} : supprime definitivement des commandes en ligne
+        NON FINALISEES (en attente ou echouees). Une commande payee ou annulee (comptabilite) n'est jamais supprimee ici.
+        Les commandes dont le client a declare un paiement Wave / Orange Money sont conservees, sauf include_declared=true.
+        Une recompense fidelite utilisee sur une commande supprimee est rendue au client.
+        """
+        from django.db import transaction
+
+        refs = request.data.get("references") or []
+        if not isinstance(refs, list) or not refs:
+            raise ValidationError({"references": "Selectionnez au moins une commande."})
+        include_declared = bool(request.data.get("include_declared"))
+        qs = Order.objects.filter(reference__in=[str(r) for r in refs], channel=Order.Channel.ONLINE).exclude(
+            status__in=[Order.Status.PAID, Order.Status.CANCELLED]
+        )
+        deletable = qs if include_declared else qs.filter(payment_declared_at__isnull=True)
+        deleted = 0
+        with transaction.atomic():
+            from apps.stores.models import LoyaltyReward
+
+            for order in list(deletable):
+                LoyaltyReward.objects.filter(used_on_order=order.reference[:40]).update(used_at=None, used_on_order="")
+                order.delete()
+                deleted += 1
+        return Response({"deleted": deleted, "skipped": len(refs) - deleted})
 
     @action(detail=True, methods=["post"], permission_classes=[permissions.IsAdminUser])
     def void(self, request, reference=None):
