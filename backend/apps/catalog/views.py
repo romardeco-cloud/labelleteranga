@@ -197,6 +197,44 @@ class ProductViewSet(viewsets.ModelViewSet):
                     updated += 1
             return Response({"updated": updated, "skipped": total - updated, "skipped_reason": f"{not_in_store} hors de ce point de vente" if not_in_store else ""})
 
+        if act == "assign_store":
+            from apps.stores.models import StoreCategory
+
+            target = PointOfSale.objects.filter(pk=request.data.get("target_point_of_sale")).first()
+            if not target or target.pk == store.pk:
+                raise ValidationError({"target_point_of_sale": "Choisissez un autre point de vente."})
+            move = request.data.get("mode") == "move"
+            done = 0
+            with transaction.atomic():
+                for product in mine:
+                    source = Stock.objects.get(product=product, point_of_sale=store)
+                    quantity, tracked = source.quantity, source.track_stock
+                    dest, created = Stock.objects.get_or_create(product=product, point_of_sale=target, defaults={"track_stock": tracked})
+                    if move:
+                        if quantity and created:
+                            change_stock(product, target, set_to=quantity, reason=StockMovement.Reason.MANUAL, user=request.user)
+                        elif quantity:
+                            change_stock(product, target, delta=quantity, reason=StockMovement.Reason.MANUAL, user=request.user)
+                        if quantity:
+                            change_stock(product, store, set_to=0, reason=StockMovement.Reason.MANUAL, user=request.user)
+                        source.delete()
+                    if product.category_id:
+                        StoreCategory.objects.get_or_create(
+                            point_of_sale=target,
+                            category_id=product.category_id,
+                            defaults={"order": StoreCategory.objects.filter(point_of_sale=target).count()},
+                        )
+                    done += 1
+            note_ = "deplace(s)" if move else "ajoute(s) aussi"
+            return Response(
+                {
+                    "updated": done,
+                    "skipped": total - done,
+                    "skipped_reason": (f"{not_in_store} hors de ce point de vente" if not_in_store else "")
+                    + (f" - {done} produit(s) {note_} vers {target.name}" if done else ""),
+                }
+            )
+
         if act == "set_tracking":
             track = request.data.get("track")
             if not isinstance(track, bool):

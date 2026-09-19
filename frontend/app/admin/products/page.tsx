@@ -55,7 +55,9 @@ export default function AdminProductsPage() {
   const bulkRef = useRef<HTMLInputElement>(null);
   // --- actions groupees ---
   const [selected, setSelected] = useState<Set<number>>(new Set());
-  const [bulkKind, setBulkKind] = useState<null | "price" | "stock" | "delete" | "category">(null);
+  const [bulkKind, setBulkKind] = useState<null | "price" | "stock" | "delete" | "category" | "assign">(null);
+  const [assignTarget, setAssignTarget] = useState("");
+  const [assignMode, setAssignMode] = useState<"move" | "copy">("move");
   const [categoryFilter, setCategoryFilter] = useState<string>(""); // "" = toutes, "none" = sans categorie, sinon id
   const [bulkCategory, setBulkCategory] = useState("");
   const [bulkCategoryName, setBulkCategoryName] = useState("");
@@ -104,11 +106,12 @@ export default function AdminProductsPage() {
       const { updated, skipped, skipped_reason } = res.data as { updated: number; skipped: number; skipped_reason?: string };
       setBulkMsg({
         ok: true,
-        text: `${updated} produit(s) modifie(s)${skipped ? ` ; ${skipped} ignore(s)${skipped_reason ? ` (${skipped_reason})` : ""}` : ""}.`,
+        text: `${updated} produit(s) modifie(s)${skipped ? ` ; ${skipped} ignore(s)` : ""}${skipped_reason ? ` (${skipped_reason.replace(/^ - /, "")})` : ""}.`,
       });
       setBulkKind(null);
       setBulkConfirm("");
-      if (action === "delete") setSelected(new Set());
+      if (action === "delete" || (action === "assign_store" && extra.mode === "move")) setSelected(new Set());
+      setBulkKind(null);
       reload();
     } catch (err) {
       setBulkMsg({ ok: false, text: apiErrorMessage(err, "Action impossible.") });
@@ -592,6 +595,9 @@ export default function AdminProductsPage() {
             <button onClick={() => runBulk("set_tracking", { track: false })} disabled={bulkBusy} className="border rounded-lg px-3 py-1.5 text-sm bg-white" title="Toujours disponible : jamais de rupture ni de sortie de stock">
               Ne pas suivre le stock
             </button>
+            <button onClick={() => setBulkKind("assign")} className="border rounded-lg px-3 py-1.5 text-sm bg-white">
+              Affecter a un autre point de vente
+            </button>
             <button onClick={() => setBulkKind("category")} className="border rounded-lg px-3 py-1.5 text-sm bg-white">
               Categorie
             </button>
@@ -643,6 +649,47 @@ export default function AdminProductsPage() {
                 ) : (
                   <p className="text-sm text-amber-700">Choisissez d&apos;abord un point de vente (boutons en haut de la liste) : le stock se gere par point de vente.</p>
                 )}
+              </>
+            )}
+            {bulkKind === "assign" && (
+              <>
+                <h2 className="font-bold text-lg">Affecter {selected.size} produit(s) a un autre point de vente</h2>
+                <p className="text-sm text-gray-600">
+                  Depuis : <strong>{store?.name}</strong>
+                </p>
+                <select value={assignTarget} onChange={(e) => setAssignTarget(e.target.value)} className="w-full border rounded px-3 py-2">
+                  <option value="">Choisir le point de vente de destination...</option>
+                  {stores
+                    .filter((s) => s.id !== storeId)
+                    .map((s) => (
+                      <option key={s.id} value={s.id}>
+                        {s.name}
+                      </option>
+                    ))}
+                </select>
+                <div className="grid grid-cols-2 gap-2 text-sm">
+                  {(
+                    [
+                      ["move", "Deplacer", "quitte ce point de vente, le stock suit"],
+                      ["copy", "Ajouter aussi", "reste ici et devient aussi vendu la-bas"],
+                    ] as const
+                  ).map(([k, l, hint]) => (
+                    <button key={k} onClick={() => setAssignMode(k)} className={`border rounded-lg p-2 text-left ${assignMode === k ? "border-brand bg-brand-light" : ""}`}>
+                      <span className="block font-medium">{l}</span>
+                      <span className="block text-xs text-gray-500">{hint}</span>
+                    </button>
+                  ))}
+                </div>
+                {assignMode === "copy" && (
+                  <p className="text-xs text-amber-700">Un produit vendu par deux points de vente partage le meme prix, statut et categorie ; son stock reste propre a chaque point de vente.</p>
+                )}
+                <button
+                  disabled={bulkBusy || !assignTarget}
+                  onClick={() => runBulk("assign_store", { target_point_of_sale: Number(assignTarget), mode: assignMode })}
+                  className="w-full bg-brand text-white rounded-lg py-2.5 font-medium disabled:opacity-40"
+                >
+                  {bulkBusy ? "Application..." : assignMode === "move" ? "Deplacer les produits" : "Ajouter a ce point de vente"}
+                </button>
               </>
             )}
             {bulkKind === "category" && (
@@ -834,7 +881,28 @@ export default function AdminProductsPage() {
                   </td>
                   <td className="p-2">{p.sku}</td>
                   <td className="p-2">{p.name}</td>
-                  <td className="p-2">{p.category?.name ?? "-"}</td>
+                  <td className="p-2">
+                    <select
+                      value={p.category?.id ?? ""}
+                      onChange={async (e) => {
+                        try {
+                          await api.patch(`/catalog/products/${p.id}/`, { category_id: e.target.value ? Number(e.target.value) : null });
+                          reload();
+                        } catch (err) {
+                          setPhotoErr(apiErrorMessage(err, "Categorie non modifiee."));
+                        }
+                      }}
+                      className="border rounded px-1 py-0.5 text-xs max-w-[160px] bg-transparent"
+                      aria-label={`Categorie de ${p.name}`}
+                    >
+                      <option value="">- Sans categorie -</option>
+                      {categories.map((c) => (
+                        <option key={c.id} value={c.id}>
+                          {c.name}
+                        </option>
+                      ))}
+                    </select>
+                  </td>
                   <td className="p-2">
                     {p.active_promotion_name ? (
                       <>
