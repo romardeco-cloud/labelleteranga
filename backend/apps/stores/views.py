@@ -316,6 +316,8 @@ def _site_payload(store, with_categories=False):
         "email": st.email or "info@labelleteranga.com",
     }
     data["payment_methods"], data["manual_payment_methods"] = _available_online_methods(st.payment_methods)
+    data["wave_pay_url"] = st.wave_pay_url
+    data["orange_pay_url"] = st.orange_pay_url
     if with_categories:
         counts = {
             r["product__category_id"]: r["n"]

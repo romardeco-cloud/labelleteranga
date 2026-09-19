@@ -12,11 +12,29 @@ export type Site = {
   email: string;
   payment_methods: ("cash" | "wave" | "orange_money" | "card")[];
   manual_payment_methods: ("wave" | "orange_money")[];
+  wave_pay_url?: string;
+  orange_pay_url?: string;
   categories?: SiteCategory[];
 };
 
 /** Nom court d'un site : "Resto & Fast-food La Belle Teranga" -> "Resto & Fast-food". */
 export const shortName = (name: string) => name.replace(/ La Belle Teranga$/i, "");
+
+/**
+ * Lien de paiement marchand du point de vente pour ce moyen de paiement, avec le montant pre-rempli quand
+ * l'application le permet (Wave : parametre amount). Ouvre directement Wave / Orange Money / Max it sur mobile.
+ */
+export function merchantPayLink(site: Site, method: "wave" | "orange_money", amount: number): string | null {
+  const raw = method === "wave" ? site.wave_pay_url : site.orange_pay_url;
+  if (!raw) return null;
+  try {
+    const url = new URL(raw);
+    if (method === "wave") url.searchParams.set("amount", String(Math.round(amount)));
+    return url.toString();
+  } catch {
+    return null;
+  }
+}
 
 /** Adresse unique de contact pour tous les points de vente. */
 export const CONTACT_EMAIL = "info@labelleteranga.com";

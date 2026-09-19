@@ -57,7 +57,7 @@ const MODULES: { key: keyof StoreConfig; label: string; hint: string }[] = [
 
 const EDITABLE: (keyof StoreConfig)[] = [
   "name", "address", "phone", "slug", "online_enabled", "description", "timezone", "email", "legal_form", "share_capital", "ninea", "rccm", "vat_rate",
-  "prices_include_vat", "payment_methods", "track_stock", "receipt_slogan", "receipt_footer",
+  "prices_include_vat", "payment_methods", "wave_pay_url", "orange_pay_url", "track_stock", "receipt_slogan", "receipt_footer",
   "module_hold", "module_history", "module_qr", "module_dine_in", "module_customer_orders", "module_drawer", "module_xreport",
 ];
 
@@ -316,6 +316,18 @@ export default function AdminSettingsPage() {
                 </div>
               </Field>
             </div>
+          </Card>
+          <Card icon="wallet" title="Comptes marchands Wave / Orange Money (site web)" tone="text-sky-400">
+            <p className="text-sm text-gray-500">
+              Le client est envoye directement dans son application (Wave, Orange Money, Max it) vers CE compte marchand, avec le montant. Collez
+              le lien contenu dans le QR code marchand du point de vente (il commence par https://pay.wave.com/... ou https://qrcode.orange.sn/...).
+            </p>
+            <Field label="Lien de paiement Wave">
+              <input value={cfg.wave_pay_url} onChange={(e) => set("wave_pay_url", e.target.value)} placeholder="https://pay.wave.com/m/..." className={inputCls} />
+            </Field>
+            <Field label="Lien de paiement Orange Money / Max it">
+              <input value={cfg.orange_pay_url} onChange={(e) => set("orange_pay_url", e.target.value)} placeholder="https://qrcode.orange.sn/..." className={inputCls} />
+            </Field>
           </Card>
           <Card icon="wallet" title="Moyens de paiement acceptes a la caisse" tone="text-emerald-400">
             {PAYMENTS.map((p) => {

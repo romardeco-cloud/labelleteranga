@@ -139,6 +139,10 @@ class StoreSettings(models.Model):
     prices_include_vat = models.BooleanField("Prix TTC", default=True)
     payment_methods = models.JSONField("Moyens de paiement acceptes", default=default_payment_methods)
     # apparence du ticket
+    # liens de paiement marchand (contenus dans les QR codes Wave / Orange Money du point de vente) :
+    # le client est envoye directement dans son application avec le compte marchand et le montant
+    wave_pay_url = models.URLField("Lien de paiement Wave", max_length=300, blank=True)
+    orange_pay_url = models.URLField("Lien de paiement Orange Money / Max it", max_length=300, blank=True)
     # suivi du stock : desactive (restaurant, plats faits a la commande) => jamais de rupture ni de sortie de stock
     track_stock = models.BooleanField("Suivi du stock", default=True)
     receipt_slogan = models.CharField(max_length=120, blank=True, default="L'art du service")

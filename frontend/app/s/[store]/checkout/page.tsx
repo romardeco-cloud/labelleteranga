@@ -60,6 +60,9 @@ export default function CheckoutPage() {
       }
       if (method !== "card" && site.manual_payment_methods?.includes(method)) {
         const order = await createManualOrder(method, customer);
+        try {
+          localStorage.setItem(`lbt_pending_pay_${site.slug}`, order.reference);
+        } catch {}
         router.push(`${base}/checkout/success?order=${order.reference}`);
         return;
       }

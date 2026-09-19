@@ -47,6 +47,8 @@ export type StoreConfig = {
   prices_include_vat: boolean;
   payment_methods: PayMethodKey[];
   track_stock: boolean;
+  wave_pay_url: string;
+  orange_pay_url: string;
   receipt_slogan: string;
   receipt_footer: string;
   module_hold: boolean;

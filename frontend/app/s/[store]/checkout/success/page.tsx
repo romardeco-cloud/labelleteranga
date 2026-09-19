@@ -7,6 +7,7 @@ import { useSite } from "@/components/site/SiteContext";
 import Image from "next/image";
 import { Order, declarePayment, fetchOrder } from "@/lib/api";
 import { PAYMENT_QR } from "@/lib/branding";
+import { merchantPayLink } from "@/lib/site";
 
 const PAYMENT_LABELS: Record<string, string> = {
   card: "Carte bancaire",
@@ -21,8 +22,28 @@ function SuccessContent() {
   const reference = params.get("order");
   const [order, setOrder] = useState<Order | null>(null);
   const [txnRef, setTxnRef] = useState("");
+  const [redirecting, setRedirecting] = useState(false);
   const [declareError, setDeclareError] = useState("");
   const [declaring, setDeclaring] = useState(false);
+
+  // Ouverture automatique de l'application de paiement (une seule fois par commande)
+  const payLink =
+    order && (order.payment_method === "wave" || order.payment_method === "orange_money")
+      ? merchantPayLink(site, order.payment_method, Number(order.total_amount))
+      : null;
+  useEffect(() => {
+    if (!order || !payLink || order.status !== "pending" || order.payment_declared_at) return;
+    const key = `lbt_paylink_opened_${order.reference}`;
+    try {
+      if (sessionStorage.getItem(key)) return;
+      sessionStorage.setItem(key, "1");
+    } catch {}
+    setRedirecting(true);
+    const t = setTimeout(() => {
+      window.location.href = payLink;
+    }, 1800);
+    return () => clearTimeout(t);
+  }, [order, payLink]);
 
   async function submitDeclaration(e: React.FormEvent) {
     e.preventDefault();
@@ -126,8 +147,19 @@ function SuccessContent() {
       {isManual && isPending && order && !order.payment_declared_at && (
         <div className="bg-brand-light border border-brand-accent/50 rounded-lg p-4 mb-6 text-left">
           <p className="text-brand-dark font-medium text-center">Derniere etape : payez {new Intl.NumberFormat("fr-SN", { maximumFractionDigits: 0 }).format(Number(order.total_amount))} FCFA</p>
-          <ol className="text-sm text-gray-700 mt-2 list-decimal list-inside space-y-1">
-            <li>Ouvrez {PAYMENT_LABELS[order.payment_method]} et scannez le code ci-dessous.</li>
+          {payLink && (
+            <a
+              href={payLink}
+              className="mt-3 block w-full text-center bg-brand text-white py-3 rounded-lg font-semibold hover:bg-brand-dark"
+            >
+              {redirecting ? `Ouverture de ${PAYMENT_LABELS[order.payment_method]}...` : `Payer maintenant avec ${PAYMENT_LABELS[order.payment_method]}`}
+            </a>
+          )}
+          <p className="text-xs text-gray-500 mt-1 text-center">
+            Le compte marchand{order.payment_method === "wave" ? " et le montant sont deja remplis" : " est deja rempli : saisissez le montant indique"}.
+          </p>
+          <ol className="text-sm text-gray-700 mt-3 list-decimal list-inside space-y-1">
+            <li>{payLink ? `Payez dans l'application ${PAYMENT_LABELS[order.payment_method]} (ou scannez le code ci-dessous depuis un autre appareil).` : `Ouvrez ${PAYMENT_LABELS[order.payment_method]} et scannez le code ci-dessous.`}</li>
             <li>
               Payez exactement le montant indique et indiquez le numero de commande <strong>{order.order_number}</strong> si l&apos;application le permet.
             </li>

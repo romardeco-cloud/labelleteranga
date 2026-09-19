@@ -118,7 +118,7 @@ class InventoryCountDetailSerializer(InventoryCountSerializer):
 
 SETTINGS_FIELDS = [
     "timezone", "email", "legal_form", "share_capital", "ninea", "rccm", "vat_rate", "prices_include_vat",
-    "payment_methods", "track_stock", "receipt_slogan", "receipt_footer", "module_hold", "module_history", "module_qr",
+    "payment_methods", "wave_pay_url", "orange_pay_url", "track_stock", "receipt_slogan", "receipt_footer", "module_hold", "module_history", "module_qr",
     "module_dine_in", "module_customer_orders", "module_drawer", "module_xreport",
 ]
 
@@ -127,6 +127,18 @@ class StoreSettingsSerializer(serializers.ModelSerializer):
     class Meta:
         model = StoreSettings
         fields = SETTINGS_FIELDS
+
+    @staticmethod
+    def _https_only(value):
+        if value and not value.lower().startswith("https://"):
+            raise serializers.ValidationError("Le lien doit commencer par https://")
+        return value
+
+    def validate_wave_pay_url(self, value):
+        return self._https_only(value)
+
+    def validate_orange_pay_url(self, value):
+        return self._https_only(value)
 
     def validate_payment_methods(self, value):
         allowed = {"cash", "wave", "orange_money", "card"}
