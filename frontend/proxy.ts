@@ -11,9 +11,24 @@ const HOSTS: Record<string, string> = {
   depot: "depot",
 };
 
+// Espaces professionnels : admin.labelleteranga.com (administration) et caisse.labelleteranga.com (caisse).
+// L'adresse racine du sous-domaine ouvre directement l'espace ; les autres chemins (/admin/..., /caisse/...) fonctionnent tels quels.
+const APPS: Record<string, string> = { admin: "/admin", caisse: "/caisse" };
+
 export function proxy(req: NextRequest) {
   const host = (req.headers.get("host") ?? "").toLowerCase();
   const sub = host.split(".")[0];
+
+  const appPath = host.includes(".") ? APPS[sub] : undefined;
+  if (appPath) {
+    if (req.nextUrl.pathname === "/") {
+      const url = req.nextUrl.clone();
+      url.pathname = appPath;
+      return NextResponse.rewrite(url);
+    }
+    return NextResponse.next();
+  }
+
   const slug = host.includes(".") ? HOSTS[sub] : undefined;
   if (!slug) return NextResponse.next();
 
