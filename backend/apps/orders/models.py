@@ -51,7 +51,7 @@ class Order(models.Model):
     service_mode = models.CharField(max_length=10, choices=ServiceMode.choices, default=ServiceMode.DIRECT)
     table_label = models.CharField("Table", max_length=40, blank=True)
     customer_name = models.CharField(max_length=150)
-    customer_email = models.EmailField()
+    customer_email = models.EmailField(blank=True)
     customer_phone = models.CharField(max_length=30, blank=True)
     delivery_address = models.TextField(blank=True)
     delivery_latitude = models.DecimalField(max_digits=10, decimal_places=7, null=True, blank=True)

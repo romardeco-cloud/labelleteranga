@@ -145,9 +145,10 @@ export default function CheckoutPage() {
           />
         </div>
         <div>
-          <label className="block text-sm font-medium mb-1">Email</label>
+          <label className="block text-sm font-medium mb-1">
+            Email <span className="text-gray-400 font-normal">(facultatif)</span>
+          </label>
           <input
-            required
             type="email"
             value={form.customer_email}
             onChange={(e) => setForm({ ...form, customer_email: e.target.value })}
