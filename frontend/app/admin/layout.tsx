@@ -27,6 +27,7 @@ const MAIN_NAV: NavItem[] = [
   { href: "/admin/accounting", label: "Comptabilite", icon: "book", match: ACCOUNTING_PREFIXES },
   { href: "/admin/inventory", label: "Inventaire", icon: "clipboard" },
   { href: "/admin/products", label: "Produits", icon: "box" },
+  { href: "/admin/import", label: "Importer", icon: "archive" },
   { href: "/admin/categories", label: "Categories", icon: "list" },
   { href: "/admin/daily-menu", label: "Menu du jour", icon: "utensils" },
   { href: "/admin/combos", label: "Combos & evenements", icon: "gift" },

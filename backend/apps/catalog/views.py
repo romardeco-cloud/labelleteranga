@@ -5,7 +5,7 @@ from django_filters.rest_framework import DjangoFilterBackend
 from rest_framework import filters, permissions, status, viewsets
 from rest_framework.decorators import action
 from rest_framework.exceptions import ValidationError
-from rest_framework.parsers import MultiPartParser
+from rest_framework.parsers import FormParser, JSONParser, MultiPartParser
 from rest_framework.response import Response
 
 from apps.stores.models import PointOfSale
@@ -162,6 +162,42 @@ class ProductViewSet(viewsets.ModelViewSet):
         store = self._store_from(request.data.get("point_of_sale"))
         summary = import_products_from_excel(file_obj, store=store)
         return Response(summary, status=status.HTTP_200_OK)
+
+
+    @action(
+        detail=False,
+        methods=["post"],
+        permission_classes=[permissions.IsAdminUser],
+        parser_classes=[MultiPartParser, FormParser, JSONParser],
+        url_path="smart-import",
+    )
+    def smart_import(self, request):
+        """
+        Import intelligent (Excel, CSV, JSON, PDF, Word, texte, ZIP, images) en 3 etapes courtes :
+          step=analyze  files[], point_of_sale?, create_from_images? -> apercu + job_id (aucune ecriture)
+          step=rows     job_id -> cree / met a jour produits, categories, stocks
+          step=images   job_id -> rattache un lot de photos ; a rappeler tant que done=false
+        """
+        from . import smart_import as si
+
+        step = request.data.get("step", "analyze")
+        try:
+            if step == "analyze":
+                files = [(f.name, f.read()) for f in request.FILES.getlist("files")]
+                if not files:
+                    raise ValidationError({"files": "Ajoutez au moins un fichier."})
+                if sum(len(d) for _, d in files) > 80 * 1024 * 1024:
+                    raise ValidationError({"files": "Fichiers trop volumineux (80 Mo maximum)."})
+                store = self._store_from(request.data.get("point_of_sale") or None)
+                create_from_images = str(request.data.get("create_from_images", "")).lower() in ("1", "true", "yes", "on")
+                return Response(si.analyze(files, store=store, create_from_images=create_from_images))
+            if step == "rows":
+                return Response(si.run_rows(request.data.get("job_id")))
+            if step == "images":
+                return Response(si.run_images(request.data.get("job_id")))
+        except ValueError as exc:
+            raise ValidationError({"detail": str(exc)})
+        raise ValidationError({"step": "Etape inconnue."})
 
 
 class PromotionViewSet(viewsets.ModelViewSet):
