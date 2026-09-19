@@ -280,7 +280,18 @@ def seal_block():
     right_col = Table([[r] for r in right], colWidths=[col_w])
     right_col.setStyle(TableStyle([("ALIGN", (0, 0), (-1, -1), "CENTER"), ("LEFTPADDING", (0, 0), (-1, -1), 0), ("RIGHTPADDING", (0, 0), (-1, -1), 0), ("TOPPADDING", (0, 0), (-1, -1), 0), ("BOTTOMPADDING", (0, 0), (-1, -1), 0)]))
     box = Table([[Paragraph("<br/>".join(lines), BODY), right_col]], colWidths=[90 * mm, col_w + 2 * mm])
-    box.setStyle(TableStyle([("VALIGN", (0, 0), (-1, -1), "TOP"), ("ALIGN", (1, 0), (1, 0), "CENTER"), ("LEFTPADDING", (0, 0), (-1, -1), 0), ("RIGHTPADDING", (0, 0), (-1, -1), 0)]))
+    box.setStyle(
+        TableStyle(
+            [
+                ("VALIGN", (0, 0), (-1, -1), "TOP"),
+                ("ALIGN", (1, 0), (1, 0), "CENTER"),
+                ("LEFTPADDING", (0, 0), (-1, -1), 0),
+                ("RIGHTPADDING", (0, 0), (-1, -1), 0),
+                ("TOPPADDING", (0, 0), (-1, -1), 7),
+                ("LINEABOVE", (0, 0), (-1, 0), 0.9, colors.HexColor("#8a8a8a"), 1, (1.5, 3)),  # ligne en pointilles : separe le bloc du reste du document
+            ]
+        )
+    )
     return [BottomAligned(box)]
 
 

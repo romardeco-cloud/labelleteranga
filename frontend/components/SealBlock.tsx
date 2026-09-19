@@ -81,7 +81,7 @@ export default function SealBlock({ printOnly = false, fresh = false }: { printO
   const where = seal.place ? `Fait à ${seal.place}${seal.show_date ? ", le" : ""}` : seal.show_date ? "Le" : "";
   return (
     <>
-    <div className={`mt-10 flex flex-wrap items-start justify-between gap-6 text-sm text-gray-800 break-inside-avoid ${printOnly ? "hidden print:flex" : ""}`}>
+    <div className={`mt-10 flex flex-wrap items-start justify-between gap-6 border-t-2 border-dotted border-gray-400 pt-4 text-sm text-gray-800 break-inside-avoid ${printOnly ? "hidden print:flex" : ""}`}>
       <div>
         {show.mention && <p className="font-semibold">{seal.certified_text}</p>}
         {show.mention && (where || seal.show_date) && (
