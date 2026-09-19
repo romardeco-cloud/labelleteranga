@@ -47,19 +47,17 @@ export default function SealBlock({ printOnly = false, fresh = false }: { printO
           </p>
         )}
       </div>
-      <div className="flex flex-col items-end">
-        {(seal.signer_name || seal.signer_title) && (
-          <p className="text-right mb-2">
-            {seal.signer_name && <strong className="block">{seal.signer_name}</strong>}
-            {seal.signer_title}
-          </p>
+      <div className="flex flex-col items-center text-center w-72 max-w-full">
+        {seal.signer_name && <strong className="text-[15px] text-gray-900">{seal.signer_name}</strong>}
+        {seal.signer_title && <span className="text-gray-600 text-[13px]">{seal.signer_title}</span>}
+        {(seal.stamp || seal.signature) && (
+          <div className="relative mt-2 h-32 w-full bg-white">
+            {/* eslint-disable-next-line @next/next/no-img-element */}
+            {seal.stamp && <img src={seal.stamp} alt="Cachet de l'entreprise" className="absolute top-0 h-32 w-auto object-contain" style={{ left: seal.signature ? "16%" : "50%", transform: seal.signature ? "none" : "translateX(-50%)" }} />}
+            {/* eslint-disable-next-line @next/next/no-img-element */}
+            {seal.signature && <img src={seal.signature} alt="Signature" className="absolute w-[80%] object-contain" style={{ left: seal.stamp ? "18%" : "10%", top: seal.stamp ? "22%" : "0" }} />}
+          </div>
         )}
-        <div className="flex items-center gap-3 bg-white rounded">
-          {/* eslint-disable-next-line @next/next/no-img-element */}
-          {seal.stamp && <img src={seal.stamp} alt="Cachet de l'entreprise" className="h-24 w-auto object-contain" />}
-          {/* eslint-disable-next-line @next/next/no-img-element */}
-          {seal.signature && <img src={seal.signature} alt="Signature" className="h-16 w-auto object-contain" />}
-        </div>
       </div>
     </div>
   );

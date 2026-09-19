@@ -156,21 +156,51 @@ class BottomAligned(Flowable):
         self.content.drawOn(self.canv, 0, 0)
 
 
+class SealImages(Flowable):
+    """Cachet et signature centres l'un sur l'autre : la signature (transparente) se pose sur le cachet, comme sur un vrai document."""
+
+    def __init__(self, stamp_png, signature_png, width, height):
+        super().__init__()
+        self.stamp, self.signature = stamp_png, signature_png
+        self.width, self.height = width, height
+
+    def wrap(self, availWidth, availHeight):
+        return self.width, self.height
+
+    def _fit(self, blob, max_w, max_h):
+        from PIL import Image as PILImage
+
+        with PILImage.open(io.BytesIO(bytes(blob))) as im:
+            w, h = im.size
+        k = min(max_w / w, max_h / h)
+        return w * k, h * k
+
+    def draw(self):
+        from reportlab.lib.utils import ImageReader
+
+        c, W, H = self.canv, self.width, self.height
+        both = bool(self.stamp and self.signature)
+        if self.stamp:
+            sw, sh = self._fit(self.stamp, H * 0.98, H * 0.98)
+            # avec une signature : le cachet est legerement decale pour que la signature le recouvre a moitie
+            x = (W - sw) / 2 - (W * 0.08 if both else 0)
+            c.drawImage(ImageReader(io.BytesIO(bytes(self.stamp))), x, (H - sh) / 2, sw, sh, mask="auto")
+        if self.signature:
+            gw, gh = self._fit(self.signature, W * (0.78 if both else 0.9), H * (0.6 if both else 0.9))
+            x = (W - gw) / 2 + (W * 0.06 if both else 0)
+            y = (H - gh) / 2 - (H * 0.04 if both else 0)
+            c.drawImage(ImageReader(io.BytesIO(bytes(self.signature))), x, y, gw, gh, mask="auto")
+
+
 def seal_block():
     """Mention « Certifie conforme », date du jour, cachet et signature (si actives) : ajoutes automatiquement a chaque PDF."""
+    from reportlab.lib.enums import TA_CENTER
+
     from apps.stores.models import CompanySeal
 
     seal = CompanySeal.objects.first()
     if seal is None or not seal.enabled:
         return []
-
-    def img(blob, max_w, max_h):
-        from PIL import Image as PILImage
-
-        with PILImage.open(io.BytesIO(bytes(blob))) as im:
-            w, h = im.size
-        scale = min(max_w / w, max_h / h)
-        return Image(io.BytesIO(bytes(blob)), width=w * scale, height=h * scale)
 
     today = timezone.localdate()
     lines = [f"<b>{seal.certified_text or 'Certifié conforme'}</b>"]
@@ -179,20 +209,24 @@ def seal_block():
         lines.append(f"{where} {today.day} {MONTHS_FR[today.month - 1]} {today.year}")
     elif seal.place:
         lines.append(f"Fait à {seal.place}")
-    cells = []
-    both = bool(seal.stamp_png and seal.signature_png)
-    if seal.stamp_png:
-        cells.append(img(seal.stamp_png, 34 * mm if both else 42 * mm, 30 * mm if both else 34 * mm))
-    if seal.signature_png:
-        cells.append(img(seal.signature_png, 52 * mm if both else 72 * mm, 22 * mm if both else 26 * mm))
-    signer = "<br/>".join(x for x in (seal.signer_name and f"<b>{seal.signer_name}</b>", seal.signer_title) if x)
-    right = [cells] if cells else [[Spacer(1, 22 * mm)]]
-    inner = Table(right, hAlign="RIGHT")
-    inner.setStyle(TableStyle([("VALIGN", (0, 0), (-1, -1), "MIDDLE"), ("LEFTPADDING", (0, 0), (-1, -1), 4), ("RIGHTPADDING", (0, 0), (-1, -1), 4)]))
-    # nom et fonction du signataire AU-DESSUS du cachet et de la signature
-    rows = [[Paragraph("<br/>".join(lines), BODY), Paragraph(signer, RIGHT) if signer else ""], ["", inner]]
-    box = Table(rows, colWidths=[85 * mm, 89 * mm])
-    box.setStyle(TableStyle([("VALIGN", (0, 0), (-1, -1), "TOP"), ("ALIGN", (1, 0), (1, -1), "RIGHT"), ("LEFTPADDING", (0, 0), (-1, -1), 0), ("RIGHTPADDING", (0, 0), (-1, -1), 0)]))
+
+    name_style = ParagraphStyle("SealName", parent=BODY, alignment=TA_CENTER, fontName="Helvetica-Bold", fontSize=10.5, leading=13)
+    title_style = ParagraphStyle("SealTitle", parent=BODY, alignment=TA_CENTER, fontSize=8.5, leading=11, textColor=colors.HexColor("#555555"))
+    col_w = 82 * mm
+    right = []
+    if seal.signer_name:
+        right.append(Paragraph(seal.signer_name, name_style))
+    if seal.signer_title:
+        right.append(Paragraph(seal.signer_title, title_style))
+    if seal.stamp_png or seal.signature_png:
+        right.append(Spacer(1, 2 * mm))
+        right.append(SealImages(seal.stamp_png, seal.signature_png, col_w, 34 * mm if seal.stamp_png else 24 * mm))
+    else:
+        right.append(Spacer(1, 22 * mm))
+    right_col = Table([[r] for r in right], colWidths=[col_w])
+    right_col.setStyle(TableStyle([("ALIGN", (0, 0), (-1, -1), "CENTER"), ("LEFTPADDING", (0, 0), (-1, -1), 0), ("RIGHTPADDING", (0, 0), (-1, -1), 0), ("TOPPADDING", (0, 0), (-1, -1), 0), ("BOTTOMPADDING", (0, 0), (-1, -1), 0)]))
+    box = Table([[Paragraph("<br/>".join(lines), BODY), right_col]], colWidths=[90 * mm, col_w + 2 * mm])
+    box.setStyle(TableStyle([("VALIGN", (0, 0), (-1, -1), "TOP"), ("ALIGN", (1, 0), (1, 0), "CENTER"), ("LEFTPADDING", (0, 0), (-1, -1), 0), ("RIGHTPADDING", (0, 0), (-1, -1), 0)]))
     return [BottomAligned(box)]
 
 
