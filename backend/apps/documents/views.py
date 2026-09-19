@@ -73,7 +73,7 @@ class DocumentViewSet(AdminOnly):
         return document_pdf(self.pdf_kind, obj, self.get_serializer(obj).data)
 
     def get_queryset(self):
-        qs = super().get_queryset().select_related(self.party_field, "point_of_sale").prefetch_related("items")
+        qs = super().get_queryset().select_related(self.party_field, "point_of_sale").prefetch_related("items__product__category")
         p = self.request.query_params
         if p.get("start"):
             qs = qs.filter(date__gte=p["start"])

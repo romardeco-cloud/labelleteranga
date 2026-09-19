@@ -167,7 +167,15 @@ def document_pdf(kind, obj, data):
     story += [box, Spacer(1, 5 * mm)]
 
     rows = [["Designation", "Qte", "Prix unitaire", "Remise", "Total"]]
-    for it in data.get("items", []):
+    items = data.get("items", [])
+    group_rows, current = [], object()
+    has_categories = any(it.get("category") for it in items)
+    for it in items:
+        cat = it.get("category") or ("Autres articles" if has_categories else "")
+        if has_categories and cat != current:
+            current = cat
+            group_rows.append(len(rows))
+            rows.append([Paragraph(f"<b>{cat}</b>", BODY), "", "", "", ""])
         rows.append(
             [
                 P(it["description"]),
@@ -177,7 +185,13 @@ def document_pdf(kind, obj, data):
                 fmt(it["line_total"]),
             ]
         )
-    story.append(_table(rows, [80 * mm, 16 * mm, 32 * mm, 18 * mm, 28 * mm], align_right_cols=(1, 2, 3, 4)))
+    items_table = _table(rows, [80 * mm, 16 * mm, 32 * mm, 18 * mm, 28 * mm], align_right_cols=(1, 2, 3, 4), zebra=not group_rows)
+    if group_rows:
+        cmds = []
+        for r in group_rows:
+            cmds += [("SPAN", (0, r), (-1, r)), ("BACKGROUND", (0, r), (-1, r), LIGHT)]
+        items_table.setStyle(TableStyle(cmds))
+    story.append(items_table)
     story.append(Spacer(1, 3 * mm))
 
     tot = [["Sous-total", fmt(data["subtotal"])]]

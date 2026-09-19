@@ -39,6 +39,7 @@ export type Party = {
 };
 
 export type DocLine = {
+  category?: string;
   id?: number;
   product: number | null;
   description: string;

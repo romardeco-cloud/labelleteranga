@@ -3,7 +3,7 @@
 import Image from "next/image";
 import Link from "next/link";
 import { useParams, useRouter } from "next/navigation";
-import { useCallback, useEffect, useState } from "react";
+import { Fragment, useCallback, useEffect, useState } from "react";
 import PayBadge from "@/components/documents/PayBadge";
 import {
   DOC_CONFIG,
@@ -197,8 +197,16 @@ export default function DocumentDetailPage() {
             </tr>
           </thead>
           <tbody>
-            {doc.items.map((l) => (
-              <tr key={l.id} className="border-b">
+            {doc.items.map((l, idx) => (
+              <Fragment key={l.id}>
+                {(idx === 0 || (l.category || "") !== (doc.items[idx - 1].category || "")) && (doc.items.some((x) => x.category) || false) && (
+                  <tr className="bg-gray-100 print:bg-gray-100">
+                    <td colSpan={isPO ? 6 : 5} className="py-1 px-1 font-semibold text-gray-700">
+                      {l.category || "Autres articles"}
+                    </td>
+                  </tr>
+                )}
+              <tr className="border-b">
                 <td className="py-1.5">{l.description}</td>
                 <td className="py-1.5 text-right">{Number(l.quantity)}</td>
                 <td className="py-1.5 text-right">{formatXof(l.unit_price)}</td>
@@ -210,6 +218,7 @@ export default function DocumentDetailPage() {
                   </td>
                 )}
               </tr>
+              </Fragment>
             ))}
           </tbody>
         </table>

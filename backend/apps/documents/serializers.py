@@ -33,10 +33,39 @@ class SupplierSerializer(serializers.ModelSerializer):
         fields = ["id", "name", "phone", "email", "address", "tax_id", "notes", "created_at"]
 
 
-LINE_FIELDS = ["id", "product", "description", "quantity", "unit_price", "discount_percent", "line_total"]
+LINE_FIELDS = ["id", "product", "description", "quantity", "unit_price", "discount_percent", "line_total", "category"]
 
 
-class QuoteItemSerializer(serializers.ModelSerializer):
+def _sort_key(line):
+    """Categorie (A-Z, sans categorie a la fin) puis designation (A-Z, sans accents ni majuscules), quel que soit l'ordre de saisie."""
+    import unicodedata
+
+    def n(text):
+        return unicodedata.normalize("NFKD", text or "").encode("ascii", "ignore").decode().lower()
+
+    cat = line.get("category") or ""
+    return (cat == "", n(cat), n(line.get("description")))
+
+
+class SortedItemsMixin:
+    """Les lignes d'un document sont renvoyees rangees par categorie puis par ordre alphabetique."""
+
+    def to_representation(self, instance):
+        data = super().to_representation(instance)
+        if isinstance(data.get("items"), list):
+            data["items"] = sorted(data["items"], key=_sort_key)
+        return data
+
+
+class CategoryFieldMixin(serializers.Serializer):
+    category = serializers.SerializerMethodField()
+
+    def get_category(self, line):
+        product = getattr(line, "product", None)
+        return product.category.name if product and product.category_id else ""
+
+
+class QuoteItemSerializer(CategoryFieldMixin, serializers.ModelSerializer):
     line_total = serializers.DecimalField(max_digits=14, decimal_places=2, read_only=True)
 
     class Meta:
@@ -44,7 +73,7 @@ class QuoteItemSerializer(serializers.ModelSerializer):
         fields = LINE_FIELDS
 
 
-class InvoiceItemSerializer(serializers.ModelSerializer):
+class InvoiceItemSerializer(CategoryFieldMixin, serializers.ModelSerializer):
     line_total = serializers.DecimalField(max_digits=14, decimal_places=2, read_only=True)
 
     class Meta:
@@ -52,7 +81,7 @@ class InvoiceItemSerializer(serializers.ModelSerializer):
         fields = LINE_FIELDS
 
 
-class PurchaseOrderItemSerializer(serializers.ModelSerializer):
+class PurchaseOrderItemSerializer(CategoryFieldMixin, serializers.ModelSerializer):
     line_total = serializers.DecimalField(max_digits=14, decimal_places=2, read_only=True)
 
     class Meta:
@@ -113,7 +142,7 @@ def _int_quantity(item):
     return int(q)
 
 
-class QuoteSerializer(TotalsMixin, serializers.ModelSerializer):
+class QuoteSerializer(SortedItemsMixin, TotalsMixin, serializers.ModelSerializer):
     items = QuoteItemSerializer(many=True)
     customer_name = serializers.CharField(source="customer.name", read_only=True)
     status_label = serializers.CharField(source="get_status_display", read_only=True)
@@ -161,7 +190,7 @@ class QuoteSerializer(TotalsMixin, serializers.ModelSerializer):
         return instance
 
 
-class InvoiceSerializer(TotalsMixin, serializers.ModelSerializer):
+class InvoiceSerializer(SortedItemsMixin, TotalsMixin, serializers.ModelSerializer):
     items = InvoiceItemSerializer(many=True)
     payments = InvoicePaymentSerializer(many=True, read_only=True)
     customer_name = serializers.CharField(source="customer.name", read_only=True)
@@ -214,7 +243,7 @@ class InvoiceSerializer(TotalsMixin, serializers.ModelSerializer):
         return instance
 
 
-class PurchaseOrderSerializer(TotalsMixin, serializers.ModelSerializer):
+class PurchaseOrderSerializer(SortedItemsMixin, TotalsMixin, serializers.ModelSerializer):
     items = PurchaseOrderItemSerializer(many=True)
     payments = PurchaseOrderPaymentSerializer(many=True, read_only=True)
     supplier_name = serializers.CharField(source="supplier.name", read_only=True)

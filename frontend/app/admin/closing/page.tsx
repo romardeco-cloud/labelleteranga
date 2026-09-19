@@ -2,6 +2,7 @@
 
 import { useEffect, useState } from "react";
 import CashierTills from "@/components/admin/CashierTills";
+import StoreGaps from "@/components/admin/StoreGaps";
 import { openPdf } from "@/lib/documents";
 import {
   ClosingPreview,
@@ -113,6 +114,8 @@ export default function AdminClosingPage() {
           ))}
         </select>
       </div>
+
+      <StoreGaps date={date} />
 
       <CashierTills date={date} storeId={storeId} onChanged={loadHistory} />
 

@@ -323,6 +323,74 @@ class DailyClosingViewSet(viewsets.ModelViewSet):
             )
         return Response(rows)
 
+    @action(detail=False, methods=["get"], url_path="store-gaps")
+    def store_gaps(self, request):
+        """
+        GET ?start=&end= (defaut : aujourd'hui) : ecart de caisse de chaque point de vente, detaille par moyen de paiement
+        (especes, Wave, Orange Money, carte), avec le detail de chaque fermeture (caissier, jour). Pour un meme jour et
+        un meme point de vente, ce sont les fermetures des caissiers qui comptent ; a defaut, la cloture globale.
+        """
+        from apps.accounts.models import CashierProfile
+        from apps.stores.models import PointOfSale
+
+        start = self._date_param(request.query_params.get("start"))
+        end = self._date_param(request.query_params.get("end") or request.query_params.get("start"))
+        if end < start:
+            start, end = end, start
+        methods = ("cash", "wave", "orange_money", "card")
+
+        def gaps(c):
+            return {m: float(getattr(c, f"declared_{m}") - getattr(c, f"expected_{m}")) for m in methods}
+
+        groups = {}
+        for c in DailyClosing.objects.filter(date__gte=start, date__lte=end).select_related("point_of_sale", "cashier"):
+            groups.setdefault((c.point_of_sale_id, c.date), []).append(c)
+
+        stores = {s.id: s for s in PointOfSale.objects.filter(is_active=True)}
+        out = {sid: None for sid in stores}
+        for (sid, day), rows in groups.items():
+            used = [c for c in rows if c.cashier_id] or rows
+            entry = out.get(sid)
+            if entry is None:
+                name = stores[sid].name if sid in stores else (rows[0].point_of_sale.name if rows[0].point_of_sale else "En ligne (non affecte)")
+                entry = out[sid] = {"point_of_sale": sid, "name": name, "closings": 0, "expected": dict.fromkeys(methods, 0.0), "declared": dict.fromkeys(methods, 0.0), "gap": dict.fromkeys(methods, 0.0), "details": []}
+            for c in sorted(used, key=lambda c: (c.cashier.username if c.cashier else "")):
+                entry["closings"] += 1
+                g = gaps(c)
+                for m in methods:
+                    entry["expected"][m] += float(getattr(c, f"expected_{m}"))
+                    entry["declared"][m] += float(getattr(c, f"declared_{m}"))
+                    entry["gap"][m] += g[m]
+                entry["details"].append(
+                    {
+                        "id": c.id,
+                        "date": c.date,
+                        "cashier": c.cashier.username if c.cashier else None,
+                        "expected": {m: float(getattr(c, f"expected_{m}")) for m in methods},
+                        "declared": {m: float(getattr(c, f"declared_{m}")) for m in methods},
+                        "gap": g,
+                        "gap_total": sum(g.values()),
+                        "notes": c.notes,
+                    }
+                )
+        # caisses ouvertes (sans fermeture) le dernier jour de la periode
+        profiles = CashierProfile.objects.select_related("user").filter(is_active=True)
+        open_tills = {}
+        for pr in profiles:
+            if not DailyClosing.objects.filter(date=end, point_of_sale_id=pr.point_of_sale_id, cashier=pr.user).exists():
+                open_tills.setdefault(pr.point_of_sale_id, []).append(pr.user.username)
+        rows = []
+        for sid, entry in out.items():
+            if entry is None:
+                entry = {"point_of_sale": sid, "name": stores[sid].name, "closings": 0, "expected": dict.fromkeys(methods, 0.0), "declared": dict.fromkeys(methods, 0.0), "gap": dict.fromkeys(methods, 0.0), "details": []}
+            entry["gap_total"] = sum(entry["gap"].values())
+            entry["open_tills"] = open_tills.get(sid, [])
+            entry["details"].sort(key=lambda d: (d["date"], d["cashier"] or ""), reverse=True)
+            rows.append(entry)
+        rows.sort(key=lambda r: r["name"])
+        totals = {m: sum(r["gap"][m] for r in rows) for m in methods}
+        return Response({"start": start, "end": end, "stores": rows, "totals": {**totals, "total": sum(totals.values())}})
+
     @action(detail=False, methods=["get"], url_path="cashier-preview")
     def cashier_preview(self, request):
         """GET ?date=&cashier=<id> : montants attendus pour la caisse de ce caissier (l'administrateur les voit)."""
