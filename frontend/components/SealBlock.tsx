@@ -10,6 +10,9 @@ export type Seal = {
   signer_name: string;
   signer_title: string;
   legal_line?: string;
+  contact_address?: string;
+  contact_phone?: string;
+  contact_whatsapp?: string;
   place: string;
   certified_text: string;
   show_date: boolean;
@@ -37,9 +40,18 @@ export default function SealBlock({ printOnly = false, fresh = false }: { printO
       .catch(() => {});
   }, [fresh]);
 
-  if (!seal || !seal.enabled) return null;
+  if (!seal) return null;
+  const contact = [seal.contact_address, seal.contact_phone && `Tél : ${seal.contact_phone}`, seal.contact_whatsapp && `WhatsApp : ${seal.contact_whatsapp}`].filter(Boolean).join("  |  ");
+  const footer = (contact || seal.legal_line) && (
+    <div className={`mt-6 border-t border-gray-300 pt-2 text-center text-[11px] leading-snug text-gray-600 break-inside-avoid ${printOnly ? "hidden print:block" : ""}`}>
+      {contact && <p>{contact}</p>}
+      {seal.legal_line && <p>{seal.legal_line}</p>}
+    </div>
+  );
+  if (!seal.enabled) return footer || null;
   const where = seal.place ? `Fait à ${seal.place}${seal.show_date ? ", le" : ""}` : seal.show_date ? "Le" : "";
   return (
+    <>
     <div className={`mt-10 flex flex-wrap items-start justify-between gap-6 text-sm text-gray-800 break-inside-avoid ${printOnly ? "hidden print:flex" : ""}`}>
       <div>
         <p className="font-semibold">{seal.certified_text}</p>
@@ -52,7 +64,6 @@ export default function SealBlock({ printOnly = false, fresh = false }: { printO
       <div className="flex flex-col items-center text-center w-72 max-w-full">
         {seal.signer_name && <strong className="text-[15px] text-gray-900">{seal.signer_name}</strong>}
         {seal.signer_title && <span className="text-gray-600 text-[13px]">{seal.signer_title}</span>}
-        {seal.legal_line && <span className="text-gray-500 text-[10px] leading-tight">{seal.legal_line}</span>}
         {(seal.stamp || seal.signature) && (
           <div className="mt-2 grid w-full place-items-center bg-white">
             {/* eslint-disable-next-line @next/next/no-img-element */}
@@ -63,5 +74,7 @@ export default function SealBlock({ printOnly = false, fresh = false }: { printO
         )}
       </div>
     </div>
+    {footer}
+    </>
   );
 }

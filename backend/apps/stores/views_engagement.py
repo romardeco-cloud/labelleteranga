@@ -398,6 +398,9 @@ def seal_payload(seal):
         "signer_name": seal.signer_name,
         "signer_title": seal.signer_title,
         "legal_line": seal.legal_line,
+        "contact_address": seal.contact_address,
+        "contact_phone": seal.contact_phone,
+        "contact_whatsapp": seal.contact_whatsapp,
         "place": seal.place,
         "certified_text": seal.certified_text,
         "show_date": seal.show_date,
@@ -452,7 +455,7 @@ class CompanySealView(APIView):
         seal.stamp_color = stamp_color
         if seal.stamp_source:
             seal.stamp_png = tint_stamp(seal.stamp_source, stamp_color)
-        for f, mx in (("signer_name", 120), ("signer_title", 120), ("legal_line", 160), ("place", 80), ("certified_text", 80)):
+        for f, mx in (("signer_name", 120), ("signer_title", 120), ("legal_line", 160), ("contact_address", 200), ("contact_phone", 60), ("contact_whatsapp", 60), ("place", 80), ("certified_text", 80)):
             if f in d:
                 setattr(seal, f, str(d.get(f) or "").strip()[:mx])
         if not seal.certified_text:

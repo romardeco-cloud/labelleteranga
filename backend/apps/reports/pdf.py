@@ -125,12 +125,37 @@ def letterhead(store=None):
     return t
 
 
+def _footer_lines():
+    """Pied de page de chaque page : adresse, telephone, WhatsApp, courriel, puis RCCM / NINEA (saisis dans Admin > Cachet et signature)."""
+    try:
+        from apps.stores.models import CompanySeal
+
+        seal = CompanySeal.objects.first()
+    except Exception:
+        seal = None
+    parts = []
+    if seal:
+        if seal.contact_address:
+            parts.append(seal.contact_address)
+        if seal.contact_phone:
+            parts.append(f"Tel : {seal.contact_phone}")
+        if seal.contact_whatsapp:
+            parts.append(f"WhatsApp : {seal.contact_whatsapp}")
+    parts.append(CONTACT_EMAIL)
+    contact = "La Belle Teranga - " + "  |  ".join(parts) if len(parts) == 1 else "  |  ".join(parts)
+    return contact, (seal.legal_line if seal else "")
+
+
 def _footer(canvas, doc):
     canvas.saveState()
     canvas.setFont("Helvetica", 7.5)
     canvas.setFillColor(colors.HexColor("#777777"))
-    canvas.drawString(18 * mm, 10 * mm, f"La Belle Teranga - L'art du service - {CONTACT_EMAIL}")
-    canvas.drawRightString(A4[0] - 18 * mm, 10 * mm, f"Page {doc.page}")
+    contact, legal = _footer_lines()
+    mid = A4[0] / 2
+    canvas.drawCentredString(mid, 13.5 * mm, contact)
+    if legal:
+        canvas.drawCentredString(mid, 9.5 * mm, legal)
+    canvas.drawRightString(A4[0] - 18 * mm, 5.5 * mm, f"Page {doc.page}")
     canvas.restoreState()
 
 
@@ -217,8 +242,6 @@ def seal_block():
         right.append(Paragraph(seal.signer_name, name_style))
     if seal.signer_title:
         right.append(Paragraph(seal.signer_title, title_style))
-    if seal.legal_line:
-        right.append(Paragraph(seal.legal_line, ParagraphStyle("SealLegal", parent=title_style, fontSize=7.2, leading=9, textColor=colors.HexColor("#777777"))))
     if seal.stamp_png or seal.signature_png:
         right.append(Spacer(1, 2 * mm))
         right.append(SealImages(seal.stamp_png, seal.signature_png, col_w, 34 * mm if seal.stamp_png else 24 * mm))

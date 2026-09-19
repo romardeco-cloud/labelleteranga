@@ -36,6 +36,9 @@ export default function SealPage() {
       f.append("signer_name", seal.signer_name);
       f.append("signer_title", seal.signer_title);
       f.append("legal_line", seal.legal_line ?? "");
+      f.append("contact_address", seal.contact_address ?? "");
+      f.append("contact_phone", seal.contact_phone ?? "");
+      f.append("contact_whatsapp", seal.contact_whatsapp ?? "");
       f.append("place", seal.place);
       f.append("certified_text", seal.certified_text);
       f.append("keep_background", String(keepBg));
@@ -142,10 +145,6 @@ export default function SealPage() {
           <span className="block text-gray-400 mb-1">Fonction</span>
           <input value={seal.signer_title} onChange={(e) => set("signer_title", e.target.value)} placeholder="Ex. Gerant" className="w-full border rounded-lg px-3 py-2" />
         </label>
-        <label className="text-sm block sm:col-span-2">
-          <span className="block text-gray-400 mb-1">Identifiants legaux (sous la fonction)</span>
-          <input value={seal.legal_line ?? ""} onChange={(e) => set("legal_line", e.target.value)} placeholder="RCCM ... · NINEA ..." className="w-full border rounded-lg px-3 py-2" />
-        </label>
         <label className="text-sm block">
           <span className="block text-gray-400 mb-1">Ville (Fait a ...)</span>
           <input value={seal.place} onChange={(e) => set("place", e.target.value)} placeholder="Ex. Ziguinchor" className="w-full border rounded-lg px-3 py-2" />
@@ -154,6 +153,30 @@ export default function SealPage() {
           <span className="block text-gray-400 mb-1">Mention</span>
           <input value={seal.certified_text} onChange={(e) => set("certified_text", e.target.value)} className="w-full border rounded-lg px-3 py-2" />
         </label>
+      </div>
+      <div className="border rounded-2xl bg-[#1c1514] p-4 space-y-3">
+        <div>
+          <p className="font-medium">Pied de page de chaque document</p>
+          <p className="text-xs text-gray-500">Affiche tout en bas de chaque page des PDF, avec le courriel de l&apos;entreprise. Laissez un champ vide pour ne pas l&apos;afficher.</p>
+        </div>
+        <div className="grid sm:grid-cols-2 gap-4">
+          <label className="text-sm block sm:col-span-2">
+            <span className="block text-gray-400 mb-1">Adresse</span>
+            <input value={seal.contact_address ?? ""} onChange={(e) => set("contact_address", e.target.value)} placeholder="Ex. Quartier ..., Ziguinchor, Senegal" className="w-full border rounded-lg px-3 py-2" />
+          </label>
+          <label className="text-sm block">
+            <span className="block text-gray-400 mb-1">Telephone</span>
+            <input value={seal.contact_phone ?? ""} onChange={(e) => set("contact_phone", e.target.value)} placeholder="Ex. +221 77 000 00 00" className="w-full border rounded-lg px-3 py-2" />
+          </label>
+          <label className="text-sm block">
+            <span className="block text-gray-400 mb-1">WhatsApp</span>
+            <input value={seal.contact_whatsapp ?? ""} onChange={(e) => set("contact_whatsapp", e.target.value)} placeholder="Ex. +221 78 000 00 00" className="w-full border rounded-lg px-3 py-2" />
+          </label>
+          <label className="text-sm block sm:col-span-2">
+            <span className="block text-gray-400 mb-1">Identifiants legaux (RCCM, NINEA)</span>
+            <input value={seal.legal_line ?? ""} onChange={(e) => set("legal_line", e.target.value)} placeholder="RCCM ... · NINEA ..." className="w-full border rounded-lg px-3 py-2" />
+          </label>
+        </div>
       </div>
       <label className="flex items-center gap-2 text-sm">
         <input type="checkbox" checked={seal.show_date} onChange={(e) => set("show_date", e.target.checked)} /> Afficher la date du jour (mise a jour automatiquement a chaque impression)
