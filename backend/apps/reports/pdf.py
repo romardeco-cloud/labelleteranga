@@ -113,10 +113,12 @@ def letterhead(store=None):
         contact.append(f"Tel : {phone}")
     if company and company.contact_whatsapp:
         contact.append(f"WhatsApp : {company.contact_whatsapp}")
-    contact.append(f"Email : {(company.contact_email if company and company.contact_email else (st.email if st and st.email else CONTACT_EMAIL))}")
+    if contact:
+        lines.append(" - ".join(contact))  # telephone et WhatsApp sur une ligne
+    web = [f"Email : {(company.contact_email if company and company.contact_email else (st.email if st and st.email else CONTACT_EMAIL))}"]
     if company and company.contact_website:
-        contact.append(company.contact_website)
-    lines.append(" - ".join(contact))
+        web.append(company.contact_website)
+    lines.append(" - ".join(web))  # courriel et site web a la ligne
     legal = []
     if st:
         if st.legal_form:
