@@ -181,14 +181,13 @@ class SealImages(Flowable):
         c, W, H = self.canv, self.width, self.height
         both = bool(self.stamp and self.signature)
         if self.stamp:
-            sw, sh = self._fit(self.stamp, W * (0.62 if both else 0.7), H * 0.98)
-            # avec une signature : le cachet est legerement decale pour que la signature le recouvre a moitie
-            x = (W - sw) / 2 - (W * 0.08 if both else 0)
+            sw, sh = self._fit(self.stamp, W * 0.62, H * 0.98)
+            x = (W - sw) / 2  # meme axe vertical que le nom et la fonction
             c.drawImage(ImageReader(io.BytesIO(bytes(self.stamp))), x, (H - sh) / 2, sw, sh, mask="auto")
         if self.signature:
-            gw, gh = self._fit(self.signature, W * (0.78 if both else 0.9), H * (0.6 if both else 0.9))
-            x = (W - gw) / 2 + (W * 0.06 if both else 0)
-            y = (H - gh) / 2 - (H * 0.04 if both else 0)
+            gw, gh = self._fit(self.signature, W * (0.7 if both else 0.9), H * (0.55 if both else 0.9))
+            x = (W - gw) / 2
+            y = (H - gh) / 2 - (H * 0.08 if both else 0)
             c.drawImage(ImageReader(io.BytesIO(bytes(self.signature))), x, y, gw, gh, mask="auto")
 
 

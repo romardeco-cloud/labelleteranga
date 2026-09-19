@@ -52,11 +52,11 @@ export default function SealBlock({ printOnly = false, fresh = false }: { printO
         {seal.signer_name && <strong className="text-[15px] text-gray-900">{seal.signer_name}</strong>}
         {seal.signer_title && <span className="text-gray-600 text-[13px]">{seal.signer_title}</span>}
         {(seal.stamp || seal.signature) && (
-          <div className="relative mt-2 h-32 w-full bg-white">
+          <div className="mt-2 grid w-full place-items-center bg-white">
             {/* eslint-disable-next-line @next/next/no-img-element */}
-            {seal.stamp && <img src={seal.stamp} alt="Cachet de l'entreprise" className="absolute top-0 h-32 w-auto max-w-[66%] object-contain" style={{ left: seal.signature ? "16%" : "50%", transform: seal.signature ? "none" : "translateX(-50%)" }} />}
+            {seal.stamp && <img src={seal.stamp} alt="Cachet de l'entreprise" className="col-start-1 row-start-1 h-32 w-auto max-w-[62%] object-contain" />}
             {/* eslint-disable-next-line @next/next/no-img-element */}
-            {seal.signature && <img src={seal.signature} alt="Signature" className="absolute w-[80%] object-contain" style={{ left: seal.stamp ? "18%" : "10%", top: seal.stamp ? "22%" : "0" }} />}
+            {seal.signature && <img src={seal.signature} alt="Signature" className={`col-start-1 row-start-1 object-contain ${seal.stamp ? "w-[70%] max-h-[70px] translate-y-3" : "w-[90%] max-h-24"}`} />}
           </div>
         )}
       </div>
