@@ -3,6 +3,7 @@
 import Image from "next/image";
 import { useEffect, useState } from "react";
 import ProductCard from "@/components/ProductCard";
+import DailyMenus from "@/components/site/DailyMenus";
 import { useSite } from "@/components/site/SiteContext";
 import { Product, fetchProducts } from "@/lib/api";
 import { storeImage } from "@/lib/branding";
@@ -55,6 +56,7 @@ export default function StoreHomePage() {
       </div>
 
       <div className="max-w-6xl mx-auto px-4 py-8">
+        <DailyMenus />
         <input
           type="search"
           placeholder={isResto ? "Rechercher un plat..." : "Rechercher un produit..."}

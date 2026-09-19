@@ -7,6 +7,7 @@ from apps.catalog.models import Product
 from apps.orders.models import Order
 from apps.stores.models import UNLIMITED_STOCK, DrawerOpening, Stock, StoreCategory, tracks_stock
 from apps.stores.serializers import pos_settings
+from apps.stores.services import price_for, special_prices_map
 
 from django.utils import timezone
 
@@ -31,13 +32,13 @@ class POSProductListView(APIView):
         qs = qs.order_by("name")[:1000]
 
         tracked = tracks_stock(store)
+        specials = special_prices_map(store)
         stock_by_product = dict(
             Stock.objects.filter(point_of_sale=store, product__in=qs).values_list("product_id", "quantity")
         )
         results = []
         for p in qs:
-            promo = p.active_promotion(store)
-            price = promo.discounted_price(p.price) if promo else p.price
+            price, promo_label = price_for(p, store, specials)
             results.append(
                 {
                     "id": p.id,
@@ -47,17 +48,22 @@ class POSProductListView(APIView):
                     "unit": p.unit,
                     "price": str(p.price),
                     "effective_price": str(price),
-                    "promotion": promo.name if promo else None,
+                    "promotion": promo_label,
                     "stock": stock_by_product.get(p.id, 0) if tracked else UNLIMITED_STOCK,
                     "image": request.build_absolute_uri(p.image.url) if p.image else None,
                 }
             )
+        from apps.stores.models import DailyMenu
+
+        daily = {"lunch": [], "special": []}
+        for menu in DailyMenu.objects.filter(point_of_sale=store, date=timezone.localdate(), is_published=True):
+            daily[menu.kind] = [{"product": i.product_id, "number": i.number} for i in menu.items.all()]
         categories = [
             {"name": l.category.name, "order": l.order}
             for l in StoreCategory.objects.filter(point_of_sale=store).select_related("category")
         ]
         return Response(
-            {"point_of_sale": store.name, "results": results, "categories": categories, "settings": pos_settings(store)}
+            {"point_of_sale": store.name, "results": results, "categories": categories, "settings": pos_settings(store), "daily_menu": daily}
         )
 
 

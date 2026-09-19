@@ -49,6 +49,8 @@ export type StoreConfig = {
   track_stock: boolean;
   wave_pay_url: string;
   orange_pay_url: string;
+  wave_number: string;
+  orange_number: string;
   receipt_slogan: string;
   receipt_footer: string;
   module_hold: boolean;
@@ -77,4 +79,56 @@ export async function saveSecurityCode(newPin: string, currentPin?: string) {
 export type StaffUser = { id: number; username: string; email: string; role: string; last_login: string | null };
 export async function fetchStaff() {
   return (await api.get<StaffUser[]>("/accounts/staff/")).data;
+}
+
+/* ---------- Menu du jour / Speciaux du jour ---------- */
+export type MenuKind = "lunch" | "special";
+
+export type DailyMenuItem = {
+  number: number;
+  special_price: string | null;
+  product: {
+    id: number;
+    name: string;
+    image: string | null;
+    price: string;
+    effective_price: string;
+    active_promotion_name: string | null;
+    category: { id: number; name: string } | null;
+    in_stock: boolean;
+    description: string;
+  };
+};
+
+export type DailyMenu = {
+  id: number;
+  date: string;
+  kind: MenuKind;
+  title: string;
+  note: string;
+  is_published: boolean;
+  items: DailyMenuItem[];
+};
+
+export async function fetchDailyMenuAdmin(storeId: number, date: string, kind: MenuKind) {
+  return (
+    await api.get<{ menu: DailyMenu | null; previous: { product: number; special_price: string | null }[]; previous_date: string | null }>(
+      "/stores/daily-menus/",
+      { params: { point_of_sale: storeId, date, kind } }
+    )
+  ).data;
+}
+export async function saveDailyMenu(payload: {
+  point_of_sale: number;
+  date: string;
+  kind: MenuKind;
+  title: string;
+  note: string;
+  is_published: boolean;
+  items: { product: number; special_price?: string | number | null }[];
+}) {
+  return (await api.post<DailyMenu>("/stores/daily-menus/", payload)).data;
+}
+export async function deleteDailyMenu(storeId: number, date: string, kind: MenuKind) {
+  await api.delete("/stores/daily-menus/", { params: { point_of_sale: storeId, date, kind } });
 }

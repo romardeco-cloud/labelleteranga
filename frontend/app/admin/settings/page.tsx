@@ -57,7 +57,7 @@ const MODULES: { key: keyof StoreConfig; label: string; hint: string }[] = [
 
 const EDITABLE: (keyof StoreConfig)[] = [
   "name", "address", "phone", "slug", "online_enabled", "description", "timezone", "email", "legal_form", "share_capital", "ninea", "rccm", "vat_rate",
-  "prices_include_vat", "payment_methods", "wave_pay_url", "orange_pay_url", "track_stock", "receipt_slogan", "receipt_footer",
+  "prices_include_vat", "payment_methods", "wave_pay_url", "orange_pay_url", "wave_number", "orange_number", "track_stock", "receipt_slogan", "receipt_footer",
   "module_hold", "module_history", "module_qr", "module_dine_in", "module_customer_orders", "module_drawer", "module_xreport",
 ];
 
@@ -327,6 +327,12 @@ export default function AdminSettingsPage() {
             </Field>
             <Field label="Lien de paiement Orange Money / Max it">
               <input value={cfg.orange_pay_url} onChange={(e) => set("orange_pay_url", e.target.value)} placeholder="https://qrcode.orange.sn/..." className={inputCls} />
+            </Field>
+            <Field label="Numero marchand Wave (paiement avec le numero)">
+              <input value={cfg.wave_number ?? ""} onChange={(e) => set("wave_number", e.target.value)} placeholder="77 000 00 00" className={inputCls} />
+            </Field>
+            <Field label="Numero marchand Orange Money (paiement avec le numero)">
+              <input value={cfg.orange_number ?? ""} onChange={(e) => set("orange_number", e.target.value)} placeholder="77 000 00 00" className={inputCls} />
             </Field>
           </Card>
           <Card icon="wallet" title="Moyens de paiement acceptes a la caisse" tone="text-emerald-400">

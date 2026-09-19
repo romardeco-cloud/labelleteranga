@@ -33,12 +33,15 @@ def create_order_from_cart(session_key, customer_data, payment_method, clear_car
         payment_method=payment_method,
     )
 
+    from apps.stores.services import price_for, special_prices_map
+
+    specials = special_prices_map(cart.point_of_sale)
     for cart_item in items:
         OrderItem.objects.create(
             order=order,
             product=cart_item.product,
             product_name=cart_item.product.name,
-            unit_price=cart_item.product.price,
+            unit_price=price_for(cart_item.product, cart.point_of_sale, specials)[0],
             quantity=cart_item.quantity,
         )
 

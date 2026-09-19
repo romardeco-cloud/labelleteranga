@@ -28,6 +28,7 @@ const MAIN_NAV: NavItem[] = [
   { href: "/admin/inventory", label: "Inventaire", icon: "clipboard" },
   { href: "/admin/products", label: "Produits", icon: "box" },
   { href: "/admin/categories", label: "Categories", icon: "list" },
+  { href: "/admin/daily-menu", label: "Menu du jour", icon: "utensils" },
   { href: "/admin/promotions", label: "Promotions", icon: "tag" },
   { href: "/admin/orders", label: "Commandes", icon: "cart" },
   { href: "/admin/cashiers", label: "Caissiers", icon: "users" },

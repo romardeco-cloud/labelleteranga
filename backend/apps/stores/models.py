@@ -143,6 +143,9 @@ class StoreSettings(models.Model):
     # le client est envoye directement dans son application avec le compte marchand et le montant
     wave_pay_url = models.URLField("Lien de paiement Wave", max_length=300, blank=True)
     orange_pay_url = models.URLField("Lien de paiement Orange Money / Max it", max_length=300, blank=True)
+    # numeros marchands : le client peut aussi payer en saisissant ce numero dans son application
+    wave_number = models.CharField("Numero marchand Wave", max_length=30, blank=True)
+    orange_number = models.CharField("Numero marchand Orange Money", max_length=30, blank=True)
     # suivi du stock : desactive (restaurant, plats faits a la commande) => jamais de rupture ni de sortie de stock
     track_stock = models.BooleanField("Suivi du stock", default=True)
     receipt_slogan = models.CharField(max_length=120, blank=True, default="L'art du service")
@@ -183,3 +186,41 @@ class DrawerOpening(models.Model):
 
     class Meta:
         ordering = ["-created_at"]
+
+
+class DailyMenu(models.Model):
+    """
+    Selection du jour d'un point de vente, affichee dans l'application :
+    - "lunch"   : menu du midi (plats numerotes) ;
+    - "special" : specials du jour (produits mis en avant, avec un prix special facultatif).
+    """
+
+    class Kind(models.TextChoices):
+        LUNCH = "lunch", "Menu du midi"
+        SPECIAL = "special", "Speciaux du jour"
+
+    point_of_sale = models.ForeignKey(PointOfSale, related_name="daily_menus", on_delete=models.CASCADE)
+    date = models.DateField()
+    kind = models.CharField(max_length=10, choices=Kind.choices, default=Kind.LUNCH)
+    title = models.CharField(max_length=80, blank=True)
+    note = models.CharField("Horaires / remarque", max_length=160, blank=True)
+    is_published = models.BooleanField(default=True)
+    updated_at = models.DateTimeField(auto_now=True)
+
+    class Meta:
+        unique_together = ("point_of_sale", "date", "kind")
+        ordering = ["-date"]
+
+    def __str__(self):
+        return f"{self.point_of_sale} - {self.get_kind_display()} - {self.date}"
+
+
+class DailyMenuItem(models.Model):
+    menu = models.ForeignKey(DailyMenu, related_name="items", on_delete=models.CASCADE)
+    product = models.ForeignKey("catalog.Product", related_name="+", on_delete=models.CASCADE)
+    number = models.PositiveIntegerField("Numero de choix")
+    special_price = models.DecimalField("Prix special", max_digits=12, decimal_places=2, null=True, blank=True)
+
+    class Meta:
+        unique_together = (("menu", "product"), ("menu", "number"))
+        ordering = ["number"]

@@ -39,7 +39,9 @@ class CartItem(models.Model):
 
     @property
     def subtotal(self):
-        return self.product.price * self.quantity
+        from apps.stores.services import price_for
+
+        return price_for(self.product, self.cart.point_of_sale)[0] * self.quantity
 
     def __str__(self):
         return f"{self.product.name} x{self.quantity}"

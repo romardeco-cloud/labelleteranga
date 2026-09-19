@@ -66,13 +66,21 @@ class ProductSerializer(serializers.ModelSerializer):
         q = self._store_quantity(product)
         return product.in_stock if q is None else q > 0
 
+    def _price_label(self, product):
+        from apps.stores.services import price_for, special_prices_map
+
+        store = self.context.get("store")
+        cache = self.context.setdefault("_specials", {})
+        key = store.id if store else 0
+        if key not in cache:
+            cache[key] = special_prices_map(store)
+        return price_for(product, store, cache[key])
+
     def get_effective_price(self, product):
-        promo = product.active_promotion(self.context.get("store"))
-        return promo.discounted_price(product.price) if promo else product.price
+        return self._price_label(product)[0]
 
     def get_active_promotion_name(self, product):
-        promo = product.active_promotion(self.context.get("store"))
-        return promo.name if promo else None
+        return self._price_label(product)[1]
 
 
 class PromotionSerializer(serializers.ModelSerializer):

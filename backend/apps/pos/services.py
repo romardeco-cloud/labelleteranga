@@ -50,6 +50,9 @@ def create_pos_sale(cashier_profile, items, payment_method, customer_name="", am
 
     from apps.stores.models import tracks_stock  # import tardif (evite un cycle d'apps)
 
+    from apps.stores.services import price_for, special_prices_map
+
+    specials = special_prices_map(store)
     tracked = tracks_stock(store)
     merged = {}
     for line in items:
@@ -70,8 +73,7 @@ def create_pos_sale(cashier_profile, items, payment_method, customer_name="", am
             if available < qty:
                 raise ValidationError({"items": f"Stock insuffisant pour '{product.name}' (disponible: {available})."})
 
-        promo = product.active_promotion(store)
-        unit_price = promo.discounted_price(product.price) if promo else product.price
+        unit_price, _label = price_for(product, store, specials)
 
         OrderItem.objects.create(
             order=order,

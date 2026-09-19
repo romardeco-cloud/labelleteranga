@@ -14,6 +14,8 @@ export type Site = {
   manual_payment_methods: ("wave" | "orange_money")[];
   wave_pay_url?: string;
   orange_pay_url?: string;
+  wave_number?: string;
+  orange_number?: string;
   categories?: SiteCategory[];
 };
 
@@ -72,3 +74,17 @@ export function siteUrl(slug: string): string {
 
 /** Icones d'application (PWA) par site ; les sites sans logo propre utilisent le logo principal. */
 export const iconSet = (slug: string) => (["supermarche", "resto"].includes(slug) ? slug : "main");
+
+export type SiteDailyMenus = {
+  lunch: import("./store-admin").DailyMenu | null;
+  special: import("./store-admin").DailyMenu | null;
+};
+
+export async function fetchSiteMenus(slug: string): Promise<SiteDailyMenus> {
+  try {
+    const res = await fetch(`${API_URL}/stores/sites/${slug}/menu/`, { cache: "no-store" });
+    return res.ok ? res.json() : { lunch: null, special: null };
+  } catch {
+    return { lunch: null, special: null };
+  }
+}

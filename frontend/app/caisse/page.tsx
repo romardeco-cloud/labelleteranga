@@ -68,6 +68,7 @@ export default function CaissePage() {
   const [table, setTable] = useState("");
   const [settings, setSettings] = useState<POSSettings>(DEFAULT_SETTINGS);
   const [storeCats, setStoreCats] = useState<{ name: string; order: number }[]>([]);
+  const [dailyMenu, setDailyMenu] = useState<{ lunch: { product: number; number: number }[]; special: { product: number; number: number }[] }>({ lunch: [], special: [] });
   const [customerOrders, setCustomerOrders] = useState<POSCustomerOrder[]>([]);
   const [ordersLoading, setOrdersLoading] = useState(false);
   const [drawerRows, setDrawerRows] = useState<DrawerOpening[]>([]);
@@ -102,6 +103,7 @@ export default function CaissePage() {
       const data = await fetchPOSProducts("");
       setProducts(data.results);
       setStoreCats(data.categories ?? []);
+      setDailyMenu(data.daily_menu ?? { lunch: [], special: [] });
       if (data.settings) setSettings(data.settings);
     } catch (e: any) {
       if (e?.response?.status === 401 || e?.response?.status === 403) logout();
@@ -336,10 +338,15 @@ export default function CaissePage() {
     const q = search.trim().toLowerCase();
     return products.filter(
       (p) =>
-        (category === "all" || (p.category ?? NO_CATEGORY) === category) &&
+        (category === "all" ||
+          (category === "__special"
+            ? dailyMenu.special.some((m) => m.product === p.id)
+            : category === "__lunch"
+              ? dailyMenu.lunch.some((m) => m.product === p.id)
+              : (p.category ?? NO_CATEGORY) === category)) &&
         (!q || p.name.toLowerCase().includes(q) || p.sku.toLowerCase().includes(q))
     );
-  }, [products, category, search]);
+  }, [products, category, search, dailyMenu]);
 
   function onSearchEnter(e: React.KeyboardEvent<HTMLInputElement>) {
     if (e.key !== "Enter") return;
@@ -722,7 +729,14 @@ export default function CaissePage() {
               <>
                 {/* Categories */}
                 <div className="flex flex-wrap gap-2 px-4 py-3 border-b shrink-0">
-                  {[["all", "Tout", products.length] as const, ...categories.map(([n, c]) => [n, n, c] as const)].map(([key, label, count]) => (
+                  {(
+                    [
+                      ["all", "Tout", products.length],
+                      ...(dailyMenu.special.length ? [["__special", "Speciaux du jour", dailyMenu.special.length]] : []),
+                      ...(dailyMenu.lunch.length ? [["__lunch", "Menu du midi", dailyMenu.lunch.length]] : []),
+                      ...categories.map(([n, c]) => [n, n, c]),
+                    ] as [string, string, number][]
+                  ).map(([key, label, count]) => (
                     <button
                       key={key}
                       onClick={() => setCategory(key)}
@@ -730,7 +744,7 @@ export default function CaissePage() {
                         category === key ? "bg-[#f5b942] text-[#241010] border-[#f5b942]" : "text-gray-300 hover:border-[#f5b942]/60"
                       }`}
                     >
-                      <span className="mr-1.5">{key === "all" ? "▦" : categoryEmoji(label)}</span>
+                      <span className="mr-1.5">{key === "all" ? "▦" : key === "__special" ? "⭐" : key === "__lunch" ? "🍽️" : categoryEmoji(label)}</span>
                       {label} <span className="opacity-60 text-xs">{count}</span>
                     </button>
                   ))}
@@ -755,6 +769,11 @@ export default function CaissePage() {
                             <div className="absolute inset-0">
                               <ProductVisual image={p.image} name={p.name} category={p.category} />
                             </div>
+                            {dailyMenu.lunch.find((m) => m.product === p.id) && (
+                              <span className="absolute bottom-2 left-2 bg-white/95 text-[#6e1212] text-xs font-bold rounded-full px-2 h-6 flex items-center">
+                                N° {dailyMenu.lunch.find((m) => m.product === p.id)?.number}
+                              </span>
+                            )}
                             {qty > 0 && (
                               <span className="absolute top-2 right-2 bg-[#f5b942] text-[#241010] text-xs font-bold rounded-full min-w-6 h-6 px-1.5 flex items-center justify-center">
                                 {qty}

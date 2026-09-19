@@ -118,7 +118,7 @@ class InventoryCountDetailSerializer(InventoryCountSerializer):
 
 SETTINGS_FIELDS = [
     "timezone", "email", "legal_form", "share_capital", "ninea", "rccm", "vat_rate", "prices_include_vat",
-    "payment_methods", "wave_pay_url", "orange_pay_url", "track_stock", "receipt_slogan", "receipt_footer", "module_hold", "module_history", "module_qr",
+    "payment_methods", "wave_pay_url", "orange_pay_url", "wave_number", "orange_number", "track_stock", "receipt_slogan", "receipt_footer", "module_hold", "module_history", "module_qr",
     "module_dine_in", "module_customer_orders", "module_drawer", "module_xreport",
 ]
 

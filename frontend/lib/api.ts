@@ -25,6 +25,8 @@ export type Category = {
 export type PointOfSale = {
   id: number;
   name: string;
+  slug?: string | null;
+  online_enabled?: boolean;
   address: string;
   phone: string;
   is_active: boolean;
@@ -491,6 +493,7 @@ export async function fetchPOSProducts(search: string) {
     point_of_sale: string;
     results: POSProduct[];
     categories: { name: string; order: number }[];
+    daily_menu?: { lunch: { product: number; number: number }[]; special: { product: number; number: number }[] };
     settings: POSSettings;
   }>("/pos/products/", {
     params: search ? { search } : {},

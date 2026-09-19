@@ -22,9 +22,9 @@ function SuccessContent() {
   const reference = params.get("order");
   const [order, setOrder] = useState<Order | null>(null);
   const [txnRef, setTxnRef] = useState("");
-  const [redirecting, setRedirecting] = useState(false);
   const [isMobile, setIsMobile] = useState(false);
-  const [showQr, setShowQr] = useState(false);
+  const [mode, setMode] = useState<"app" | "qr" | "number" | null>(null);
+  const [copied, setCopied] = useState("");
   useEffect(() => {
     setIsMobile(/android|iphone|ipad|ipod|mobile/i.test(navigator.userAgent));
   }, []);
@@ -36,19 +36,23 @@ function SuccessContent() {
     order && (order.payment_method === "wave" || order.payment_method === "orange_money")
       ? merchantPayLink(site, order.payment_method, Number(order.total_amount))
       : null;
-  useEffect(() => {
-    if (!order || !payLink || order.status !== "pending" || order.payment_declared_at) return;
-    const key = `lbt_paylink_opened_${order.reference}`;
+  const merchantNumber =
+    order?.payment_method === "wave" ? site.wave_number : order?.payment_method === "orange_money" ? site.orange_number : "";
+  const qr = order ? PAYMENT_QR[order.payment_method] : undefined;
+  const choices = [
+    payLink && { key: "app" as const, label: "Dans l'application" },
+    qr && { key: "qr" as const, label: "Scanner le QR" },
+    merchantNumber && { key: "number" as const, label: "Avec le numero" },
+  ].filter(Boolean) as { key: "app" | "qr" | "number"; label: string }[];
+  const activeMode = mode && choices.some((c) => c.key === mode) ? mode : (isMobile ? choices.find((c) => c.key === "app") : choices.find((c) => c.key === "qr"))?.key ?? choices[0]?.key;
+
+  function copy(text: string, key: string) {
     try {
-      if (sessionStorage.getItem(key)) return;
-      sessionStorage.setItem(key, "1");
+      navigator.clipboard.writeText(text);
+      setCopied(key);
+      setTimeout(() => setCopied(""), 1500);
     } catch {}
-    setRedirecting(true);
-    const t = setTimeout(() => {
-      window.location.href = payLink;
-    }, 1800);
-    return () => clearTimeout(t);
-  }, [order, payLink]);
+  }
 
   async function submitDeclaration(e: React.FormEvent) {
     e.preventDefault();
@@ -151,39 +155,65 @@ function SuccessContent() {
 
       {isManual && isPending && order && !order.payment_declared_at && (
         <div className="bg-brand-light border border-brand-accent/50 rounded-lg p-4 mb-6 text-left">
-          <p className="text-brand-dark font-medium text-center">Derniere etape : payez {new Intl.NumberFormat("fr-SN", { maximumFractionDigits: 0 }).format(Number(order.total_amount))} FCFA</p>
-          {payLink && (
-            <a
-              href={payLink}
-              className="mt-3 block w-full text-center bg-brand text-white py-3 rounded-lg font-semibold hover:bg-brand-dark"
-            >
-              {redirecting ? `Ouverture de ${PAYMENT_LABELS[order.payment_method]}...` : `Payer maintenant avec ${PAYMENT_LABELS[order.payment_method]}`}
-            </a>
-          )}
-          <p className="text-xs text-gray-500 mt-1 text-center">
-            Le compte marchand{order.payment_method === "wave" ? " et le montant sont deja remplis" : " est deja rempli : saisissez le montant indique"}.
+          <p className="text-brand-dark font-medium text-center">
+            Derniere etape : payez {new Intl.NumberFormat("fr-SN", { maximumFractionDigits: 0 }).format(Number(order.total_amount))} FCFA
           </p>
-          <ol className="text-sm text-gray-700 mt-3 list-decimal list-inside space-y-1">
-            <li>{payLink ? `Payez dans l'application ${PAYMENT_LABELS[order.payment_method]} (inutile de scanner : le lien ouvre directement l'application).` : `Ouvrez ${PAYMENT_LABELS[order.payment_method]} et scannez le code ci-dessous.`}</li>
-            <li>
-              Payez exactement le montant indique et indiquez le numero de commande <strong>{order.order_number}</strong> si l&apos;application le permet.
-            </li>
-            <li>Revenez ici et validez votre paiement avec la reference de la transaction.</li>
-          </ol>
-          {payLink && isMobile && !showQr && (
-            <button type="button" onClick={() => setShowQr(true)} className="block mx-auto mt-2 text-xs text-gray-500 underline">
-              Afficher le code QR
-            </button>
+          <p className="text-xs text-gray-500 text-center mt-0.5">Choisissez comment payer avec {PAYMENT_LABELS[order.payment_method]} :</p>
+          {choices.length > 1 && (
+            <div className="grid grid-cols-3 gap-1.5 mt-3">
+              {choices.map((c) => (
+                <button
+                  key={c.key}
+                  type="button"
+                  onClick={() => setMode(c.key)}
+                  className={`rounded-lg border px-2 py-2 text-xs font-semibold ${activeMode === c.key ? "bg-brand text-white border-brand" : "bg-white text-gray-700 hover:border-brand"}`}
+                >
+                  {c.label}
+                </button>
+              ))}
+            </div>
           )}
-          {PAYMENT_QR[order.payment_method] && (!payLink || !isMobile || showQr) && (
-            <Image
-              src={PAYMENT_QR[order.payment_method].src}
-              alt={PAYMENT_QR[order.payment_method].alt}
-              width={PAYMENT_QR[order.payment_method].width}
-              height={PAYMENT_QR[order.payment_method].height}
-              className="mx-auto mt-3 max-h-80 w-auto rounded-lg border"
-            />
+
+          {activeMode === "app" && payLink && (
+            <div className="mt-3">
+              <a href={payLink} className="block w-full text-center bg-brand text-white py-3 rounded-lg font-semibold hover:bg-brand-dark">
+                Payer avec {PAYMENT_LABELS[order.payment_method]}
+              </a>
+              <p className="text-xs text-gray-500 mt-2 text-center">
+                Le lien ouvre directement l&apos;application{order.payment_method === "wave" ? " avec le compte marchand et le montant deja remplis" : " : saisissez le montant indique"}.
+              </p>
+            </div>
           )}
+
+          {activeMode === "qr" && qr && (
+            <div className="mt-3 text-center">
+              <Image src={qr.src} alt={qr.alt} width={qr.width} height={qr.height} className="mx-auto max-h-80 w-auto rounded-lg border" />
+              <p className="text-xs text-gray-500 mt-2">Ouvrez {PAYMENT_LABELS[order.payment_method]}, scannez ce code et payez le montant indique.</p>
+            </div>
+          )}
+
+          {activeMode === "number" && merchantNumber && (
+            <div className="mt-3 bg-white border rounded-lg p-3 space-y-2 text-sm">
+              <p className="text-gray-600">Dans {PAYMENT_LABELS[order.payment_method]}, faites un envoi / paiement vers :</p>
+              <div className="flex items-center justify-between gap-2">
+                <span className="font-bold text-lg text-brand-dark">{merchantNumber}</span>
+                <button type="button" onClick={() => copy(merchantNumber, "num")} className="text-xs border rounded px-2 py-1">
+                  {copied === "num" ? "Copie !" : "Copier"}
+                </button>
+              </div>
+              <div className="flex items-center justify-between gap-2">
+                <span>
+                  Montant : <strong>{new Intl.NumberFormat("fr-SN", { maximumFractionDigits: 0 }).format(Number(order.total_amount))} FCFA</strong>
+                </span>
+                <button type="button" onClick={() => copy(String(Math.round(Number(order.total_amount))), "amt")} className="text-xs border rounded px-2 py-1">
+                  {copied === "amt" ? "Copie !" : "Copier"}
+                </button>
+              </div>
+              <p className="text-xs text-gray-500">Indiquez le numero de commande <strong>{order.order_number}</strong> en motif si possible.</p>
+            </div>
+          )}
+
+          <p className="text-xs text-gray-600 mt-3">Ensuite, revenez ici et validez avec la reference de la transaction (recue par SMS).</p>
         </div>
       )}
 

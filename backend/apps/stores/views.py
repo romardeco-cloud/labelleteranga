@@ -17,7 +17,7 @@ from .inventory import (
 )
 from apps.catalog.models import Category
 
-from .models import InventoryCount, PointOfSale, Stock, StockMovement, StoreCategory, get_settings
+from .models import DailyMenu, DailyMenuItem, InventoryCount, PointOfSale, Stock, StockMovement, StoreCategory, get_settings
 from .serializers import (
     InventoryCountDetailSerializer,
     InventoryCountSerializer,
@@ -318,6 +318,8 @@ def _site_payload(store, with_categories=False):
     data["payment_methods"], data["manual_payment_methods"] = _available_online_methods(st.payment_methods)
     data["wave_pay_url"] = st.wave_pay_url
     data["orange_pay_url"] = st.orange_pay_url
+    data["wave_number"] = st.wave_number
+    data["orange_number"] = st.orange_number
     if with_categories:
         counts = {
             r["product__category_id"]: r["n"]
@@ -354,3 +356,134 @@ class SiteDetailView(APIView):
         except PointOfSale.DoesNotExist:
             return Response({"detail": "Site introuvable."}, status=status.HTTP_404_NOT_FOUND)
         return Response(_site_payload(store, with_categories=True))
+
+
+DEFAULT_TITLES = {"lunch": "Menu du midi", "special": "Speciaux du jour"}
+
+
+def _menu_payload(menu, request=None):
+    from apps.catalog.serializers import ProductSerializer
+
+    ctx = {"store": menu.point_of_sale, "request": request}
+    items = menu.items.select_related("product__category").prefetch_related("product__stocks__point_of_sale")
+    return {
+        "id": menu.id,
+        "date": menu.date,
+        "kind": menu.kind,
+        "title": menu.title or DEFAULT_TITLES[menu.kind],
+        "note": menu.note,
+        "is_published": menu.is_published,
+        "items": [
+            {
+                "number": i.number,
+                "special_price": i.special_price,
+                "product": ProductSerializer(i.product, context=ctx).data,
+            }
+            for i in items
+            if i.product.is_active
+        ],
+    }
+
+
+class SiteDailyMenuView(APIView):
+    """GET /api/stores/sites/<slug>/menu/ : {lunch, special} publies pour aujourd'hui (null si absent)."""
+
+    permission_classes = [permissions.AllowAny]
+
+    def get(self, request, slug):
+        from django.utils import timezone
+
+        store = PointOfSale.objects.filter(slug=slug, online_enabled=True, is_active=True).first()
+        if not store:
+            return Response({"detail": "Site introuvable."}, status=status.HTTP_404_NOT_FOUND)
+        out = {"lunch": None, "special": None}
+        for menu in DailyMenu.objects.filter(point_of_sale=store, date=timezone.localdate(), is_published=True):
+            data = _menu_payload(menu, request)
+            out[menu.kind] = data if data["items"] else None
+        return Response(out)
+
+
+class DailyMenuAdminView(APIView):
+    """
+    GET    ?point_of_sale=<id>&date=YYYY-MM-DD&kind=lunch|special -> {menu, previous: [...]}
+    POST   {point_of_sale, date, kind, title, note, is_published, items: [{product, special_price?}, ...]}
+           remplace la selection ; les numeros de choix suivent l'ordre de la liste (1, 2, 3...)
+    DELETE ?point_of_sale=&date=&kind= : retire la selection de ce jour
+    """
+
+    permission_classes = [permissions.IsAdminUser]
+
+    def _params(self, data):
+        from datetime import date as date_cls
+
+        from django.utils import timezone
+
+        try:
+            store = PointOfSale.objects.get(pk=data.get("point_of_sale"))
+        except (PointOfSale.DoesNotExist, ValueError, TypeError):
+            raise ValidationError({"point_of_sale": "Point de vente introuvable."})
+        try:
+            day = date_cls.fromisoformat(data["date"]) if data.get("date") else timezone.localdate()
+        except ValueError:
+            raise ValidationError({"date": "Date invalide."})
+        kind = data.get("kind") or "lunch"
+        if kind not in ("lunch", "special"):
+            raise ValidationError({"kind": "Type inconnu."})
+        return store, day, kind
+
+    def get(self, request):
+        store, day, kind = self._params(request.query_params)
+        menu = DailyMenu.objects.filter(point_of_sale=store, date=day, kind=kind).first()
+        previous = DailyMenu.objects.filter(point_of_sale=store, date__lt=day, kind=kind, items__isnull=False).distinct().first()
+        return Response(
+            {
+                "menu": _menu_payload(menu, request) if menu else None,
+                "previous": (
+                    [{"product": i.product_id, "special_price": i.special_price} for i in previous.items.all()] if previous else []
+                ),
+                "previous_date": previous.date if previous else None,
+            }
+        )
+
+    def post(self, request):
+        from decimal import Decimal, InvalidOperation
+
+        from apps.catalog.models import Product
+
+        store, day, kind = self._params(request.data)
+        raw = request.data.get("items") or []
+        if not isinstance(raw, list):
+            raise ValidationError({"items": "Liste attendue."})
+        entries, seen = [], set()
+        for it in raw:
+            pid = int(it["product"] if isinstance(it, dict) else it)
+            if pid in seen:
+                continue
+            seen.add(pid)
+            price = None
+            if isinstance(it, dict) and it.get("special_price") not in (None, ""):
+                try:
+                    price = Decimal(str(it["special_price"]))
+                except InvalidOperation:
+                    raise ValidationError({"items": "Prix special invalide."})
+                if price < 0:
+                    raise ValidationError({"items": "Prix special invalide."})
+            entries.append((pid, price if kind == "special" else None))
+        valid = set(Product.objects.filter(pk__in=[e[0] for e in entries], stocks__point_of_sale=store).values_list("pk", flat=True))
+        if any(pid not in valid for pid, _ in entries):
+            raise ValidationError({"items": "Certains produits ne sont pas rattaches a ce point de vente."})
+        menu, _ = DailyMenu.objects.get_or_create(point_of_sale=store, date=day, kind=kind)
+        menu.title = (request.data.get("title") or "")[:80]
+        menu.note = (request.data.get("note") or "")[:160]
+        menu.is_published = bool(request.data.get("is_published", True))
+        menu.save()
+        menu.items.all().delete()
+        DailyMenuItem.objects.bulk_create(
+            [DailyMenuItem(menu=menu, product_id=pid, number=n, special_price=price) for n, (pid, price) in enumerate(entries, start=1)]
+        )
+        return Response(_menu_payload(menu, request))
+
+    def delete(self, request):
+        store, day, kind = self._params(request.query_params)
+        DailyMenu.objects.filter(point_of_sale=store, date=day, kind=kind).delete()
+        return Response(status=status.HTTP_204_NO_CONTENT)
