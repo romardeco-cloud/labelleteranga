@@ -1,7 +1,7 @@
 import Image from "next/image";
 import Link from "next/link";
 import { storeImage } from "@/lib/branding";
-import { fetchSites, shortName, siteUrl } from "@/lib/site";
+import { fetchSites, shortName, siteHref } from "@/lib/site";
 
 export const revalidate = 60;
 
@@ -34,7 +34,7 @@ export default async function PortalPage() {
             {sites.map((site) => (
               <Link
                 key={site.slug}
-                href={siteUrl(site.slug)}
+                href={siteHref(site.slug)}
                 className="group border rounded-2xl bg-white overflow-hidden flex flex-col hover:border-brand hover:shadow-md transition"
               >
                 <div className="bg-white h-44 flex items-center justify-center p-3 border-b">

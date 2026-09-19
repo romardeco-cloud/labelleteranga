@@ -6,7 +6,7 @@ import { useParams } from "next/navigation";
 import { useEffect, useState } from "react";
 import QrCode from "@/components/site/QrCode";
 import { storeImage } from "@/lib/branding";
-import { Site, fetchSite, shortName } from "@/lib/site";
+import { Site, displayUrl, fetchSite, shortName, siteUrl } from "@/lib/site";
 
 /** Affiche A4 a imprimer (vitrine, comptoir, flyers) : QR code de l'application du point de vente. */
 export default function PosterPage() {
@@ -20,7 +20,7 @@ export default function PosterPage() {
   }, [store]);
 
   if (!site || !origin) return <p className="p-8">Chargement...</p>;
-  const link = `${origin}/${site.slug}?install=1`;
+  const link = `${siteUrl(site)}?install=1`;
 
   return (
     <div className="max-w-2xl mx-auto px-6 py-8 text-center print:py-0">
@@ -42,7 +42,7 @@ export default function PosterPage() {
         </div>
         <p className="text-2xl font-bold text-brand-dark">Scannez pour installer l&apos;application</p>
         <p className="text-gray-600 mt-2">ou allez sur</p>
-        <p className="font-mono text-xl mt-1">{origin.replace(/^https?:\/\//, "")}/{site.slug}</p>
+        <p className="font-mono text-xl mt-1">{displayUrl(site)}</p>
         <p className="text-sm text-gray-500 mt-6">
           {site.phone ? `Tel : ${site.phone} - ` : ""}info@labelleteranga.com
         </p>

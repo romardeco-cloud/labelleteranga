@@ -5,24 +5,24 @@ import Link from "next/link";
 import { useEffect, useState } from "react";
 import QrCode, { useQrDataUrl } from "@/components/site/QrCode";
 import { storeImage } from "@/lib/branding";
-import { Site, fetchSites, shortName } from "@/lib/site";
+import { Site, displayUrl, fetchSites, shortName, siteUrl } from "@/lib/site";
 
 // Les deux applications mises en avant ; les autres points de vente en ligne suivent.
 const FEATURED = ["resto", "supermarche"];
 
-function AppCard({ site, origin }: { site: Site; origin: string }) {
-  const link = `${origin}/${site.slug}?install=1`;
-  const shortLink = `${origin.replace(/^https?:\/\//, "")}/${site.slug}`;
+function AppCard({ site }: { site: Site }) {
+  const link = `${siteUrl(site)}?install=1`;
+  const shortLink = displayUrl(site);
   const png = useQrDataUrl(link, 1024);
   const [copied, setCopied] = useState(false);
 
   async function copy() {
     try {
-      await navigator.clipboard.writeText(`${origin}/${site.slug}`);
+      await navigator.clipboard.writeText(siteUrl(site));
       setCopied(true);
       setTimeout(() => setCopied(false), 1800);
     } catch {
-      window.prompt("Copiez ce lien :", `${origin}/${site.slug}`);
+      window.prompt("Copiez ce lien :", siteUrl(site));
     }
   }
 
@@ -79,7 +79,7 @@ export default function AppDownloadPage() {
       {origin && (
         <div className="grid sm:grid-cols-2 gap-6">
           {sites.map((s) => (
-            <AppCard key={s.slug} site={s} origin={origin} />
+            <AppCard key={s.slug} site={s} />
           ))}
         </div>
       )}

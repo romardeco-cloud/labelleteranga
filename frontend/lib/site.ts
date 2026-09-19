@@ -44,6 +44,18 @@ export function merchantPayLink(site: Site, method: "wave" | "orange_money", amo
   }
 }
 
+/** Domaine officiel et points de vente qui ont leur propre sous-domaine (resto.labelleteranga.com...). */
+export const ROOT_URL = "https://labelleteranga.com";
+export const SUBDOMAIN_SITES = ["resto", "supermarche", "quincaillerie", "depot"];
+
+/** Adresse publique definitive d'un site (utilisee pour les QR codes, affiches et liens a partager). */
+export function siteUrl(site: Pick<Site, "slug">): string {
+  return SUBDOMAIN_SITES.includes(site.slug) ? `https://${site.slug}.labelleteranga.com` : `${ROOT_URL}/s/${site.slug}`;
+}
+
+/** Adresse sans "https://" pour l'affichage (affiches, cartes). */
+export const displayUrl = (site: Pick<Site, "slug">) => siteUrl(site).replace(/^https?:\/\//, "");
+
 /** Adresse unique de contact pour tous les points de vente. */
 export const CONTACT_EMAIL = "info@labelleteranga.com";
 
@@ -73,7 +85,7 @@ export const setActiveStore = (slug: string | null) => {
 export const getActiveStore = () => activeStore;
 
 /** Adresse publique d'un site : sous-domaine si NEXT_PUBLIC_ROOT_DOMAIN est defini, sinon /s/<slug>. */
-export function siteUrl(slug: string): string {
+export function siteHref(slug: string): string {
   const root = process.env.NEXT_PUBLIC_ROOT_DOMAIN;
   return root ? `https://${slug}.${root}` : `/s/${slug}`;
 }
