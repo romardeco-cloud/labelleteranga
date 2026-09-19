@@ -170,6 +170,12 @@ def _footer(canvas, doc):
     contact, more = _footer_lines()
     mid = A4[0] / 2
     y = 9.5 * mm + 3.6 * mm * len(more)
+    canvas.saveState()  # ligne en pointilles au-dessus du pied de page
+    canvas.setStrokeColor(colors.HexColor("#8a8a8a"))
+    canvas.setLineWidth(0.9)
+    canvas.setDash(1.5, 3)
+    canvas.line(18 * mm, y + 3.6 * mm, A4[0] - 18 * mm, y + 3.6 * mm)
+    canvas.restoreState()
     canvas.drawCentredString(mid, y, contact)
     for line in more:
         y -= 3.6 * mm

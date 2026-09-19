@@ -67,7 +67,7 @@ export default function SealBlock({ printOnly = false, fresh = false }: { printO
   if (!seal) return null;
   const contact = [seal.contact_address, seal.contact_phone && `Tél : ${seal.contact_phone}`, seal.contact_whatsapp && `WhatsApp : ${seal.contact_whatsapp}`, seal.contact_email || "info@labelleteranga.com", seal.contact_website].filter(Boolean).join("  |  ");
   const footer = (contact || seal.legal_line || seal.contact_extra) && (
-    <div className={`mt-6 border-t border-gray-300 pt-2 text-center text-[11px] leading-snug text-gray-600 break-inside-avoid ${printOnly ? "hidden print:block" : ""}`}>
+    <div className={`mt-6 border-t-2 border-dotted border-gray-400 pt-2 text-center text-[11px] leading-snug text-gray-600 break-inside-avoid ${printOnly ? "hidden print:block" : ""}`}>
       {contact && <p>{contact}</p>}
       {seal.legal_line && <p>{seal.legal_line}</p>}
       {(seal.contact_extra ?? "").split("\n").filter((l) => l.trim()).map((l, i) => <p key={i}>{l}</p>)}
