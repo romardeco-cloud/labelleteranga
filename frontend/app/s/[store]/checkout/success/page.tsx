@@ -23,6 +23,11 @@ function SuccessContent() {
   const [order, setOrder] = useState<Order | null>(null);
   const [txnRef, setTxnRef] = useState("");
   const [redirecting, setRedirecting] = useState(false);
+  const [isMobile, setIsMobile] = useState(false);
+  const [showQr, setShowQr] = useState(false);
+  useEffect(() => {
+    setIsMobile(/android|iphone|ipad|ipod|mobile/i.test(navigator.userAgent));
+  }, []);
   const [declareError, setDeclareError] = useState("");
   const [declaring, setDeclaring] = useState(false);
 
@@ -159,13 +164,18 @@ function SuccessContent() {
             Le compte marchand{order.payment_method === "wave" ? " et le montant sont deja remplis" : " est deja rempli : saisissez le montant indique"}.
           </p>
           <ol className="text-sm text-gray-700 mt-3 list-decimal list-inside space-y-1">
-            <li>{payLink ? `Payez dans l'application ${PAYMENT_LABELS[order.payment_method]} (ou scannez le code ci-dessous depuis un autre appareil).` : `Ouvrez ${PAYMENT_LABELS[order.payment_method]} et scannez le code ci-dessous.`}</li>
+            <li>{payLink ? `Payez dans l'application ${PAYMENT_LABELS[order.payment_method]} (inutile de scanner : le lien ouvre directement l'application).` : `Ouvrez ${PAYMENT_LABELS[order.payment_method]} et scannez le code ci-dessous.`}</li>
             <li>
               Payez exactement le montant indique et indiquez le numero de commande <strong>{order.order_number}</strong> si l&apos;application le permet.
             </li>
             <li>Revenez ici et validez votre paiement avec la reference de la transaction.</li>
           </ol>
-          {PAYMENT_QR[order.payment_method] && (
+          {payLink && isMobile && !showQr && (
+            <button type="button" onClick={() => setShowQr(true)} className="block mx-auto mt-2 text-xs text-gray-500 underline">
+              Afficher le code QR
+            </button>
+          )}
+          {PAYMENT_QR[order.payment_method] && (!payLink || !isMobile || showQr) && (
             <Image
               src={PAYMENT_QR[order.payment_method].src}
               alt={PAYMENT_QR[order.payment_method].alt}
