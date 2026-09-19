@@ -54,7 +54,7 @@ export default function SealBlock({ printOnly = false, fresh = false }: { printO
             {seal.signer_title}
           </p>
         )}
-        <div className="flex items-center gap-3">
+        <div className="flex items-center gap-3 bg-white rounded">
           {/* eslint-disable-next-line @next/next/no-img-element */}
           {seal.stamp && <img src={seal.stamp} alt="Cachet de l'entreprise" className="h-24 w-auto object-contain" />}
           {/* eslint-disable-next-line @next/next/no-img-element */}
