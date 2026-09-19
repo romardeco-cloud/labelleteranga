@@ -39,6 +39,9 @@ export default function SealPage() {
       f.append("contact_address", seal.contact_address ?? "");
       f.append("contact_phone", seal.contact_phone ?? "");
       f.append("contact_whatsapp", seal.contact_whatsapp ?? "");
+      f.append("contact_email", seal.contact_email ?? "");
+      f.append("contact_website", seal.contact_website ?? "");
+      f.append("contact_extra", seal.contact_extra ?? "");
       f.append("place", seal.place);
       f.append("certified_text", seal.certified_text);
       f.append("keep_background", String(keepBg));
@@ -156,8 +159,8 @@ export default function SealPage() {
       </div>
       <div className="border rounded-2xl bg-[#1c1514] p-4 space-y-3">
         <div>
-          <p className="font-medium">Pied de page de chaque document</p>
-          <p className="text-xs text-gray-500">Affiche tout en bas de chaque page des PDF, avec le courriel de l&apos;entreprise. Laissez un champ vide pour ne pas l&apos;afficher.</p>
+          <p className="font-medium">En-tete et pied de page des documents</p>
+          <p className="text-xs text-gray-500">Ces informations sont affichees dans l&apos;en-tete (a cote du logo) et en bas de chaque page des PDF. Modifiez-les ou ajoutez-en quand vous voulez ; un champ vide n&apos;est pas affiche.</p>
         </div>
         <div className="grid sm:grid-cols-2 gap-4">
           <label className="text-sm block sm:col-span-2">
@@ -172,9 +175,21 @@ export default function SealPage() {
             <span className="block text-gray-400 mb-1">WhatsApp</span>
             <input value={seal.contact_whatsapp ?? ""} onChange={(e) => set("contact_whatsapp", e.target.value)} placeholder="Ex. +221 78 000 00 00" className="w-full border rounded-lg px-3 py-2" />
           </label>
+          <label className="text-sm block">
+            <span className="block text-gray-400 mb-1">Courriel</span>
+            <input value={seal.contact_email ?? ""} onChange={(e) => set("contact_email", e.target.value)} placeholder="info@labelleteranga.com" className="w-full border rounded-lg px-3 py-2" />
+          </label>
+          <label className="text-sm block">
+            <span className="block text-gray-400 mb-1">Site web</span>
+            <input value={seal.contact_website ?? ""} onChange={(e) => set("contact_website", e.target.value)} placeholder="labelleteranga.com" className="w-full border rounded-lg px-3 py-2" />
+          </label>
           <label className="text-sm block sm:col-span-2">
             <span className="block text-gray-400 mb-1">Identifiants legaux (RCCM, NINEA)</span>
             <input value={seal.legal_line ?? ""} onChange={(e) => set("legal_line", e.target.value)} placeholder="RCCM ... · NINEA ..." className="w-full border rounded-lg px-3 py-2" />
+          </label>
+          <label className="text-sm block sm:col-span-2">
+            <span className="block text-gray-400 mb-1">Lignes supplementaires (une information par ligne : 2e telephone, compte bancaire, horaires...)</span>
+            <textarea value={seal.contact_extra ?? ""} onChange={(e) => set("contact_extra", e.target.value)} rows={3} maxLength={500} className="w-full border rounded-lg px-3 py-2" />
           </label>
         </div>
       </div>

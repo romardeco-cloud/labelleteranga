@@ -5,6 +5,7 @@ Toutes les pieces portent l'en-tete du point de vente (coordonnees, informations
 
 import calendar
 import io
+from xml.sax.saxutils import escape
 from collections import defaultdict
 from datetime import date as date_cls
 from decimal import Decimal
@@ -112,7 +113,9 @@ def letterhead(store=None):
         contact.append(f"Tel : {phone}")
     if company and company.contact_whatsapp:
         contact.append(f"WhatsApp : {company.contact_whatsapp}")
-    contact.append(f"Email : {(st.email if st and st.email else CONTACT_EMAIL)}")
+    contact.append(f"Email : {(company.contact_email if company and company.contact_email else (st.email if st and st.email else CONTACT_EMAIL))}")
+    if company and company.contact_website:
+        contact.append(company.contact_website)
     lines.append(" - ".join(contact))
     legal = []
     if st:
@@ -126,6 +129,8 @@ def letterhead(store=None):
         lines.append(" - ".join(legal))
     elif company and company.legal_line:
         lines.append(company.legal_line)
+    if company and company.contact_extra:
+        lines += [escape(x.strip()) for x in company.contact_extra.splitlines() if x.strip()]
     text = Paragraph("<br/>".join(lines), BODY)
     logo_path = Path(settings.BASE_DIR) / "assets" / "logo.jpg"
     cells = [[Image(str(logo_path), 18 * mm, 18 * mm) if logo_path.exists() else "", text]]
@@ -150,20 +155,25 @@ def _footer_lines():
             parts.append(f"Tel : {seal.contact_phone}")
         if seal.contact_whatsapp:
             parts.append(f"WhatsApp : {seal.contact_whatsapp}")
-    parts.append(CONTACT_EMAIL)
+    parts.append((seal.contact_email if seal and seal.contact_email else "") or CONTACT_EMAIL)
+    if seal and seal.contact_website:
+        parts.append(seal.contact_website)
     contact = "La Belle Teranga - " + "  |  ".join(parts) if len(parts) == 1 else "  |  ".join(parts)
-    return contact, (seal.legal_line if seal else "")
+    extra = [x.strip() for x in seal.contact_extra.splitlines() if x.strip()] if seal else []
+    return contact, [seal.legal_line] * bool(seal and seal.legal_line) + extra
 
 
 def _footer(canvas, doc):
     canvas.saveState()
     canvas.setFont("Helvetica", 7.5)
     canvas.setFillColor(colors.HexColor("#777777"))
-    contact, legal = _footer_lines()
+    contact, more = _footer_lines()
     mid = A4[0] / 2
-    canvas.drawCentredString(mid, 13.5 * mm, contact)
-    if legal:
-        canvas.drawCentredString(mid, 9.5 * mm, legal)
+    y = 9.5 * mm + 3.6 * mm * len(more)
+    canvas.drawCentredString(mid, y, contact)
+    for line in more:
+        y -= 3.6 * mm
+        canvas.drawCentredString(mid, y, line)
     canvas.drawRightString(A4[0] - 18 * mm, 5.5 * mm, f"Page {doc.page}")
     canvas.restoreState()
 
@@ -269,7 +279,7 @@ def render(story, filename, title):
     except Exception:  # le cachet ne doit jamais empecher l'impression d'un document
         pass
     buf = io.BytesIO()
-    doc = SimpleDocTemplate(buf, pagesize=A4, leftMargin=18 * mm, rightMargin=18 * mm, topMargin=14 * mm, bottomMargin=18 * mm, title=title, author="La Belle Teranga")
+    doc = SimpleDocTemplate(buf, pagesize=A4, leftMargin=18 * mm, rightMargin=18 * mm, topMargin=14 * mm, bottomMargin=18 * mm + 3.6 * mm * max(0, len(_footer_lines()[1]) - 1), title=title, author="La Belle Teranga")
     doc.build(story, onFirstPage=_footer, onLaterPages=_footer)
     response = HttpResponse(buf.getvalue(), content_type="application/pdf")
     response["Content-Disposition"] = f'inline; filename="{filename}"'
