@@ -8,7 +8,7 @@ from rest_framework.exceptions import ValidationError
 from rest_framework.parsers import FormParser, JSONParser, MultiPartParser
 from rest_framework.response import Response
 
-from apps.stores.models import PointOfSale
+from apps.stores.models import PointOfSale, Stock
 
 from .excel import build_import_template, export_products_to_excel, import_products_from_excel
 from .models import Category, Product, Promotion
@@ -124,10 +124,10 @@ class ProductViewSet(viewsets.ModelViewSet):
     @action(detail=False, methods=["post"], permission_classes=[permissions.IsAdminUser], url_path="bulk-update")
     def bulk_update(self, request):
         """
-        Action groupee sur une liste de produits : {ids: [...], action, ...}
+        Action groupee sur une liste de produits, limitee au point de vente choisi : {ids: [...], point_of_sale, action, ...}
           action = activate | deactivate        (activate ignore les produits sans prix, sauf include_unpriced=true)
           action = set_price   price, activate?  meme prix pour toute la liste
-          action = set_stock   point_of_sale, quantity, mode = set | add   meme stock pour toute la liste
+          action = set_stock   quantity, mode = set | add   meme stock pour toute la liste
           action = delete      confirm=true      suppression definitive (les ventes passees sont conservees)
         """
         from decimal import Decimal, InvalidOperation
@@ -140,17 +140,34 @@ class ProductViewSet(viewsets.ModelViewSet):
         ids = request.data.get("ids")
         if not isinstance(ids, list) or not ids:
             raise ValidationError({"ids": "Selectionnez au moins un produit."})
+        store = self._store_from(request.data.get("point_of_sale"))
+        if not store:
+            raise ValidationError({"point_of_sale": "Choisissez un point de vente : les modifications ne s'appliquent qu'a lui."})
         act = request.data.get("action")
-        qs = Product.objects.filter(pk__in=[int(i) for i in ids])
-        total = qs.count()
+
+        # uniquement les produits de CE point de vente ; ceux qu'un autre point de vente vend aussi (prix, statut et categorie
+        # sont partages) ne sont jamais modifies ici, pour ne pas changer les autres points de vente
+        mine = Product.objects.filter(pk__in=[int(i) for i in ids], stocks__point_of_sale=store).distinct()
+        total = len(set(int(i) for i in ids))
+        shared_ids = set(Stock.objects.filter(product__in=mine).exclude(point_of_sale=store).values_list("product_id", flat=True))
+        qs = mine.exclude(pk__in=shared_ids)
+        not_in_store = total - mine.count()
+        note = []
+        if shared_ids:
+            note.append(f"{len(shared_ids)} partage(s) avec un autre point de vente")
+        if not_in_store:
+            note.append(f"{not_in_store} hors de ce point de vente")
+
+        def result(updated, extra=""):
+            reasons = ", ".join(x for x in [*note, extra] if x)
+            return Response({"updated": updated, "skipped": total - updated, "skipped_reason": reasons})
 
         if act in ("activate", "deactivate"):
             if act == "deactivate":
-                n = qs.update(is_active=False)
-                return Response({"updated": n, "skipped": total - n})
+                return result(qs.update(is_active=False))
             target = qs if request.data.get("include_unpriced") else qs.filter(price__gt=0)
             n = target.update(is_active=True)
-            return Response({"updated": n, "skipped": total - n, "skipped_reason": "prix a 0" if n < total else ""})
+            return result(n, "prix a 0" if n < qs.count() else "")
 
         if act == "set_price":
             try:
@@ -162,13 +179,9 @@ class ProductViewSet(viewsets.ModelViewSet):
             fields = {"price": price}
             if request.data.get("activate") and price > 0:
                 fields["is_active"] = True
-            n = qs.update(**fields)
-            return Response({"updated": n, "skipped": total - n})
+            return result(qs.update(**fields))
 
         if act == "set_stock":
-            store = self._store_from(request.data.get("point_of_sale"))
-            if not store:
-                raise ValidationError({"point_of_sale": "Choisissez le point de vente dont on modifie le stock."})
             try:
                 quantity = int(request.data.get("quantity"))
             except (TypeError, ValueError):
@@ -178,11 +191,11 @@ class ProductViewSet(viewsets.ModelViewSet):
                 raise ValidationError({"quantity": "Le stock ne peut pas etre negatif."})
             updated = 0
             with transaction.atomic():
-                for product in qs.filter(stocks__point_of_sale=store).distinct():
+                for product in mine:  # le stock est propre a chaque point de vente : les produits partages sont concernes aussi
                     kwargs = {"delta": quantity} if add else {"set_to": quantity}
                     change_stock(product, store, reason=StockMovement.Reason.MANUAL, user=request.user, **kwargs)
                     updated += 1
-            return Response({"updated": updated, "skipped": total - updated})
+            return Response({"updated": updated, "skipped": total - updated, "skipped_reason": f"{not_in_store} hors de ce point de vente" if not_in_store else ""})
 
         if act in ("set_category", "auto_category"):
             from .categorizer import assign, get_category, guess_category
@@ -198,26 +211,32 @@ class ProductViewSet(viewsets.ModelViewSet):
                 for product in qs.prefetch_related("stocks"):
                     assign(product, category)
                     updated += 1
-                return Response({"updated": updated, "skipped": 0, "category": category.name})
+                return result(updated)
             only_empty = request.data.get("only_empty", True)
             for product in qs.prefetch_related("stocks"):
                 if only_empty and product.category_id:
-                    skipped += 1
                     continue
                 guess = guess_category(product.name)
                 if not guess:
-                    skipped += 1
                     continue
                 assign(product, get_category(guess, cache))
                 updated += 1
-            return Response({"updated": updated, "skipped": skipped, "skipped_reason": "deja classes ou nom non reconnu" if skipped else ""})
+            return result(updated, "deja classes ou nom non reconnu")
 
         if act == "delete":
             if request.data.get("confirm") is not True:
                 raise ValidationError({"confirm": "Confirmation requise."})
-            n = qs.count()
-            qs.delete()
-            return Response({"updated": n, "skipped": 0})
+            removed = detached = 0
+            with transaction.atomic():
+                for product in mine:
+                    if product.pk in shared_ids:
+                        Stock.objects.filter(product=product, point_of_sale=store).delete()  # retire seulement de ce point de vente
+                        detached += 1
+                    else:
+                        product.delete()
+                        removed += 1
+            extra = f"{detached} produit(s) partage(s) retire(s) de ce point de vente seulement" if detached else ""
+            return Response({"updated": removed + detached, "skipped": total - removed - detached, "skipped_reason": extra})
 
         raise ValidationError({"action": "Action inconnue."})
 

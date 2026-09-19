@@ -100,7 +100,7 @@ export default function AdminProductsPage() {
     setBulkBusy(true);
     setBulkMsg(null);
     try {
-      const res = await api.post("/catalog/products/bulk-update/", { ids, action, ...extra });
+      const res = await api.post("/catalog/products/bulk-update/", { ids, action, point_of_sale: storeId, ...extra });
       const { updated, skipped, skipped_reason } = res.data as { updated: number; skipped: number; skipped_reason?: string };
       setBulkMsg({
         ok: true,
@@ -551,7 +551,7 @@ export default function AdminProductsPage() {
         <button onClick={toggleAll} disabled={products.length === 0} className="border rounded-lg px-3 py-1.5 text-sm bg-white disabled:opacity-40">
           {allSelected ? "Tout deselectionner" : `Tout selectionner (${products.length})`}
         </button>
-        {products.some((x) => !x.category) && (
+        {storeId && products.some((x) => !x.category) && (
           <button
             onClick={() => {
               setSelected(new Set(products.filter((x) => !x.category).map((x) => x.id)));
@@ -564,9 +564,16 @@ export default function AdminProductsPage() {
             Classer automatiquement ({products.filter((x) => !x.category).length} sans categorie)
           </button>
         )}
-        {selected.size > 0 && (
+        {selected.size > 0 && !storeId && (
+          <span className="text-sm text-amber-500">
+            {selected.size} selectionne(s) : choisissez d&apos;abord un point de vente (boutons ci-dessus) - les modifications ne s&apos;appliquent qu&apos;a lui.
+          </span>
+        )}
+        {selected.size > 0 && storeId && (
           <>
-            <span className="text-sm font-medium">{selected.size} selectionne(s) :</span>
+            <span className="text-sm font-medium">
+              {selected.size} selectionne(s) - applique uniquement a <strong>{store?.name.replace(/ La Belle Teranga$/i, "")}</strong> :
+            </span>
             <button onClick={() => runBulk("activate")} disabled={bulkBusy} className="border border-green-600 text-green-700 rounded-lg px-3 py-1.5 text-sm bg-white">
               Activer
             </button>
@@ -623,7 +630,7 @@ export default function AdminProductsPage() {
                       ))}
                     </div>
                     <input type="number" autoFocus value={bulkQty} onChange={(e) => setBulkQty(e.target.value)} placeholder="Quantite" className="w-full border rounded px-3 py-2" />
-                    <button disabled={bulkBusy || bulkQty === ""} onClick={() => runBulk("set_stock", { point_of_sale: storeId, quantity: Number(bulkQty), mode: bulkMode })} className="w-full bg-brand text-white rounded-lg py-2.5 font-medium disabled:opacity-40">
+                    <button disabled={bulkBusy || bulkQty === ""} onClick={() => runBulk("set_stock", { quantity: Number(bulkQty), mode: bulkMode })} className="w-full bg-brand text-white rounded-lg py-2.5 font-medium disabled:opacity-40">
                       {bulkBusy ? "Application..." : bulkMode === "add" ? "Ajouter cette quantite" : "Appliquer ce stock"}
                     </button>
                   </>
