@@ -306,10 +306,13 @@ def _save(job_id, plan):
 
 
 def match_image(item, pool, used):
-    """Renvoie l'index de l'image du lot qui correspond au produit : fichier indique, SKU, nom exact, puis nom approchant."""
+    """
+    Renvoie l'index de l'image du lot qui correspond au produit : image incrustee, fichier indique, SKU, nom exact, puis nom
+    proche. Une meme photo peut servir a plusieurs variantes d'un produit (« Riz parfume 1kg », « 5kg », « 25kg »...).
+    """
     if "embedded" in item and item["embedded"] not in used:
         return item["embedded"]
-    stems = [(i, os.path.splitext(img["filename"])[0], img["filename"]) for i, img in enumerate(pool) if i not in used and not img.get("embedded")]
+    stems = [(i, os.path.splitext(img["filename"])[0], img["filename"]) for i, img in enumerate(pool) if not img.get("embedded")]
     wanted = str(item.get("image_file") or "").strip().lower()
     if wanted:
         for i, _stem, fn in stems:
@@ -320,17 +323,20 @@ def match_image(item, pool, used):
         for i, stem, _ in stems:
             if compact(stem) == sku:
                 return i
-    cname = compact(item["name"])
+    names = {compact(item["name"]), compact(re.sub(r"\(.*?\)", "", item["name"]))}
+    names.discard("")
     for i, stem, _ in stems:
-        if compact(stem) == cname:
+        if compact(stem) in names:
             return i
     best, best_i = 0.0, None
     for i, stem, _ in stems:
         cs = compact(stem)
-        if len(cs) >= 4 and (cs in cname or cname in cs) and min(len(cs), len(cname)) >= 4:
-            ratio = 0.9
-        else:
-            ratio = difflib.SequenceMatcher(None, cs, cname).ratio()
+        ratio = 0.0
+        for cn in names:
+            if len(cs) >= 4 and len(cn) >= 4 and (cs in cn or cn in cs) and min(len(cs), len(cn)) / max(len(cs), len(cn)) >= 0.7:
+                ratio = max(ratio, 0.9)
+            else:
+                ratio = max(ratio, difflib.SequenceMatcher(None, cs, cn).ratio())
         if ratio > best:
             best, best_i = ratio, i
     return best_i if best >= 0.84 else None
