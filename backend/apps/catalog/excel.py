@@ -230,6 +230,7 @@ def import_products_from_excel(file_obj, store=None):
         }
 
     col_index = {name: idx for idx, name in enumerate(header_lower)}
+    category_cache = {}
     stock_columns = [
         (idx, h[len(STOCK_COLUMN_PREFIX):].strip())
         for idx, h in enumerate(header)
@@ -262,7 +263,9 @@ def import_products_from_excel(file_obj, store=None):
 
             category = None
             if category_name:
-                category, _ = Category.objects.get_or_create(name=category_name)
+                from .smart_import import get_category  # insensible aux accents et aux majuscules : evite les doublons de categories
+
+                category = get_category(category_name, category_cache)
 
             defaults = {
                 "name": name,
