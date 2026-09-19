@@ -48,6 +48,9 @@ def create_pos_sale(cashier_profile, items, payment_method, customer_name="", am
         paid_at=timezone.now(),
     )
 
+    from apps.stores.models import tracks_stock  # import tardif (evite un cycle d'apps)
+
+    tracked = tracks_stock(store)
     merged = {}
     for line in items:
         pid = int(line["product"])
@@ -61,10 +64,11 @@ def create_pos_sale(cashier_profile, items, payment_method, customer_name="", am
         if not product:
             raise ValidationError({"items": f"Produit {product_id} introuvable ou inactif."})
 
-        stock = Stock.objects.select_for_update().filter(product=product, point_of_sale=store).first()
-        available = stock.quantity if stock else 0
-        if available < qty:
-            raise ValidationError({"items": f"Stock insuffisant pour '{product.name}' (disponible: {available})."})
+        if tracked:
+            stock = Stock.objects.select_for_update().filter(product=product, point_of_sale=store).first()
+            available = stock.quantity if stock else 0
+            if available < qty:
+                raise ValidationError({"items": f"Stock insuffisant pour '{product.name}' (disponible: {available})."})
 
         promo = product.active_promotion(store)
         unit_price = promo.discounted_price(product.price) if promo else product.price
@@ -76,14 +80,15 @@ def create_pos_sale(cashier_profile, items, payment_method, customer_name="", am
             unit_price=unit_price,
             quantity=qty,
         )
-        change_stock(
-            product,
-            store,
-            delta=-qty,
-            reason=StockMovement.Reason.SALE_POS,
-            reference=order.reference[:8].upper(),
-            user=cashier_profile.user,
-        )
+        if tracked:
+            change_stock(
+                product,
+                store,
+                delta=-qty,
+                reason=StockMovement.Reason.SALE_POS,
+                reference=order.reference[:8].upper(),
+                user=cashier_profile.user,
+            )
 
     order.recompute_total()
     order.save(update_fields=["total_amount"])

@@ -139,6 +139,8 @@ class StoreSettings(models.Model):
     prices_include_vat = models.BooleanField("Prix TTC", default=True)
     payment_methods = models.JSONField("Moyens de paiement acceptes", default=default_payment_methods)
     # apparence du ticket
+    # suivi du stock : desactive (restaurant, plats faits a la commande) => jamais de rupture ni de sortie de stock
+    track_stock = models.BooleanField("Suivi du stock", default=True)
     receipt_slogan = models.CharField(max_length=120, blank=True, default="L'art du service")
     receipt_footer = models.CharField(max_length=200, blank=True, default="Merci de votre visite !")
     # modules de la caisse
@@ -152,6 +154,14 @@ class StoreSettings(models.Model):
 
     def __str__(self):
         return f"Parametres de {self.point_of_sale}"
+
+
+UNLIMITED_STOCK = 9999
+
+
+def tracks_stock(store):
+    """False pour un point de vente sans suivi de stock (ex. restaurant) : quantite toujours disponible."""
+    return get_settings(store).track_stock if store else True
 
 
 def get_settings(store):

@@ -46,6 +46,7 @@ export type StoreConfig = {
   vat_rate: string;
   prices_include_vat: boolean;
   payment_methods: PayMethodKey[];
+  track_stock: boolean;
   receipt_slogan: string;
   receipt_footer: string;
   module_hold: boolean;

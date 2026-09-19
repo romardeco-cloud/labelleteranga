@@ -88,6 +88,10 @@ def _decrement_store_stock(order):
     """Sortie de stock du point de vente d'une commande en ligne (jamais bloquante : la commande est deja payee)."""
     if order.channel != Order.Channel.ONLINE or not order.point_of_sale_id:
         return
+    from apps.stores.models import tracks_stock
+
+    if not tracks_stock(order.point_of_sale):
+        return
     from rest_framework.exceptions import ValidationError
 
     from apps.stores.models import StockMovement
@@ -116,7 +120,9 @@ def void_order(order, user, reason):
         if order.status == Order.Status.CANCELLED:
             raise ValidationError({"detail": "Cette vente est deja annulee."})
         was_paid = order.status == Order.Status.PAID
-        if was_paid and order.point_of_sale_id:
+        from apps.stores.models import tracks_stock
+
+        if was_paid and order.point_of_sale_id and tracks_stock(order.point_of_sale):
             from apps.stores.models import StockMovement
             from apps.stores.services import change_stock
 

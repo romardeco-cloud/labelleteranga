@@ -53,6 +53,10 @@ class ProductSerializer(serializers.ModelSerializer):
         store = self.context.get("store")
         if not store:
             return None
+        from apps.stores.models import UNLIMITED_STOCK, tracks_stock
+
+        if not tracks_stock(store):
+            return UNLIMITED_STOCK  # pas de suivi de stock : toujours disponible
         return next((s.quantity for s in product.stocks.all() if s.point_of_sale_id == store.id), 0)
 
     def get_store_stock(self, product):

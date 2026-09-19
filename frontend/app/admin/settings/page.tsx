@@ -41,6 +41,11 @@ const PAYMENTS: { key: PayMethodKey; label: string; hint: string }[] = [
 ];
 
 const MODULES: { key: keyof StoreConfig; label: string; hint: string }[] = [
+  {
+    key: "track_stock",
+    label: "Suivi du stock",
+    hint: "Desactivez-le pour un restaurant ou des plats faits a la commande : plus de « Rupture », les quantites ne sont ni verifiees ni decomptees.",
+  },
   { key: "module_hold", label: "Ventes en attente", hint: "Mettre une vente de cote et la reprendre." },
   { key: "module_history", label: "Historique du jour", hint: "Liste des ventes du caissier et reimpression des tickets." },
   { key: "module_dine_in", label: "Vente sur place", hint: "Associer une vente a une table (restaurant)." },
@@ -52,7 +57,7 @@ const MODULES: { key: keyof StoreConfig; label: string; hint: string }[] = [
 
 const EDITABLE: (keyof StoreConfig)[] = [
   "name", "address", "phone", "slug", "online_enabled", "description", "timezone", "email", "legal_form", "share_capital", "ninea", "rccm", "vat_rate",
-  "prices_include_vat", "payment_methods", "receipt_slogan", "receipt_footer",
+  "prices_include_vat", "payment_methods", "track_stock", "receipt_slogan", "receipt_footer",
   "module_hold", "module_history", "module_qr", "module_dine_in", "module_customer_orders", "module_drawer", "module_xreport",
 ];
 

@@ -5,7 +5,7 @@ from rest_framework.views import APIView
 from apps.accounts.permissions import IsCashier
 from apps.catalog.models import Product
 from apps.orders.models import Order
-from apps.stores.models import DrawerOpening, Stock, StoreCategory
+from apps.stores.models import UNLIMITED_STOCK, DrawerOpening, Stock, StoreCategory, tracks_stock
 from apps.stores.serializers import pos_settings
 
 from django.utils import timezone
@@ -30,6 +30,7 @@ class POSProductListView(APIView):
             qs = qs.filter(Q(name__icontains=search) | Q(sku__icontains=search))
         qs = qs.order_by("name")[:1000]
 
+        tracked = tracks_stock(store)
         stock_by_product = dict(
             Stock.objects.filter(point_of_sale=store, product__in=qs).values_list("product_id", "quantity")
         )
@@ -47,7 +48,7 @@ class POSProductListView(APIView):
                     "price": str(p.price),
                     "effective_price": str(price),
                     "promotion": promo.name if promo else None,
-                    "stock": stock_by_product.get(p.id, 0),
+                    "stock": stock_by_product.get(p.id, 0) if tracked else UNLIMITED_STOCK,
                     "image": request.build_absolute_uri(p.image.url) if p.image else None,
                 }
             )

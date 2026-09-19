@@ -4,7 +4,7 @@ from rest_framework.response import Response
 from rest_framework.views import APIView
 
 from apps.catalog.models import Product
-from apps.stores.models import PointOfSale, Stock
+from apps.stores.models import PointOfSale, Stock, tracks_stock
 
 from .models import Cart, CartItem
 from .serializers import CartSerializer
@@ -43,7 +43,7 @@ class CartAddItemView(APIView):
             wanted = quantity + (existing.quantity if existing else 0)
             if not stock:
                 return Response({"detail": "Ce produit n'est pas vendu sur ce site."}, status=status.HTTP_400_BAD_REQUEST)
-            if wanted > stock.quantity:
+            if tracks_stock(cart.point_of_sale) and wanted > stock.quantity:
                 return Response(
                     {"detail": f"Stock insuffisant pour {product.name} (disponible : {stock.quantity})."},
                     status=status.HTTP_400_BAD_REQUEST,
