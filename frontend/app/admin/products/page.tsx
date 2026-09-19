@@ -104,10 +104,15 @@ export default function AdminProductsPage() {
     try {
       const res = await api.post("/catalog/products/bulk-update/", { ids, action, point_of_sale: storeId, ...extra });
       const { updated, skipped, skipped_reason } = res.data as { updated: number; skipped: number; skipped_reason?: string };
-      setBulkMsg({
-        ok: true,
-        text: `${updated} produit(s) modifie(s)${skipped ? ` ; ${skipped} ignore(s)` : ""}${skipped_reason ? ` (${skipped_reason.replace(/^ - /, "")})` : ""}.`,
-      });
+      const why = skipped_reason?.replace(/^ - /, "") ?? "";
+      let text = `${updated} produit(s) modifie(s)${skipped ? ` ; ${skipped} ignore(s)` : ""}${why ? ` (${why})` : ""}.`;
+      if (action === "activate" && skipped) {
+        text = `${updated} produit(s) active(s). ${skipped} non active(s) :`;
+        if (why.includes("prix a 0")) text += " leur prix est a 0 FCFA - donnez-leur d'abord un prix avec « Prix uniforme » (case « Activer aussi »), ou modifiez le prix produit par produit.";
+        if (why.includes("partage")) text += " certains sont aussi vendus par un autre point de vente : leur statut est commun, changez-le depuis la ligne du produit.";
+        if (why.includes("hors de ce point")) text += " certains ne sont pas dans ce point de vente.";
+      }
+      setBulkMsg({ ok: !(action === "activate" && skipped && !updated), text });
       setBulkKind(null);
       setBulkConfirm("");
       if (action === "delete" || (action === "assign_store" && extra.mode === "move")) setSelected(new Set());
