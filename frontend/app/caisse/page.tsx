@@ -68,7 +68,7 @@ export default function CaissePage() {
   const [mode, setMode] = useState<Mode>("direct");
   const [table, setTable] = useState("");
   const [settings, setSettings] = useState<POSSettings>(DEFAULT_SETTINGS);
-  const [storeCats, setStoreCats] = useState<{ name: string; order: number }[]>([]);
+  const [storeCats, setStoreCats] = useState<{ name: string; label?: string; order: number }[]>([]);
   const [dailyMenu, setDailyMenu] = useState<{ lunch: { product: number; number: number }[]; special: { product: number; number: number }[] }>({ lunch: [], special: [] });
   const [customerOrders, setCustomerOrders] = useState<POSCustomerOrder[]>([]);
   const [ordersLoading, setOrdersLoading] = useState(false);
@@ -879,7 +879,7 @@ export default function CaissePage() {
                       ["all", "Tout", products.length],
                       ...(dailyMenu.special.length ? [["__special", "Speciaux du jour", dailyMenu.special.length]] : []),
                       ...(dailyMenu.lunch.length ? [["__lunch", "Menu du midi", dailyMenu.lunch.length]] : []),
-                      ...categories.map(([n, c]) => [n, n, c]),
+                      ...categories.map(([n, c]) => [n, storeCats.find((s) => s.name === n)?.label ?? n, c]),
                     ] as [string, string, number][]
                   ).map(([key, label, count]) => (
                     <button

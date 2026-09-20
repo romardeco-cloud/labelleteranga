@@ -111,6 +111,11 @@ class StoreCategory(models.Model):
     point_of_sale = models.ForeignKey(PointOfSale, related_name="store_categories", on_delete=models.CASCADE)
     category = models.ForeignKey("catalog.Category", related_name="store_links", on_delete=models.CASCADE)
     order = models.PositiveIntegerField("Ordre", default=0)
+    display_name = models.CharField("Nom affiché dans ce point de vente (vide = nom d'origine)", max_length=120, blank=True)
+
+    @property
+    def label(self):
+        return self.display_name or self.category.name
 
     class Meta:
         unique_together = ("point_of_sale", "category")

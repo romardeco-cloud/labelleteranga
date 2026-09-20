@@ -6,6 +6,8 @@ export type StoreCategory = {
   point_of_sale: number;
   category: number;
   name: string;
+  default_name: string;
+  display_name: string;
   order: number;
   products_count: number;
   hidden_count: number;
@@ -20,6 +22,9 @@ export async function addStoreCategory(storeId: number, input: { category?: numb
 }
 export async function setStoreCategoryOrder(id: number, order: number) {
   return (await api.patch<StoreCategory>(`/stores/categories/${id}/`, { order })).data;
+}
+export async function renameStoreCategory(id: number, displayName: string) {
+  return (await api.patch<StoreCategory>(`/stores/categories/${id}/`, { display_name: displayName })).data;
 }
 export async function removeStoreCategory(id: number) {
   await api.delete(`/stores/categories/${id}/`);

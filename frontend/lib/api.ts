@@ -513,7 +513,7 @@ export async function fetchPOSProducts(search: string) {
   const { data } = await api.get<{
     point_of_sale: string;
     results: POSProduct[];
-    categories: { name: string; order: number }[];
+    categories: { name: string; label?: string; order: number }[];
     daily_menu?: { lunch: { product: number; number: number }[]; special: { product: number; number: number }[] };
     settings: POSSettings;
   }>("/pos/products/", {

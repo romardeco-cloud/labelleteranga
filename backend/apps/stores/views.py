@@ -206,7 +206,12 @@ class StoreCategoryViewSet(viewsets.ModelViewSet):
             link.order = max(0, int(request.data.get("order", link.order)))
         except (TypeError, ValueError):
             raise ValidationError({"order": "Nombre entier attendu."})
-        link.save(update_fields=["order"])
+        if "display_name" in request.data:  # renommer la categorie dans CE point de vente seulement (vide = nom d'origine)
+            new_name = " ".join(str(request.data.get("display_name") or "").split())[:120]
+            if new_name and StoreCategory.objects.filter(point_of_sale=link.point_of_sale, display_name__iexact=new_name).exclude(pk=link.pk).exists():
+                raise ValidationError({"display_name": "Une autre categorie porte deja ce nom dans ce point de vente."})
+            link.display_name = "" if new_name.lower() == link.category.name.lower() else new_name
+        link.save(update_fields=["order", "display_name"])
         return Response(StoreCategorySerializer(self._annotate([link])[0]).data)
 
 
@@ -428,7 +433,7 @@ def _site_payload(store, with_categories=False):
             (
                 {
                     "id": cid,
-                    "name": links[cid].category.name if cid in links else names.get(cid, ""),
+                    "name": links[cid].label if cid in links else names.get(cid, ""),
                     "order": links[cid].order if cid in links else 999,
                     "products_count": n,
                 }

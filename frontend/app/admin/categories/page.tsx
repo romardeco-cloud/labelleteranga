@@ -11,6 +11,7 @@ import {
   addStoreCategory,
   fetchStoreCategories,
   removeStoreCategory,
+  renameStoreCategory,
   setStoreCategoryOrder,
 } from "@/lib/store-admin";
 
@@ -24,6 +25,9 @@ export default function AdminCategoriesPage() {
   const [name, setName] = useState("");
   const [error, setError] = useState("");
   const [busy, setBusy] = useState(false);
+  const [editing, setEditing] = useState<number | null>(null);
+  const [newName, setNewName] = useState("");
+  const [renameError, setRenameError] = useState("");
 
   useEffect(() => {
     fetchPointsOfSale().then((list) => {
@@ -67,6 +71,17 @@ export default function AdminCategoriesPage() {
     if (!Number.isFinite(n) || n === l.order) return;
     await setStoreCategoryOrder(l.id, n);
     load();
+  }
+
+  async function saveName(l: StoreCategory, value: string) {
+    setRenameError("");
+    try {
+      await renameStoreCategory(l.id, value);
+      setEditing(null);
+      load();
+    } catch (err) {
+      setRenameError(apiErrorMessage(err, "Renommage impossible."));
+    }
   }
 
   async function remove(l: StoreCategory) {
@@ -150,7 +165,39 @@ export default function AdminCategoriesPage() {
               {categoryEmoji(l.name)}
             </span>
             <div className="flex-1 min-w-0">
-              <p className="font-semibold truncate">{l.name}</p>
+              {editing === l.id ? (
+                <form
+                  onSubmit={(e) => {
+                    e.preventDefault();
+                    saveName(l, newName);
+                  }}
+                  className="flex flex-wrap items-center gap-2"
+                >
+                  <input
+                    autoFocus
+                    value={newName}
+                    onChange={(e) => setNewName(e.target.value)}
+                    maxLength={120}
+                    placeholder={l.default_name}
+                    className="border rounded-lg px-3 py-1.5 text-sm min-w-[12rem]"
+                  />
+                  <button className="bg-brand text-white rounded-lg px-3 py-1.5 text-sm">Enregistrer</button>
+                  <button type="button" onClick={() => setEditing(null)} className="text-sm text-gray-500 underline">
+                    Annuler
+                  </button>
+                  {l.display_name && (
+                    <button type="button" onClick={() => saveName(l, "")} className="text-sm text-amber-400 underline">
+                      Rétablir « {l.default_name} »
+                    </button>
+                  )}
+                  {renameError && <span className="text-sm text-red-500 w-full">{renameError}</span>}
+                </form>
+              ) : (
+                <p className="font-semibold truncate">
+                  {l.name}
+                  {l.display_name && <span className="ml-2 text-xs font-normal text-gray-500">(nom d&apos;origine : {l.default_name})</span>}
+                </p>
+              )}
               <div className="flex flex-wrap items-center gap-2 mt-1 text-sm text-gray-500">
                 <label className="flex items-center gap-1">
                   Ordre :
@@ -182,6 +229,18 @@ export default function AdminCategoriesPage() {
                 )}
               </div>
             </div>
+            {editing !== l.id && (
+              <button
+                onClick={() => {
+                  setEditing(l.id);
+                  setNewName(l.name);
+                  setRenameError("");
+                }}
+                className="text-sm text-gray-400 hover:text-white border rounded-lg px-3 py-1.5"
+              >
+                Renommer
+              </button>
+            )}
             <button onClick={() => remove(l)} aria-label="Retirer" className="text-gray-500 hover:text-red-400 p-2">
               <Icon name="trash" className="w-4 h-4" />
             </button>
@@ -194,8 +253,8 @@ export default function AdminCategoriesPage() {
         )}
       </div>
       <p className="text-xs text-gray-500">
-        L&apos;ordre commande l&apos;affichage des filtres de categories a la caisse de ce point de vente. Retirer une categorie ne supprime aucun
-        produit.
+        L&apos;ordre commande l&apos;affichage des filtres de categories a la caisse de ce point de vente. Renommer une categorie ne change son nom que dans
+        ce point de vente (site web et caisse) : les autres points de vente gardent leur propre nom. Retirer une categorie ne supprime aucun produit.
       </p>
     </div>
   );

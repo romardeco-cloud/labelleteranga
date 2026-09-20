@@ -60,7 +60,7 @@ class POSProductListView(APIView):
         for menu in DailyMenu.objects.filter(point_of_sale=store, date=timezone.localdate(), is_published=True):
             daily[menu.kind] = [{"product": i.product_id, "number": i.number} for i in menu.items.all()]
         categories = [
-            {"name": l.category.name, "order": l.order}
+            {"name": l.category.name, "label": l.label, "order": l.order}
             for l in StoreCategory.objects.filter(point_of_sale=store).select_related("category")
         ]
         return Response(
