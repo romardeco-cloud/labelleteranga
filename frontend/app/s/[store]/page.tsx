@@ -56,15 +56,16 @@ export default function StoreHomePage() {
   return (
     <div>
       <div
-        className="w-full text-center py-12 px-4 bg-cover bg-center"
+        className="w-full text-center py-12 sm:py-16 px-4 bg-cover bg-center"
         style={{ backgroundImage: "linear-gradient(rgba(110,18,18,0.6), rgba(110,18,18,0.78)), linear-gradient(135deg, #9c1c1c, #6e1212)" }}
       >
         <Image
           src={storeImage(site.name)}
           alt={site.name}
-          width={220}
-          height={150}
-          className="mx-auto mb-4 h-24 w-auto object-contain rounded-xl bg-white/95 p-1.5 shadow"
+          width={480}
+          height={330}
+          priority
+          className="mx-auto mb-5 h-40 sm:h-56 w-auto object-contain rounded-2xl bg-white/95 p-2.5 shadow-xl ring-4 ring-white/30"
         />
         <h1 className="text-3xl sm:text-4xl font-bold text-white mb-2 drop-shadow">{shortName(site.name)}</h1>
         <p className="text-white/90 max-w-xl mx-auto">
