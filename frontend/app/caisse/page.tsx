@@ -157,7 +157,7 @@ export default function CaissePage() {
   }, [session, loadProducts, loadClosing]);
 
   // Alerte commandes en ligne : verifiee toutes les 10 s ; clignote en rouge (avec un bip) tant qu'une commande n'est pas finalisee
-  // son de notification "message recu" (deux notes douces, jouees deux fois) ; le contexte audio est cree une fois et reveille au premier toucher
+  // son de notification "message recu" (deux notes douces, jouees deux fois, sans rappel) ; le contexte audio est cree une fois et reveille au premier toucher
   const audioRef = useRef<AudioContext | null>(null);
   const lastChime = useRef(0);
   useEffect(() => {
@@ -207,8 +207,8 @@ export default function CaissePage() {
   const checkPending = useCallback(async () => {
     try {
       const data = await fetchPendingOnlineOrders();
-      // son a chaque nouvelle commande, puis rappel toutes les 30 s tant qu'une commande n'est pas finalisee
-      if (data.count > lastPendingCount.current || (data.count > 0 && Date.now() - lastChime.current > 30000)) beep();
+      // le son retentit deux fois seulement, a chaque nouvelle commande (l'alerte rouge, elle, reste jusqu'a la finalisation)
+      if (data.count > lastPendingCount.current) beep();
       lastPendingCount.current = data.count;
       setPendingOnline(data);
     } catch {}
