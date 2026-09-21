@@ -157,27 +157,58 @@ export default function CaissePage() {
   }, [session, loadProducts, loadClosing]);
 
   // Alerte commandes en ligne : verifiee toutes les 10 s ; clignote en rouge (avec un bip) tant qu'une commande n'est pas finalisee
+  // son de notification "message recu" (deux notes douces, jouees deux fois) ; le contexte audio est cree une fois et reveille au premier toucher
+  const audioRef = useRef<AudioContext | null>(null);
+  const lastChime = useRef(0);
+  useEffect(() => {
+    const wake = () => {
+      try {
+        const Ctx = window.AudioContext || (window as unknown as { webkitAudioContext: typeof AudioContext }).webkitAudioContext;
+        if (!audioRef.current) audioRef.current = new Ctx();
+        if (audioRef.current.state === "suspended") audioRef.current.resume();
+      } catch {}
+    };
+    window.addEventListener("pointerdown", wake);
+    window.addEventListener("keydown", wake);
+    return () => {
+      window.removeEventListener("pointerdown", wake);
+      window.removeEventListener("keydown", wake);
+    };
+  }, []);
   const beep = useCallback(() => {
     try {
       const Ctx = window.AudioContext || (window as unknown as { webkitAudioContext: typeof AudioContext }).webkitAudioContext;
-      const ctx = new Ctx();
-      [0, 0.35, 0.7].forEach((t) => {
-        const o = ctx.createOscillator();
-        const g = ctx.createGain();
-        o.frequency.value = 880;
-        g.gain.value = 0.25;
-        o.connect(g);
-        g.connect(ctx.destination);
-        o.start(ctx.currentTime + t);
-        o.stop(ctx.currentTime + t + 0.2);
+      if (!audioRef.current) audioRef.current = new Ctx();
+      const ctx = audioRef.current;
+      if (ctx.state === "suspended") ctx.resume();
+      const note = (freq: number, at: number) => {
+        [ [freq, "sine", 0.32], [freq * 2, "triangle", 0.08] ].forEach(([f, type, vol]) => {
+          const o = ctx.createOscillator();
+          const g = ctx.createGain();
+          o.type = type as OscillatorType;
+          o.frequency.value = f as number;
+          const t0 = ctx.currentTime + at;
+          g.gain.setValueAtTime(0.0001, t0);
+          g.gain.exponentialRampToValueAtTime(vol as number, t0 + 0.02);
+          g.gain.exponentialRampToValueAtTime(0.0001, t0 + 0.7);
+          o.connect(g);
+          g.connect(ctx.destination);
+          o.start(t0);
+          o.stop(t0 + 0.75);
+        });
+      };
+      [0, 1.0].forEach((t) => {
+        note(1046.5, t); // do
+        note(1318.5, t + 0.16); // mi
       });
-      setTimeout(() => ctx.close(), 1500);
+      lastChime.current = Date.now();
     } catch {}
   }, []);
   const checkPending = useCallback(async () => {
     try {
       const data = await fetchPendingOnlineOrders();
-      if (data.count > lastPendingCount.current) beep();
+      // son a chaque nouvelle commande, puis rappel toutes les 30 s tant qu'une commande n'est pas finalisee
+      if (data.count > lastPendingCount.current || (data.count > 0 && Date.now() - lastChime.current > 30000)) beep();
       lastPendingCount.current = data.count;
       setPendingOnline(data);
     } catch {}
