@@ -35,9 +35,9 @@ def create_order_from_cart(session_key, customer_data, payment_method, clear_car
     order = Order.objects.create(
         point_of_sale=cart.point_of_sale,
         fulfillment=fulfillment,
-        customer_name=customer_data.get("customer_name", ""),
-        customer_email=customer_data.get("customer_email", ""),
-        customer_phone=customer_data.get("customer_phone", ""),
+        customer_name=customer_data.get("customer_name") or "",
+        customer_email=(customer_data.get("customer_email") or "").strip(),  # facultatif
+        customer_phone=customer_data.get("customer_phone") or "",
         delivery_address=customer_data.get("delivery_address", ""),
         delivery_latitude=customer_data.get("delivery_latitude") or None,
         delivery_longitude=customer_data.get("delivery_longitude") or None,

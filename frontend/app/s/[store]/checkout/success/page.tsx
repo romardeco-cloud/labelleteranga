@@ -69,7 +69,7 @@ function SuccessContent() {
     setDeclaring(true);
     setDeclareError("");
     try {
-      setOrder(await declarePayment(reference, txnRef));
+      setOrder(await declarePayment(reference, txnRef.trim() || "XXXX")); // reference facultative : XXXX si le client ne l'a pas
     } catch (err: any) {
       setDeclareError(err?.response?.data?.detail ?? "Validation impossible, reessayez.");
     } finally {
@@ -248,7 +248,7 @@ function SuccessContent() {
             </div>
           )}
 
-          <p className="text-xs text-gray-600 mt-3">Ensuite, revenez ici et validez avec la reference de la transaction (recue par SMS).</p>
+          <p className="text-xs text-gray-600 mt-3">Ensuite, revenez ici et validez le paiement (la reference de la transaction, recue par SMS, est facultative).</p>
         </div>
       )}
 
@@ -264,15 +264,16 @@ function SuccessContent() {
             </div>
           ) : (
             <form onSubmit={submitDeclaration} className="border rounded-lg p-4 bg-white space-y-2">
-              <label className="block text-sm font-medium">Reference de la transaction (recue par SMS ou dans l&apos;application)</label>
+              <label className="block text-sm font-medium">
+                Reference de la transaction <span className="text-gray-400 font-normal">(facultatif - recue par SMS ou dans l&apos;application)</span>
+              </label>
               <input
-                required
-                minLength={4}
                 value={txnRef}
                 onChange={(e) => setTxnRef(e.target.value)}
-                placeholder="Ex. T2409181234AB"
+                placeholder="Ex. T2409181234AB  (ou laissez vide : XXXX)"
                 className="w-full border rounded px-3 py-2"
               />
+              <p className="text-xs text-gray-500">Vous n&apos;avez pas la reference sous la main ? Laissez vide : nous verifions votre paiement avec votre numero et le montant.</p>
               {declareError && <p className="text-sm text-red-600">{declareError}</p>}
               <button disabled={declaring} className="w-full bg-brand text-white py-2.5 rounded-lg font-medium disabled:opacity-50">
                 {declaring ? "Validation..." : "J'ai effectue le paiement - valider"}

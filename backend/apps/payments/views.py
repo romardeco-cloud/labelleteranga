@@ -265,9 +265,7 @@ class DeclarePaymentView(APIView):
             return Response({"detail": "Cette commande n'attend pas de paiement."}, status=status.HTTP_400_BAD_REQUEST)
         ref = str(request.data.get("payment_reference") or "").strip()
         if len(ref) < 4:
-            return Response(
-                {"detail": "Indiquez la reference de votre transaction (au moins 4 caracteres)."}, status=status.HTTP_400_BAD_REQUEST
-            )
+            ref = "XXXX"  # reference facultative : l'equipe verifie le paiement avec le numero et le montant
         order.payment_reference = ref[:60]
         order.payment_declared_at = timezone.now()
         order.save(update_fields=["payment_reference", "payment_declared_at"])
