@@ -4,6 +4,7 @@ import { useCallback, useEffect, useMemo, useState } from "react";
 import ProductVisual from "@/components/ProductVisual";
 import { PointOfSale, Product, api, fetchPointsOfSale } from "@/lib/api";
 import { apiErrorMessage, formatXof } from "@/lib/documents";
+import { isMeal } from "@/lib/meals";
 import { MenuKind, deleteDailyMenu, fetchDailyMenuAdmin, saveDailyMenu } from "@/lib/store-admin";
 
 const today = () => new Date().toISOString().slice(0, 10);
@@ -29,6 +30,7 @@ export default function DailyMenuAdminPage() {
   const [previousDate, setPreviousDate] = useState<string | null>(null);
   const [existing, setExisting] = useState(false);
   const [search, setSearch] = useState("");
+  const [showAll, setShowAll] = useState(false); // false : seuls les repas sont proposes
   const [msg, setMsg] = useState<{ ok: boolean; text: string } | null>(null);
   const [busy, setBusy] = useState(false);
 
@@ -68,7 +70,7 @@ export default function DailyMenuAdminPage() {
   const q = search.trim().toLowerCase();
   // plats "repas midi" en premier pour le menu du midi
   const available = products
-    .filter((p) => !pickedIds.has(p.id) && (!q || p.name.toLowerCase().includes(q) || p.sku.toLowerCase().includes(q)))
+    .filter((p) => !pickedIds.has(p.id) && (showAll || isMeal(p.name, p.category?.name)) && (!q || p.name.toLowerCase().includes(q) || p.sku.toLowerCase().includes(q)))
     .sort((a, b) => {
       const pri = (p: Product) => (kind === "lunch" && /repas midi/i.test(p.category?.name ?? "") ? 0 : 1);
       return pri(a) - pri(b) || a.name.localeCompare(b.name, "fr");
@@ -252,6 +254,9 @@ export default function DailyMenuAdminPage() {
         <section className="border rounded-2xl bg-[#1c1514] p-5 space-y-3">
           <h2 className="font-semibold">Plats du point de vente</h2>
           <input type="search" value={search} onChange={(e) => setSearch(e.target.value)} placeholder="Rechercher un plat..." className="w-full border rounded-lg px-3 py-2" />
+          <label className="flex items-center gap-2 text-xs text-gray-500 mt-1.5">
+            <input type="checkbox" checked={showAll} onChange={(e) => setShowAll(e.target.checked)} /> Afficher aussi les boissons, desserts et autres produits
+          </label>
           <ul className="max-h-[32rem] overflow-y-auto space-y-1.5 pr-1">
             {available.map((p) => (
               <li key={p.id}>
