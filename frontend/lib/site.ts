@@ -17,6 +17,7 @@ export type Site = {
   wave_number?: string;
   orange_number?: string;
   categories?: SiteCategory[];
+  products_count?: number;
   social_links?: Partial<Record<"whatsapp" | "phone" | "facebook" | "instagram" | "tiktok" | "x" | "youtube" | "telegram" | "website", string>>;
   loyalty?: { enabled: boolean; mode?: "orders" | "amount"; threshold?: number; reward_label?: string };
   reviews?: { count: number; overall: number | null };

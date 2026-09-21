@@ -422,6 +422,7 @@ def _site_payload(store, with_categories=False):
     data["combos_count"] = Combo.objects.filter(point_of_sale=store, is_active=True).count()
     if with_categories:
         # meme regle que la liste des produits du site : tous les produits actifs du point de vente, en rupture ou non
+        data["products_count"] = Stock.objects.filter(point_of_sale=store, product__is_active=True).values("product_id").distinct().count()
         in_sale = Stock.objects.filter(point_of_sale=store, product__is_active=True, product__category__isnull=False)
         counts = {r["product__category_id"]: r["n"] for r in in_sale.values("product__category_id").annotate(n=Count("product_id", distinct=True))}
         links = {l.category_id: l for l in StoreCategory.objects.filter(point_of_sale=store).select_related("category")}

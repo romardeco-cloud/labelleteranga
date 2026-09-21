@@ -6,9 +6,9 @@ import ProductCard from "@/components/ProductCard";
 import DailyMenus from "@/components/site/DailyMenus";
 import LoyaltyBanner from "@/components/site/LoyaltyBanner";
 import { useSite } from "@/components/site/SiteContext";
-import { Product, fetchProducts } from "@/lib/api";
+import { Product, api, fetchProducts } from "@/lib/api";
 import { storeImage } from "@/lib/branding";
-import { shortName } from "@/lib/site";
+import { SiteCategory, shortName } from "@/lib/site";
 
 export default function StoreHomePage() {
   const { site } = useSite();
@@ -19,6 +19,23 @@ export default function StoreHomePage() {
   const [page, setPage] = useState(1);
   const [hasMore, setHasMore] = useState(false);
   const isResto = site.slug === "resto";
+  // categories et nombre de produits : rafraichis a chaque visite (et au retour sur l'onglet), donc a jour des qu'un produit est ajoute, modifie ou supprime
+  const [categories, setCategories] = useState<SiteCategory[]>(site.categories ?? []);
+  const [total, setTotal] = useState<number>(site.products_count ?? 0);
+  useEffect(() => {
+    const refresh = () =>
+      api
+        .get(`/stores/sites/${site.slug}/`)
+        .then((res) => {
+          setCategories(res.data.categories ?? []);
+          setTotal(res.data.products_count ?? 0);
+        })
+        .catch(() => {});
+    refresh();
+    const onVisible = () => document.visibilityState === "visible" && refresh();
+    document.addEventListener("visibilitychange", onVisible);
+    return () => document.removeEventListener("visibilitychange", onVisible);
+  }, [site.slug]);
 
   useEffect(() => {
     setLoading(true);
@@ -70,9 +87,9 @@ export default function StoreHomePage() {
           className="w-full border border-brand/30 rounded-lg px-4 py-2 mb-4 focus:outline-none focus:ring-2 focus:ring-brand-accent"
         />
 
-        {site.categories && site.categories.length > 0 && (
+        {categories.length > 0 && (
           <div className="flex flex-wrap gap-2 mb-6">
-            {[{ id: null as number | null, name: "Tout", products_count: 0 }, ...site.categories].map((c) => (
+            {[{ id: null as number | null, name: "Tout", products_count: total }, ...categories].map((c) => (
               <button
                 key={c.id ?? "all"}
                 onClick={() => {
@@ -84,7 +101,7 @@ export default function StoreHomePage() {
                 }`}
               >
                 {c.name}
-                {c.id !== null && c.products_count > 0 && <span className="ml-1.5 text-xs opacity-70">{c.products_count}</span>}
+                {c.products_count > 0 && <span className="ml-1.5 text-xs opacity-70">{c.products_count}</span>}
               </button>
             ))}
           </div>
