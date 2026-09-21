@@ -22,6 +22,7 @@ class ProductSerializer(serializers.ModelSerializer):
     active_promotion_name = serializers.SerializerMethodField()
     in_stock = serializers.SerializerMethodField()
     store_stock = serializers.SerializerMethodField()
+    combo_items = serializers.SerializerMethodField()
 
     class Meta:
         model = Product
@@ -44,10 +45,23 @@ class ProductSerializer(serializers.ModelSerializer):
             "is_active",
             "in_stock",
             "store_stock",
+            "combo_items",
             "created_at",
             "updated_at",
         ]
         read_only_fields = ["id", "slug", "created_at", "updated_at"]
+
+    def get_combo_items(self, product):
+        """Elements du combo du meme nom (site web d'un point de vente) ; liste vide pour un produit ordinaire."""
+        store = self.context.get("store")
+        if not store or "combo" not in product.name.lower():
+            return []
+        from apps.stores.combo_items import combo_items_map, norm_name
+
+        cache = self.context.setdefault("_combo_items", {})
+        if store.pk not in cache:
+            cache[store.pk] = combo_items_map(store)
+        return cache[store.pk].get(norm_name(product.name), [])
 
     def _store_quantity(self, product):
         store = self.context.get("store")

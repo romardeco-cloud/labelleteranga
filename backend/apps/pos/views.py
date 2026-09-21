@@ -37,6 +37,9 @@ class POSProductListView(APIView):
         stock_by_product = dict(
             Stock.objects.filter(point_of_sale=store, product__in=qs).values_list("product_id", "quantity")
         )
+        from apps.stores.combo_items import combo_items_map, norm_name
+
+        combos = combo_items_map(store)
         results = []
         for p in qs:
             price, promo_label = price_for(p, store, specials)
@@ -52,6 +55,7 @@ class POSProductListView(APIView):
                     "promotion": promo_label,
                     "stock": stock_by_product.get(p.id, 0) if tracked and p.id not in untracked else UNLIMITED_STOCK,
                     "image": request.build_absolute_uri(p.image.url) if p.image else None,
+                    "combo_items": combos.get(norm_name(p.name), []),
                 }
             )
         from apps.stores.models import DailyMenu

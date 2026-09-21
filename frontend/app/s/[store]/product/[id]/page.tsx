@@ -33,6 +33,16 @@ export default function ProductDetailPage() {
         <span className="text-xs text-gray-400">{product.category?.name}</span>
         <h1 className="text-2xl font-bold mb-2">{product.name}</h1>
         <p className="text-gray-600 mb-4">{product.description}</p>
+        {product.combo_items && product.combo_items.length > 0 && (
+          <div className="mb-4 rounded-xl border border-brand/20 bg-brand-light/60 p-4">
+            <p className="font-semibold text-brand-dark mb-1.5">Ce combo contient :</p>
+            <ul className="space-y-1 text-gray-700">
+              {product.combo_items.map((it, i) => (
+                <li key={i}>✓ {it}</li>
+              ))}
+            </ul>
+          </div>
+        )}
         <p className="text-2xl font-bold text-brand-dark mb-4">{formatXof(product.price)}</p>
         <button
           onClick={async () => {

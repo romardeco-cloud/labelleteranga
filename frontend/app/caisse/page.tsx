@@ -935,6 +935,13 @@ export default function CaissePage() {
                           </div>
                           <div className="p-3 flex-1 flex flex-col">
                             <p className="font-semibold text-sm leading-tight line-clamp-2 min-h-[2.25rem]">{p.name}</p>
+                            {p.combo_items && p.combo_items.length > 0 && (
+                              <ul className="mt-1 space-y-0.5 text-[11px] leading-tight text-gray-400">
+                                {p.combo_items.map((it, i) => (
+                                  <li key={i}>• {it}</li>
+                                ))}
+                              </ul>
+                            )}
                             <p className="mt-1.5 font-bold text-[#f5b942]">
                               {xof(p.effective_price)}
                               {p.promotion && <span className="ml-1.5 text-xs font-normal line-through text-gray-500">{xof(p.price)}</span>}
@@ -985,6 +992,9 @@ export default function CaissePage() {
                       <div className="flex-1 min-w-0">
                         <p className="text-sm font-medium leading-tight truncate">{l.product.name}</p>
                         <p className="text-xs text-gray-500">{xof(l.product.effective_price)}</p>
+                        {l.product.combo_items && l.product.combo_items.length > 0 && (
+                          <p className="text-[11px] leading-tight text-gray-400 mt-0.5">{l.product.combo_items.join(" · ")}</p>
+                        )}
                         <div className="flex items-center gap-1.5 mt-1.5">
                           <button onClick={() => changeQty(l.product.id, -1)} className="w-7 h-7 border rounded-lg hover:bg-white/5">
                             −

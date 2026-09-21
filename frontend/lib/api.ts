@@ -64,6 +64,7 @@ export type Product = {
   image: string | null;
   is_active: boolean;
   in_stock: boolean;
+  combo_items?: string[];
 };
 
 export async function fetchCategories() {
@@ -427,6 +428,7 @@ export type POSProduct = {
   promotion: string | null;
   stock: number;
   image: string | null;
+  combo_items?: string[];
 };
 
 export type POSReceipt = {

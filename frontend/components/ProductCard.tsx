@@ -40,6 +40,13 @@ export default function ProductCard({ product }: { product: Product }) {
         <Link href={`${base}/product/${product.id}`} className="font-medium leading-tight hover:text-brand">
           {product.name}
         </Link>
+        {product.combo_items && product.combo_items.length > 0 && (
+          <ul className="text-xs text-gray-500 leading-snug space-y-0.5">
+            {product.combo_items.map((it, i) => (
+              <li key={i}>• {it}</li>
+            ))}
+          </ul>
+        )}
         {product.active_promotion_name && (
           <span className="text-xs bg-brand-accent text-brand-dark font-medium px-1.5 py-0.5 rounded w-fit">
             {product.active_promotion_name}
