@@ -129,10 +129,11 @@ export default function EventsPage() {
       <div className="grid sm:grid-cols-2 lg:grid-cols-3 gap-5">
         {combos?.map((c) => (
           <article key={c.id} className="bg-white border rounded-2xl overflow-hidden flex flex-col">
-            <div className="h-40 bg-gradient-to-br from-brand-light to-white flex items-center justify-center overflow-hidden">
+            <div className={`bg-gradient-to-br from-brand-light to-white flex items-center justify-center overflow-hidden ${c.image ? "" : "h-40"}`}>
               {c.image ? (
+                // image affichee en entiere (texte du combo lisible en entier)
                 // eslint-disable-next-line @next/next/no-img-element
-                <img src={c.image} alt={c.name} className="w-full h-full object-cover" />
+                <img src={c.image} alt={c.name} className="w-full h-auto" />
               ) : (
                 <span className="text-6xl">{occasionEmoji(c.occasion)}</span>
               )}

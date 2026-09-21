@@ -26,8 +26,8 @@ export default function ProductDetailPage() {
 
   return (
     <div className="max-w-3xl mx-auto px-4 py-8 grid sm:grid-cols-2 gap-8">
-      <div className="aspect-square bg-brand-light rounded-lg flex items-center justify-center overflow-hidden">
-        <ProductVisual image={product.image} name={product.name} category={product.category?.name} />
+      <div className={`bg-brand-light rounded-lg flex items-center justify-center overflow-hidden ${product.image ? "" : "aspect-square"}`}>
+        <ProductVisual image={product.image} name={product.name} category={product.category?.name} natural />
       </div>
       <div>
         <span className="text-xs text-gray-400">{product.category?.name}</span>

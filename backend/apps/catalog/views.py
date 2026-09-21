@@ -244,7 +244,10 @@ class ProductViewSet(viewsets.ModelViewSet):
 
         if act in ("set_category", "auto_category"):
             from .categorizer import assign, get_category, guess_category
+            from .resto_rules import guess_resto_category
 
+            # restaurant / fast-food : classement par type de plat ; les autres points de vente : catalogue de reference du supermarche
+            guess_category = guess_resto_category if store.slug == "resto" else guess_category
             cache = {}
             updated = skipped = 0
             if act == "set_category":
