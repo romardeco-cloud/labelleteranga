@@ -15,6 +15,8 @@ from .views import (
 )
 from .views_engagement import (
     ComboAdminViewSet,
+    PromoBandAdminViewSet,
+    SiteBandsView,
     ComboRequestAdminViewSet,
     CompanySealView,
     LoyaltyAdminView,
@@ -28,6 +30,7 @@ from .views_engagement import (
 router = DefaultRouter()
 router.register("reviews", ReviewAdminViewSet, basename="review-admin")
 router.register("combos", ComboAdminViewSet, basename="combo-admin")
+router.register("bands", PromoBandAdminViewSet, basename="band-admin")
 router.register("combo-requests", ComboRequestAdminViewSet, basename="combo-request-admin")
 router.register("points-of-sale", PointOfSaleViewSet, basename="point-of-sale")
 router.register("stock", StockViewSet, basename="stock")
@@ -41,6 +44,7 @@ urlpatterns = [
     path("sites/<slug:slug>/reviews/", SiteReviewsView.as_view()),
     path("sites/<slug:slug>/loyalty/", SiteLoyaltyView.as_view()),
     path("sites/<slug:slug>/combos/", SiteCombosView.as_view()),
+    path("sites/<slug:slug>/bands/", SiteBandsView.as_view()),
     path("sites/<slug:slug>/combo-requests/", SiteComboRequestView.as_view()),
     path("loyalty/", LoyaltyAdminView.as_view()),
     path("company-seal/", CompanySealView.as_view()),

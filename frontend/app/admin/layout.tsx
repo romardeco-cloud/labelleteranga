@@ -31,6 +31,7 @@ const MAIN_NAV: NavItem[] = [
   { href: "/admin/categories", label: "Categories", icon: "list" },
   { href: "/admin/daily-menu", label: "Menu du jour", icon: "utensils" },
   { href: "/admin/combos", label: "Combos & evenements", icon: "gift" },
+  { href: "/admin/bands", label: "Bandes de pub", icon: "tag" },
   { href: "/admin/promotions", label: "Promotions", icon: "tag" },
   { href: "/admin/orders", label: "Commandes", icon: "cart" },
   { href: "/admin/reviews", label: "Avis clients", icon: "star" },

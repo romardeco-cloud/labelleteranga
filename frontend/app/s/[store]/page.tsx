@@ -4,6 +4,7 @@ import Image from "next/image";
 import { useEffect, useState } from "react";
 import ProductCard from "@/components/ProductCard";
 import DailyMenus from "@/components/site/DailyMenus";
+import PromoBands from "@/components/site/PromoBands";
 import LoyaltyBanner from "@/components/site/LoyaltyBanner";
 import { useSite } from "@/components/site/SiteContext";
 import { Product, api, fetchProducts } from "@/lib/api";
@@ -75,6 +76,7 @@ export default function StoreHomePage() {
       </div>
 
       <div className="max-w-6xl mx-auto px-4 py-8">
+        <PromoBands />
         <DailyMenus />
         <LoyaltyBanner />
         <input

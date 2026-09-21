@@ -219,3 +219,36 @@ export async function fetchPosMenus() {
 export async function savePosMenu(payload: { kind: "lunch" | "special"; items: number[]; is_published: boolean; note?: string }) {
   return (await api.post<PosMenu>("/pos/daily-menu/", payload)).data;
 }
+
+/* ---------- Bandes de pub du site ---------- */
+export type BandCard = { kind: "product" | "combo"; id: number; name: string; subtitle: string; price: number; from_price: boolean; image: string | null };
+export type BandsData = {
+  bands: { id: number; title: string; text: string; show_prices: boolean; items: BandCard[] }[];
+  contact: { address: string; phone: string; email: string };
+};
+export async function fetchSiteBands(slug: string) {
+  return (await api.get<BandsData>(`/stores/sites/${slug}/bands/`)).data;
+}
+export type BandItemIn = { product: number; subtitle: string };
+export type Band = {
+  id: number;
+  point_of_sale: number;
+  title: string;
+  text: string;
+  show_prices: boolean;
+  category: number | null;
+  category_name: string;
+  include_combos: boolean;
+  is_active: boolean;
+  order: number;
+  items_out: { product: number; name: string; subtitle: string }[];
+};
+export async function fetchBandsAdmin(storeId: number) {
+  return (await api.get<Band[]>("/stores/bands/", { params: { point_of_sale: storeId } })).data;
+}
+export async function saveBand(id: number | null, body: Record<string, unknown>) {
+  return id ? (await api.patch<Band>(`/stores/bands/${id}/`, body)).data : (await api.post<Band>("/stores/bands/", body)).data;
+}
+export async function deleteBand(id: number) {
+  await api.delete(`/stores/bands/${id}/`);
+}

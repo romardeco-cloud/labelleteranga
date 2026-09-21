@@ -402,3 +402,35 @@ class CompanySeal(models.Model):
     @classmethod
     def current(cls):
         return cls.objects.first() or cls.objects.create()
+
+
+class PromoBand(models.Model):
+    """Bande de pub du site web d'un point de vente (« Nos Pizzas Artisanales », « Nos Combos »...) : titre, texte et cartes de plats avec photo et prix."""
+
+    point_of_sale = models.ForeignKey(PointOfSale, related_name="bands", on_delete=models.CASCADE)
+    title = models.CharField("Titre", max_length=120)
+    text = models.TextField("Texte", blank=True)
+    show_prices = models.BooleanField("Afficher les prix", default=True)
+    category = models.ForeignKey("catalog.Category", null=True, blank=True, on_delete=models.SET_NULL, related_name="+", verbose_name="Categorie (produits ajoutes automatiquement)")
+    include_combos = models.BooleanField("Ajouter automatiquement les combos actifs", default=False)
+    is_active = models.BooleanField(default=True)
+    order = models.PositiveIntegerField(default=0)
+    created_at = models.DateTimeField(auto_now_add=True)
+
+    class Meta:
+        ordering = ["order", "id"]
+
+    def __str__(self):
+        return f"{self.point_of_sale} / {self.title}"
+
+
+class PromoBandItem(models.Model):
+    """Plat choisi a la main dans une bande de pub (prioritaire sur la categorie)."""
+
+    band = models.ForeignKey(PromoBand, related_name="items", on_delete=models.CASCADE)
+    product = models.ForeignKey("catalog.Product", on_delete=models.CASCADE, related_name="+")
+    subtitle = models.CharField("Sous-titre", max_length=80, blank=True)
+    order = models.PositiveIntegerField(default=0)
+
+    class Meta:
+        ordering = ["order", "id"]

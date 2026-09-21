@@ -10,6 +10,7 @@ export default function ProductVisual({
   category,
   size = "card",
   natural = false,
+  cover = false,
 }: {
   image?: string | null;
   name: string;
@@ -17,6 +18,8 @@ export default function ProductVisual({
   size?: "card" | "tile";
   /** true : la photo est affichee en entier, sans recadrage (page produit). */
   natural?: boolean;
+  /** true : la photo remplit toujours le cadre (cartes des bandes de pub). */
+  cover?: boolean;
 }) {
   const [wide, setWide] = useState(false);
   if (image) {
@@ -26,7 +29,7 @@ export default function ProductVisual({
     }
     // les images larges (combos, affiches avec texte) sont affichees en entier au lieu d'etre recadrees
     // eslint-disable-next-line @next/next/no-img-element
-    return <img src={image} alt={name} onLoad={(e) => setWide(e.currentTarget.naturalWidth / e.currentTarget.naturalHeight >= 1.4)} className={`w-full h-full ${wide ? "object-contain" : "object-cover"}`} />;
+    return <img src={image} alt={name} onLoad={(e) => setWide(e.currentTarget.naturalWidth / e.currentTarget.naturalHeight >= 1.4)} className={`w-full h-full ${wide && !cover ? "object-contain" : "object-cover"}`} />;
   }
   return (
     <div

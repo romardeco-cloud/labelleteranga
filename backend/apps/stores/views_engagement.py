@@ -15,7 +15,7 @@ from rest_framework.views import APIView
 from apps.orders.models import Order
 
 from .loyalty import member_status, normalize_phone
-from .models import Combo, ComboRequest, LoyaltyMember, LoyaltyReward, PointOfSale, Review
+from .models import Combo, ComboRequest, LoyaltyMember, LoyaltyReward, PointOfSale, PromoBand, PromoBandItem, Review
 
 
 class SubmitThrottle(AnonRateThrottle):
@@ -539,3 +539,112 @@ class CompanySealView(APIView):
                 setattr(seal, f, truthy(d.get(f)))
         seal.save()
         return Response(seal_payload(seal))
+
+
+# ------------------------------------------------------------------ bandes de pub du site
+def band_items(band, request, limit=12):
+    """Cartes d'une bande : plats choisis a la main, sinon produits actifs de la categorie (regroupes par plat), puis combos actifs."""
+    from apps.catalog.models import Product
+
+    from .models import Stock
+
+    def img(f):
+        return request.build_absolute_uri(f.url) if f else None
+
+    cards = []
+    manual = list(band.items.select_related("product"))
+    if manual:
+        for it in manual:
+            p = it.product
+            if p.is_active:
+                cards.append({"kind": "product", "id": p.id, "name": p.name, "subtitle": it.subtitle or "", "price": int(p.price), "from_price": False, "image": img(p.image)})
+    elif band.category_id:
+        ids = Stock.objects.filter(point_of_sale=band.point_of_sale).values_list("product_id", flat=True)
+        groups = {}
+        for p in Product.objects.filter(pk__in=ids, category=band.category, is_active=True, price__gt=0).order_by("name"):
+            base = p.name.split(" - ")[0].strip()  # « Pizza 4 fromages - Petite (26 cm) » -> « Pizza 4 fromages »
+            groups.setdefault(base, []).append(p)
+        for base, ps in groups.items():
+            first = min(ps, key=lambda x: x.price)
+            photo = next((x for x in ps if x.image), None)
+            cards.append({"kind": "product", "id": first.id, "name": base, "subtitle": (first.description or "")[:70] if len(ps) == 1 else "", "price": int(first.price), "from_price": len(ps) > 1, "image": img(photo.image) if photo else None})
+    if band.include_combos:
+        today = timezone.localdate()
+        for c in Combo.objects.filter(point_of_sale=band.point_of_sale):
+            if _combo_available(c, today) and c.price > 0:
+                cards.append({"kind": "combo", "id": c.id, "name": c.name, "subtitle": (f"Pour {c.serves}" if c.serves else c.occasion) or "", "price": int(c.price), "from_price": False, "image": img(c.image)})
+    return cards[:limit]
+
+
+class SiteBandsView(APIView):
+    """GET /api/stores/sites/<slug>/bands/ -> bandes de pub actives (avec au moins une carte) + coordonnees du point de vente (public)."""
+
+    permission_classes = [permissions.AllowAny]
+
+    def get(self, request, slug):
+        store = _site_store(slug)
+        bands = []
+        for band in PromoBand.objects.filter(point_of_sale=store, is_active=True).select_related("category", "point_of_sale"):
+            cards = band_items(band, request)
+            if cards:
+                bands.append({"id": band.id, "title": band.title, "text": band.text, "show_prices": band.show_prices, "items": cards})
+        from .models import CompanySeal
+
+        company = CompanySeal.objects.first()
+        return Response(
+            {
+                "bands": bands,
+                "contact": {
+                    "address": store.address or (company.contact_address if company else ""),
+                    "phone": store.phone or (company.contact_phone if company else ""),
+                    "email": (company.contact_email if company and company.contact_email else "info@labelleteranga.com"),
+                },
+            }
+        )
+
+
+class PromoBandSerializer(serializers.ModelSerializer):
+    items = serializers.ListField(child=serializers.DictField(), required=False, write_only=True)
+    items_out = serializers.SerializerMethodField()
+    category_name = serializers.CharField(source="category.name", read_only=True, default="")
+
+    class Meta:
+        model = PromoBand
+        fields = ["id", "point_of_sale", "title", "text", "show_prices", "category", "category_name", "include_combos", "is_active", "order", "items", "items_out"]
+
+    def get_items_out(self, band):
+        return [{"product": i.product_id, "name": i.product.name, "subtitle": i.subtitle} for i in band.items.select_related("product")]
+
+    def _save_items(self, band, items):
+        from apps.catalog.models import Product
+
+        band.items.all().delete()
+        for pos, row in enumerate(items):
+            product = Product.objects.filter(pk=row.get("product")).first()
+            if product:
+                PromoBandItem.objects.create(band=band, product=product, subtitle=str(row.get("subtitle") or "")[:80], order=pos)
+
+    def create(self, validated):
+        items = validated.pop("items", None)
+        band = super().create(validated)
+        if items is not None:
+            self._save_items(band, items)
+        return band
+
+    def update(self, instance, validated):
+        items = validated.pop("items", None)
+        band = super().update(instance, validated)
+        if items is not None:
+            self._save_items(band, items)
+        return band
+
+
+class PromoBandAdminViewSet(viewsets.ModelViewSet):
+    permission_classes = [permissions.IsAdminUser]
+    serializer_class = PromoBandSerializer
+    pagination_class = None
+
+    def get_queryset(self):
+        qs = PromoBand.objects.select_related("category").prefetch_related("items__product")
+        store = self.request.query_params.get("point_of_sale")
+        return qs.filter(point_of_sale_id=store) if store else qs
