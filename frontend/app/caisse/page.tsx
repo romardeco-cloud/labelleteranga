@@ -23,6 +23,7 @@ import {
   fetchDrawerOpenings,
   fetchPOSCustomerOrders,
   acknowledgeOnlineOrders,
+  AckMessage,
   fetchPendingOnlineOrders,
   finalizeOnlineOrder,
   PendingOnlineOrders,
@@ -79,6 +80,7 @@ export default function CaissePage() {
   const [customerOrders, setCustomerOrders] = useState<POSCustomerOrder[]>([]);
   const [pendingOnline, setPendingOnline] = useState<PendingOnlineOrders>({ count: 0, new_count: 0, orders: [] });
   const lastPendingCount = useRef(0);
+  const [ackMessages, setAckMessages] = useState<AckMessage[]>([]); // messages WhatsApp de prise en charge a envoyer a la main (envoi automatique non configure ou echoue)
   const [ordersLoading, setOrdersLoading] = useState(false);
   const [drawerRows, setDrawerRows] = useState<DrawerOpening[]>([]);
   const [drawerReason, setDrawerReason] = useState("");
@@ -213,7 +215,8 @@ export default function CaissePage() {
     lastPendingCount.current = 0;
     setPendingOnline((p) => ({ ...p, new_count: 0, orders: p.orders.map((o) => ({ ...o, received: true })) }));
     try {
-      await acknowledgeOnlineOrders();
+      const res = await acknowledgeOnlineOrders();
+      setAckMessages(res.messages.filter((m) => m.status !== "sent" && m.link));
     } catch {}
   }, []);
   const checkPending = useCallback(async () => {
@@ -673,6 +676,19 @@ export default function CaissePage() {
           <span className="bg-white text-amber-700 rounded-full px-3 py-0.5 text-xs">Ouvrir</span>
         </button>
       )}
+      {ackMessages.length > 0 && (
+        <div className="w-full shrink-0 bg-emerald-700 text-white px-4 py-2 flex flex-wrap items-center gap-x-3 gap-y-1.5 text-sm print:hidden">
+          <span className="font-semibold">📲 Confirmer la prise en charge au client sur WhatsApp :</span>
+          {ackMessages.map((m) => (
+            <a key={m.reference} href={m.link!} target="_blank" rel="noopener noreferrer" className="bg-white text-emerald-800 font-semibold rounded-full px-3 py-1">
+              {m.customer_name || m.reference} - envoyer
+            </a>
+          ))}
+          <button onClick={() => setAckMessages([])} className="ml-auto text-white/80 underline text-xs">
+            Fermer
+          </button>
+        </div>
+      )}
       {pendingOnline.new_count > 0 && (
         <div
           role="alert"
@@ -1020,6 +1036,19 @@ export default function CaissePage() {
                             <p className="text-sm text-emerald-400">✓ Commande finalisee</p>
                           ) : (
                             <>
+                              {o.received && (
+                                <p className="text-xs text-gray-400 mb-2">
+                                  {o.ack_status === "sent" ? (
+                                    <span className="text-emerald-400">✓ Message WhatsApp de prise en charge envoye au client</span>
+                                  ) : o.ack_link ? (
+                                    <a href={o.ack_link} target="_blank" rel="noopener noreferrer" className="text-emerald-400 underline">
+                                      📲 Envoyer le message WhatsApp de prise en charge au client
+                                    </a>
+                                  ) : (
+                                    "Pas de numero WhatsApp pour ce client"
+                                  )}
+                                </p>
+                              )}
                               {!o.received && (
                                 <button
                                   onClick={async () => {

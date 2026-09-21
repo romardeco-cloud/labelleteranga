@@ -478,6 +478,8 @@ export type POSCustomerOrder = {
   full_reference?: string;
   handled?: boolean;
   received?: boolean;
+  ack_status?: string;
+  ack_link?: string | null;
   created_at: string;
   status: string;
   status_label: string;
@@ -512,8 +514,9 @@ export type PendingOnlineOrders = {
   new_count: number; // dont reception pas encore confirmee (alerte rouge + son)
   orders: { reference: string; customer_name: string; total: string; created_at: string; state: string; received?: boolean }[];
 };
+export type AckMessage = { reference: string; customer_name: string; status: string; link: string | null };
 export async function acknowledgeOnlineOrders() {
-  await api.post("/pos/customer-orders/acknowledge/");
+  return (await api.post<{ acknowledged: number; messages: AckMessage[] }>("/pos/customer-orders/acknowledge/")).data;
 }
 export async function fetchPendingOnlineOrders() {
   return (await api.get<PendingOnlineOrders>("/pos/customer-orders/pending/")).data;
