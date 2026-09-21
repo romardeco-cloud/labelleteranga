@@ -2,9 +2,20 @@ import type { Metadata, Viewport } from "next";
 import "./globals.css";
 import ServiceWorkerRegister from "@/components/ServiceWorkerRegister";
 
+const DESCRIPTION = "Restaurant & fast-food, supermarché, quincaillerie, dépôt d'aliments, ferme et service de forage : tous les services La Belle Teranga au Sénégal.";
+
 export const metadata: Metadata = {
-  title: "La Belle Teranga | Supermarche en ligne",
-  description: "Faites vos courses en ligne avec La Belle Teranga, livraison partout au Senegal.",
+  metadataBase: new URL("https://labelleteranga.com"),
+  title: "La Belle Teranga",
+  description: DESCRIPTION,
+  openGraph: {
+    title: "La Belle Teranga",
+    description: DESCRIPTION,
+    siteName: "La Belle Teranga",
+    type: "website",
+    locale: "fr_SN",
+    images: [{ url: "/logo.jpg", alt: "La Belle Teranga" }],
+  },
   manifest: "/manifest.webmanifest",
   icons: {
     icon: "/logo.jpg",

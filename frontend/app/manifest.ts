@@ -2,9 +2,9 @@ import type { MetadataRoute } from "next";
 
 export default function manifest(): MetadataRoute.Manifest {
   return {
-    name: "La Belle Teranga - Supermarche en ligne",
+    name: "La Belle Teranga",
     short_name: "La Belle Teranga",
-    description: "Faites vos courses en ligne avec La Belle Teranga, livraison partout au Senegal.",
+    description: "Restaurant & fast-food, supermarché, quincaillerie, dépôt d'aliments, ferme et service de forage : tous les services La Belle Teranga au Sénégal.",
     start_url: "/",
     display: "standalone",
     background_color: "#fdf8ee",

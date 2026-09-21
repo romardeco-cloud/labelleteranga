@@ -13,6 +13,14 @@ export async function generateMetadata({ params }: Params): Promise<Metadata> {
   return {
     title: `${site.name} | Commande en ligne`,
     description: site.description || `Commandez en ligne chez ${site.name}.`,
+    openGraph: {
+      title: site.name,
+      description: site.description || `Commandez en ligne chez ${site.name}.`,
+      siteName: "La Belle Teranga",
+      type: "website",
+      locale: "fr_SN",
+      images: [{ url: "/logo.jpg", alt: site.name }],
+    },
     manifest: `/s/${store}/manifest.webmanifest`,
     icons: { icon: `/icons/${icons}-192.png`, apple: `/icons/${icons}-apple.png` },
     appleWebApp: { capable: true, statusBarStyle: "black-translucent", title: shortName(site.name) },
