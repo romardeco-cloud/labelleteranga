@@ -6,6 +6,7 @@ import Icon from "@/components/admin/Icon";
 import { LoyaltyStatus, PosMember, PosMenus, fetchPosLoyalty, fetchPosMenus, redeemPosReward, savePosMenu, searchPosMembers } from "@/lib/engage";
 import ProductVisual from "@/components/ProductVisual";
 import { PAYMENT_QR, categoryEmoji, storeImage } from "@/lib/branding";
+import { useToday } from "@/lib/today";
 import { categoryRank, effectiveCategories, loadMenuCategories, saveMenuCategories } from "@/lib/meals";
 import {
   API_URL,
@@ -79,6 +80,7 @@ export default function CaissePage() {
   const [storeCats, setStoreCats] = useState<{ name: string; label?: string; order: number }[]>([]);
   const [dailyMenu, setDailyMenu] = useState<{ lunch: { product: number; number: number }[]; special: { product: number; number: number }[] }>({ lunch: [], special: [] });
   const [customerOrders, setCustomerOrders] = useState<POSCustomerOrder[]>([]);
+  const today = useToday(); // date du jour, mise a jour automatiquement a minuit
   const [pendingOnline, setPendingOnline] = useState<PendingOnlineOrders>({ count: 0, new_count: 0, orders: [] });
   const lastPendingCount = useRef(0);
   const [ackMessages, setAckMessages] = useState<AckMessage[]>([]); // messages WhatsApp de prise en charge a envoyer a la main (envoi automatique non configure ou echoue)
@@ -254,6 +256,12 @@ export default function CaissePage() {
       document.title = base;
     };
   }, [pendingOnline.new_count]);
+
+  // changement de date (minuit) : le menu du jour est recharge tout de suite
+  useEffect(() => {
+    if (session) loadProducts();
+    // eslint-disable-next-line react-hooks/exhaustive-deps
+  }, [today.key]);
 
   // Catalogue a jour sans recharger : un produit active ou reapprovisionne apparait dans la minute.
   useEffect(() => {
@@ -1116,7 +1124,7 @@ export default function CaissePage() {
                     [
                       ["all", "Tout", products.length],
                       ...(dailyMenu.special.length ? [["__special", "Speciaux du jour", dailyMenu.special.length]] : []),
-                      ...(dailyMenu.lunch.length ? [["__lunch", "Menu du midi", dailyMenu.lunch.length]] : []),
+                      ...(dailyMenu.lunch.length ? [["__lunch", `Menu du midi · ${today.short}`, dailyMenu.lunch.length]] : []),
                       ...categories.map(([n, c]) => [n, storeCats.find((s) => s.name === n)?.label ?? n, c]),
                     ] as [string, string, number][]
                   ).map(([key, label, count]) => (
@@ -1434,7 +1442,7 @@ export default function CaissePage() {
           <div className="w-full max-w-md h-full bg-[#170f0e] border-l overflow-y-auto" onClick={(e) => e.stopPropagation()}>
             <div className="flex items-center justify-between px-4 py-3 border-b sticky top-0 bg-[#170f0e]">
               <h2 className="font-semibold">
-                {panel === "held" ? "Ventes en attente" : panel === "drawer" ? "Tiroir-caisse" : panel === "menu" ? "Menu du jour" : "Historique du jour"}
+                {panel === "held" ? "Ventes en attente" : panel === "drawer" ? "Tiroir-caisse" : panel === "menu" ? `Menu du jour · ${today.long}` : "Historique du jour"}
               </h2>
               <button onClick={() => setPanel(null)} className="text-gray-500 text-sm">
                 Fermer

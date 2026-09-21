@@ -6,6 +6,7 @@ import ProductVisual from "@/components/ProductVisual";
 import { useSite } from "@/components/site/SiteContext";
 import { addToCart } from "@/lib/api";
 import { SiteDailyMenus, fetchSiteMenus } from "@/lib/site";
+import { useToday } from "@/lib/today";
 import type { DailyMenuItem } from "@/lib/store-admin";
 
 const xof = (v: string | number) => new Intl.NumberFormat("fr-SN", { maximumFractionDigits: 0 }).format(Number(v)) + " FCFA";
@@ -55,9 +56,20 @@ export default function DailyMenus() {
   const [qty, setQty] = useState(1);
   const [msg, setMsg] = useState<{ ok: boolean; text: string } | null>(null);
 
+  const today = useToday();
+
+  // le menu du jour se met a jour tout seul : a l'ouverture, toutes les 5 minutes, au retour sur la page et au changement de date
   useEffect(() => {
-    fetchSiteMenus(site.slug).then(setMenus);
-  }, [site.slug]);
+    const load = () => fetchSiteMenus(site.slug).then(setMenus);
+    load();
+    const t = setInterval(load, 300000);
+    const onVisible = () => document.visibilityState === "visible" && load();
+    document.addEventListener("visibilitychange", onVisible);
+    return () => {
+      clearInterval(t);
+      document.removeEventListener("visibilitychange", onVisible);
+    };
+  }, [site.slug, today.key]);
 
   if (!menus || (!menus.lunch && !menus.special)) return null;
 
@@ -81,6 +93,7 @@ export default function DailyMenus() {
         <section>
           <div className="flex items-baseline gap-3 flex-wrap mb-3">
             <h2 className="text-2xl font-bold text-brand-dark">{menus.special.title}</h2>
+            <span className="text-sm font-semibold text-brand bg-brand-light border border-brand/20 rounded-full px-3 py-0.5">📅 {today.long}</span>
             {menus.special.note && <span className="text-sm text-gray-500">{menus.special.note}</span>}
           </div>
           <div className="grid grid-cols-2 sm:grid-cols-3 lg:grid-cols-4 gap-4">
@@ -95,6 +108,7 @@ export default function DailyMenus() {
         <section className="rounded-2xl bg-brand-light border border-brand-accent/40 p-4 sm:p-5">
           <div className="flex items-baseline gap-3 flex-wrap mb-3">
             <h2 className="text-2xl font-bold text-brand-dark">{menus.lunch.title}</h2>
+            <span className="text-sm font-semibold text-brand bg-white border border-brand/20 rounded-full px-3 py-0.5">📅 {today.long}</span>
             {menus.lunch.note && <span className="text-sm text-gray-600">{menus.lunch.note}</span>}
           </div>
           <ul className="space-y-2">
