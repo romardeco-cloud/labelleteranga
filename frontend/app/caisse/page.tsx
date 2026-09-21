@@ -7,6 +7,7 @@ import { LoyaltyStatus, PosMember, PosMenus, fetchPosLoyalty, fetchPosMenus, red
 import ProductVisual from "@/components/ProductVisual";
 import { PAYMENT_QR, categoryEmoji, storeImage } from "@/lib/branding";
 import {
+  API_URL,
   CashierClosingState,
   fetchCashierClosing,
   submitCashierClosing,
@@ -102,6 +103,11 @@ export default function CaissePage() {
   const [closingNotes, setClosingNotes] = useState("");
   const [closingError, setClosingError] = useState("");
   const [closingBusy, setClosingBusy] = useState(false);
+
+  // reveille le serveur des l'ouverture de la page (pendant que le caissier saisit son code) : premiere vente sans attente
+  useEffect(() => {
+    fetch(`${API_URL}/health/`, { cache: "no-store" }).catch(() => {});
+  }, []);
 
   useEffect(() => {
     try {

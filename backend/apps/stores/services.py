@@ -22,10 +22,34 @@ def special_prices_map(store):
     return dict(rows)
 
 
-def price_for(product, store, specials=None):
-    """(prix a payer, libelle) : promotion en cours et/ou special du jour, le prix le plus bas l'emporte."""
+def load_promotions():
+    """Promotions en cours, chargees UNE fois : [(promotion, ids des produits vises ou None)]. Evite une requete par produit."""
+    from apps.catalog.models import Promotion
+
+    return [(p, {x.pk for x in p.products.all()} or None) for p in Promotion.objects.filter(is_active=True).current().prefetch_related("products")]
+
+
+def _best_promotion(product, store, promos):
+    """Meme choix que Product.active_promotion, sans aucune requete (promotions deja chargees)."""
+    best, best_price = None, product.price
+    for promo, product_ids in promos:
+        if promo.point_of_sale_id and promo.point_of_sale_id != (store.id if store else None):
+            continue
+        if product_ids is not None:
+            if product.pk not in product_ids:
+                continue
+        elif promo.category_id and product.category_id != promo.category_id:
+            continue
+        candidate = promo.discounted_price(product.price)
+        if candidate < best_price:
+            best, best_price = promo, candidate
+    return best
+
+
+def price_for(product, store, specials=None, promos=None):
+    """(prix a payer, libelle) : promotion en cours et/ou special du jour, le prix le plus bas l'emporte. `promos` : resultat de load_promotions() pour les listes."""
     price, label = product.price, None
-    promo = product.active_promotion(store)
+    promo = _best_promotion(product, store, promos) if promos is not None else product.active_promotion(store)
     if promo:
         price, label = promo.discounted_price(product.price), promo.name
     special = (specials if specials is not None else special_prices_map(store)).get(product.id)

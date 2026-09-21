@@ -7,7 +7,7 @@ from apps.catalog.models import Product
 from apps.orders.models import Order
 from apps.stores.models import UNLIMITED_STOCK, DrawerOpening, Stock, StoreCategory, tracks_stock, untracked_product_ids
 from apps.stores.serializers import pos_settings
-from apps.stores.services import price_for, special_prices_map
+from apps.stores.services import load_promotions, price_for, special_prices_map
 
 from django.utils import timezone
 
@@ -34,6 +34,7 @@ class POSProductListView(APIView):
         tracked = tracks_stock(store)
         untracked = untracked_product_ids(store)
         specials = special_prices_map(store)
+        promos = load_promotions()
         stock_by_product = dict(
             Stock.objects.filter(point_of_sale=store, product__in=qs).values_list("product_id", "quantity")
         )
@@ -42,7 +43,7 @@ class POSProductListView(APIView):
         combos = combo_items_map(store)
         results = []
         for p in qs:
-            price, promo_label = price_for(p, store, specials)
+            price, promo_label = price_for(p, store, specials, promos)
             results.append(
                 {
                     "id": p.id,
