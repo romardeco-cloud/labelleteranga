@@ -335,6 +335,55 @@ class SiteComboRequestView(APIView):
         return Response({"id": req.id, "detail": "Demande envoyee ! Nous vous contactons rapidement pour confirmer."}, status=201)
 
 
+def _norm_name(text):
+    import re
+    import unicodedata
+
+    return re.sub(r"[^a-z0-9]+", "", unicodedata.normalize("NFKD", str(text or "")).encode("ascii", "ignore").decode().lower())
+
+
+def sync_combo_prices(store, activate=False, only=None):
+    """
+    Applique le prix des combos (Admin > Combos) au produit du meme nom (accents et majuscules ignores) du point de vente :
+    c'est ce prix qu'affichent le menu du site et la caisse. Un produit vendu aussi par un autre point de vente n'est pas modifie.
+    """
+    from apps.catalog.models import Product
+
+    from .models import Stock
+
+    product_ids = set(Stock.objects.filter(point_of_sale=store).values_list("product_id", flat=True))
+    shared = set(Stock.objects.filter(product_id__in=product_ids).exclude(point_of_sale=store).values_list("product_id", flat=True))
+    products = {}
+    for p in Product.objects.filter(pk__in=product_ids):
+        products.setdefault(_norm_name(p.name), p)
+    out = {"updated": [], "unchanged": [], "no_price": [], "no_product": [], "shared": []}
+    combos = Combo.objects.filter(point_of_sale=store).order_by("order", "id")
+    if only is not None:
+        combos = combos.filter(pk=only.pk)
+    for combo in combos:
+        if combo.price <= 0:
+            out["no_price"].append(combo.name)
+            continue
+        product = products.get(_norm_name(combo.name))
+        if product is None:
+            out["no_product"].append(combo.name)
+        elif product.pk in shared:
+            out["shared"].append(combo.name)
+        elif product.price == combo.price and not (activate and not product.is_active):
+            out["unchanged"].append(combo.name)
+        else:
+            row = {"combo": combo.name, "product": product.name, "old_price": int(product.price), "new_price": int(combo.price)}
+            product.price = combo.price
+            fields = ["price"]
+            if activate and not product.is_active:
+                product.is_active = True
+                fields.append("is_active")
+                row["activated"] = True
+            product.save(update_fields=fields)
+            out["updated"].append(row)
+    return out
+
+
 class ComboAdminViewSet(viewsets.ModelViewSet):
     permission_classes = [permissions.IsAdminUser]
     serializer_class = ComboSerializer
@@ -352,60 +401,23 @@ class ComboAdminViewSet(viewsets.ModelViewSet):
             instance.image = ""
             instance.save(update_fields=["image"])
 
+    def perform_create(self, serializer):
+        instance = serializer.save()
+        sync_combo_prices(instance.point_of_sale, only=instance)  # le produit du meme nom prend le prix du combo
+
     def perform_update(self, serializer):
         instance = serializer.save()
         self._clear_image(self.request, instance)
+        sync_combo_prices(instance.point_of_sale, only=instance)
 
     @action(detail=False, methods=["post"], url_path="sync-prices")
     def sync_prices(self, request):
-        """
-        POST {point_of_sale, activate?} : applique le prix de chaque combo au produit du meme nom dans ce point de vente
-        (nom compare sans tenir compte des accents ni des majuscules). Un produit vendu aussi par un autre point de vente n'est pas modifie.
-        """
-        import re
-        import unicodedata
-
-        from apps.catalog.models import Product
-
-        from .models import Stock
-
-        def norm(text):
-            return re.sub(r"[^a-z0-9]+", "", unicodedata.normalize("NFKD", str(text or "")).encode("ascii", "ignore").decode().lower())
-
+        """POST {point_of_sale, activate?} : applique le prix de chaque combo au produit du meme nom dans ce point de vente."""
         store = PointOfSale.objects.filter(pk=request.data.get("point_of_sale") or 0).first()
         if not store:
             raise ValidationError({"point_of_sale": "Choisissez un point de vente."})
         activate = str(request.data.get("activate", "")).lower() in ("1", "true", "yes", "on")
-        product_ids = set(Stock.objects.filter(point_of_sale=store).values_list("product_id", flat=True))
-        shared = set(Stock.objects.filter(product_id__in=product_ids).exclude(point_of_sale=store).values_list("product_id", flat=True))
-        products = {}
-        for p in Product.objects.filter(pk__in=product_ids):
-            products.setdefault(norm(p.name), p)
-        out = {"updated": [], "unchanged": [], "no_price": [], "no_product": [], "shared": []}
-        for combo in Combo.objects.filter(point_of_sale=store).order_by("order", "id"):
-            if combo.price <= 0:
-                out["no_price"].append(combo.name)
-                continue
-            product = products.get(norm(combo.name))
-            if product is None:
-                out["no_product"].append(combo.name)
-            elif product.pk in shared:
-                out["shared"].append(combo.name)
-            else:
-                changed = product.price != combo.price or (activate and not product.is_active)
-                row = {"combo": combo.name, "product": product.name, "old_price": int(product.price), "new_price": int(combo.price)}
-                if not changed:
-                    out["unchanged"].append(combo.name)
-                    continue
-                product.price = combo.price
-                fields = ["price"]
-                if activate and not product.is_active:
-                    product.is_active = True
-                    fields.append("is_active")
-                    row["activated"] = True
-                product.save(update_fields=fields)
-                out["updated"].append(row)
-        return Response(out)
+        return Response(sync_combo_prices(store, activate=activate))
 
 
 class ComboRequestSerializer(serializers.ModelSerializer):
