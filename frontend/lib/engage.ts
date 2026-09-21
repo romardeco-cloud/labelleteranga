@@ -164,6 +164,16 @@ export async function fetchCombosAdmin(storeId: number) {
 export async function saveCombo(id: number | null, form: FormData) {
   return id ? (await api.patch<Combo>(`/stores/combos/${id}/`, form)).data : (await api.post<Combo>("/stores/combos/", form)).data;
 }
+export type SyncPricesResult = {
+  updated: { combo: string; product: string; old_price: number; new_price: number; activated?: boolean }[];
+  unchanged: string[];
+  no_price: string[];
+  no_product: string[];
+  shared: string[];
+};
+export async function syncComboPrices(storeId: number, activate: boolean) {
+  return (await api.post<SyncPricesResult>("/stores/combos/sync-prices/", { point_of_sale: storeId, activate })).data;
+}
 export async function deleteCombo(id: number) {
   await api.delete(`/stores/combos/${id}/`);
 }

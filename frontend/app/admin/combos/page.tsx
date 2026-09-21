@@ -3,7 +3,7 @@
 import { useCallback, useEffect, useState } from "react";
 import { PointOfSale, fetchPointsOfSale } from "@/lib/api";
 import { apiErrorMessage, formatXof } from "@/lib/documents";
-import { Combo, ComboRequestRow, deleteCombo, fetchComboRequests, fetchCombosAdmin, saveCombo, setComboRequestStatus } from "@/lib/engage";
+import { Combo, ComboRequestRow, deleteCombo, fetchComboRequests, fetchCombosAdmin, saveCombo, setComboRequestStatus, syncComboPrices, SyncPricesResult } from "@/lib/engage";
 import { socialHref } from "@/components/SocialLinks";
 
 const OCCASIONS = ["Anniversaire", "Soiree entre amis", "Special week-end", "Special evenement", "Mariage / bapteme", "Repas d'entreprise"];
@@ -47,6 +47,8 @@ export default function CombosAdminPage() {
   const [draft, setDraft] = useState<Draft | null>(null);
   const [busy, setBusy] = useState(false);
   const [msg, setMsg] = useState("");
+  const [sync, setSync] = useState<SyncPricesResult | null>(null);
+  const [syncActivate, setSyncActivate] = useState(false);
 
   useEffect(() => {
     fetchPointsOfSale().then((list) => {
@@ -104,6 +106,20 @@ export default function CombosAdminPage() {
     }
   }
 
+  async function applyPrices() {
+    if (!storeId) return;
+    if (!confirm("Appliquer le prix de chaque combo au produit du meme nom (ex. « Combo Box Senegalaise ») dans ce point de vente ?")) return;
+    setBusy(true);
+    setSync(null);
+    try {
+      setSync(await syncComboPrices(storeId, syncActivate));
+    } catch (err) {
+      setMsg(apiErrorMessage(err));
+    } finally {
+      setBusy(false);
+    }
+  }
+
   const newCount = requests.filter((r) => r.status === "new").length;
   const set = <K extends keyof Draft>(k: K, v: Draft[K]) => setDraft((d) => (d ? { ...d, [k]: v } : d));
 
@@ -134,9 +150,38 @@ export default function CombosAdminPage() {
 
       {tab === "combos" && (
         <>
-          <button onClick={() => setDraft({ ...empty })} className="bg-[#b3261e] text-white rounded-lg px-4 py-2 font-medium">
-            + Nouveau combo
-          </button>
+          <div className="flex flex-wrap items-center gap-3">
+            <button onClick={() => setDraft({ ...empty })} className="bg-[#b3261e] text-white rounded-lg px-4 py-2 font-medium">
+              + Nouveau combo
+            </button>
+            <button onClick={applyPrices} disabled={busy} className="border border-[#f5b942] text-[#f5b942] rounded-lg px-4 py-2 font-medium disabled:opacity-50">
+              Appliquer les prix aux produits
+            </button>
+            <label className="flex items-center gap-2 text-sm text-gray-400">
+              <input type="checkbox" checked={syncActivate} onChange={(e) => setSyncActivate(e.target.checked)} /> Activer aussi les produits
+            </label>
+          </div>
+          {sync && (
+            <div className="border rounded-2xl bg-[#1c1514] p-4 text-sm space-y-2">
+              <p className="font-semibold">
+                {sync.updated.length} produit{sync.updated.length > 1 ? "s" : ""} mis a jour
+                {sync.unchanged.length > 0 && ` · ${sync.unchanged.length} deja au bon prix`}
+              </p>
+              {sync.updated.length > 0 && (
+                <ul className="space-y-0.5 text-gray-300">
+                  {sync.updated.map((u) => (
+                    <li key={u.product}>
+                      {u.product} : {formatXof(u.old_price)} → <strong className="text-emerald-400">{formatXof(u.new_price)}</strong>
+                      {u.activated && <span className="ml-2 text-xs text-emerald-400">(active)</span>}
+                    </li>
+                  ))}
+                </ul>
+              )}
+              {sync.no_price.length > 0 && <p className="text-amber-400">Sans prix (a saisir dans le combo) : {sync.no_price.join(", ")}</p>}
+              {sync.no_product.length > 0 && <p className="text-gray-400">Pas de produit du meme nom dans ce point de vente : {sync.no_product.join(", ")}</p>}
+              {sync.shared.length > 0 && <p className="text-gray-400">Non modifies (produit partage avec un autre point de vente) : {sync.shared.join(", ")}</p>}
+            </div>
+          )}
           {combos.length === 0 ? (
             <p className="text-center text-gray-500 border rounded-2xl py-12">Aucun combo. Creez votre premiere formule.</p>
           ) : (
