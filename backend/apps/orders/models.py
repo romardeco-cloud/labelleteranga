@@ -72,6 +72,8 @@ class Order(models.Model):
     # paiement par QR (Wave / Orange Money) : le client declare avoir paye et donne la reference de sa transaction
     payment_reference = models.CharField(max_length=60, blank=True)
     payment_declared_at = models.DateTimeField(null=True, blank=True)
+    ack_whatsapp_status = models.CharField(max_length=20, blank=True)  # message de prise en charge : sent | failed | not_configured
+    ack_whatsapp_error = models.CharField(max_length=250, blank=True)
     received_at = models.DateTimeField("Reception confirmee a la caisse", null=True, blank=True)  # vide : l'alerte clignote et sonne
     handled_at = models.DateTimeField("Commande finalisee a la caisse", null=True, blank=True)  # tant qu'elle est vide, l'alerte clignote a la caisse
     tip_amount = models.DecimalField("Pourboire", max_digits=12, decimal_places=2, default=0)

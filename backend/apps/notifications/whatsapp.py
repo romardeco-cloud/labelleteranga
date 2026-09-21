@@ -188,3 +188,66 @@ def _send_via_cloud_api(order):
     except ValueError:
         detail = f"HTTP {response.status_code}"
     return False, detail
+
+
+# ---------------------------------------------------------------- message de prise en charge (envoye quand la caisse confirme la reception)
+def build_ack_message(order):
+    store = order.point_of_sale.name if order.point_of_sale else "La Belle Teranga"
+    first = (order.customer_name or "").strip() or "cher client"
+    how = "A emporter chez nous" if order.fulfillment == "pickup" else "Livraison en cours de preparation"
+    return (
+        f"Bonjour {first}, votre commande n° {order.order_number} chez {store} est bien reçue et prise en charge ✅\n"
+        f"Nous la préparons. {how}.\n"
+        "Merci de votre confiance ! La Belle Teranga, l'art du service."
+    )
+
+
+def send_order_acknowledged(order):
+    """
+    Message WhatsApp « commande prise en charge » au client, envoye quand la caisse confirme la reception. Renvoie
+    {status, error, link} ; `link` est un lien wa.me pret a l'emploi (l'equipe peut envoyer le message a la main si
+    l'envoi automatique n'est pas configure). Modele approuve : variable WHATSAPP_ACK_TEMPLATE_NAME (3 variables).
+    """
+    message = build_ack_message(order)
+    link = whatsapp_deep_link(order.customer_phone, message)
+    configured = bool(settings.WHATSAPP_ACCESS_TOKEN and settings.WHATSAPP_PHONE_NUMBER_ID)
+    error = ""
+    if not order.customer_phone:
+        status, error = "failed", "Aucun numero de telephone sur la commande."
+    elif not configured:
+        status, error = "not_configured", "L'envoi automatique WhatsApp n'est pas encore configure."
+    else:
+        url = f"https://graph.facebook.com/{settings.WHATSAPP_API_VERSION}/{settings.WHATSAPP_PHONE_NUMBER_ID}/messages"
+        headers = {"Authorization": f"Bearer {settings.WHATSAPP_ACCESS_TOKEN}"}
+        recipient = _normalize_phone(order.customer_phone)
+        if settings.WHATSAPP_ACK_TEMPLATE_NAME:
+            store = order.point_of_sale.name if order.point_of_sale else "La Belle Teranga"
+            payload = {
+                "messaging_product": "whatsapp",
+                "to": recipient,
+                "type": "template",
+                "template": {
+                    "name": settings.WHATSAPP_ACK_TEMPLATE_NAME,
+                    "language": {"code": settings.WHATSAPP_TEMPLATE_LANGUAGE},
+                    "components": [{"type": "body", "parameters": [{"type": "text", "text": v} for v in ((order.customer_name or "client").strip(), order.order_number, store)]}],
+                },
+            }
+        else:
+            payload = {"messaging_product": "whatsapp", "to": recipient, "type": "text", "text": {"body": message}}
+        try:
+            response = requests.post(url, json=payload, headers=headers, timeout=8)
+            if response.status_code == 200:
+                status = "sent"
+            else:
+                status = "failed"
+                try:
+                    err = response.json().get("error", {})
+                    error = f"{err.get('message', 'erreur inconnue')} (code {err.get('code', response.status_code)})"
+                except ValueError:
+                    error = f"HTTP {response.status_code}"
+        except requests.RequestException as exc:
+            status, error = "failed", f"Connexion a WhatsApp impossible : {exc.__class__.__name__}"
+    order.ack_whatsapp_status = status
+    order.ack_whatsapp_error = error[:250]
+    order.save(update_fields=["ack_whatsapp_status", "ack_whatsapp_error"])
+    return {"status": status, "error": error, "link": link}

@@ -225,6 +225,7 @@ class POSCustomerOrdersView(APIView):
             .prefetch_related("items")
             .order_by("-created_at")
         )
+        from apps.notifications.whatsapp import build_ack_message, whatsapp_deep_link
         from apps.stores.loyalty import member_status
 
         def loyalty_of(o):
@@ -248,6 +249,8 @@ class POSCustomerOrdersView(APIView):
                     "full_reference": o.reference,
                     "handled": o.handled_at is not None,
                     "received": o.received_at is not None,
+                    "ack_status": o.ack_whatsapp_status,
+                    "ack_link": whatsapp_deep_link(o.customer_phone, build_ack_message(o)) if o.received_at and o.customer_phone else None,
                     "created_at": o.created_at,
                     "discount_amount": str(o.discount_amount),
                     "reward_label": o.reward_label,
@@ -465,9 +468,21 @@ class POSAcknowledgeOrdersView(APIView):
     permission_classes = [IsCashier]
 
     def post(self, request):
+        from apps.notifications.whatsapp import send_order_acknowledged
+
         store = request.user.cashier_profile.point_of_sale
-        n = _pending_online_orders(store).filter(received_at__isnull=True).update(received_at=timezone.now())
-        return Response({"acknowledged": n})
+        orders = list(_pending_online_orders(store).filter(received_at__isnull=True).select_related("point_of_sale").prefetch_related("items")[:15])
+        now = timezone.now()
+        messages = []
+        for o in orders:
+            o.received_at = now
+            o.save(update_fields=["received_at"])
+            try:
+                res = send_order_acknowledged(o)  # message de prise en charge au client (WhatsApp)
+            except Exception:  # une panne d'envoi ne doit jamais bloquer la caisse
+                res = {"status": "failed", "error": "Envoi impossible.", "link": None}
+            messages.append({"reference": o.reference[:8].upper(), "customer_name": o.customer_name, "status": res["status"], "link": res["link"]})
+        return Response({"acknowledged": len(orders), "messages": messages})
 
 
 class POSFinalizeOrderView(APIView):

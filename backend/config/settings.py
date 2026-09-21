@@ -182,6 +182,8 @@ WHATSAPP_PHONE_NUMBER_ID = os.environ.get("WHATSAPP_PHONE_NUMBER_ID", "")
 WHATSAPP_API_VERSION = os.environ.get("WHATSAPP_API_VERSION", "v21.0")
 WHATSAPP_TEMPLATE_NAME = os.environ.get("WHATSAPP_TEMPLATE_NAME", "")
 WHATSAPP_TEMPLATE_LANGUAGE = os.environ.get("WHATSAPP_TEMPLATE_LANGUAGE", "fr")
+# modele approuve pour le message « commande prise en charge » (3 variables : prenom, numero de commande, point de vente)
+WHATSAPP_ACK_TEMPLATE_NAME = os.environ.get("WHATSAPP_ACK_TEMPLATE_NAME", "")
 # Numero WhatsApp de la boutique (format international sans "+", ex: 221771234567)
 WHATSAPP_SHOP_NUMBER = os.environ.get("WHATSAPP_SHOP_NUMBER", "")
 
