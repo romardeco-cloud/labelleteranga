@@ -247,6 +247,7 @@ class POSCustomerOrdersView(APIView):
                     "reference": o.reference[:8].upper(),
                     "full_reference": o.reference,
                     "handled": o.handled_at is not None,
+                    "received": o.received_at is not None,
                     "created_at": o.created_at,
                     "discount_amount": str(o.discount_amount),
                     "reward_label": o.reward_label,
@@ -452,9 +453,21 @@ class POSPendingOrdersView(APIView):
         return Response(
             {
                 "count": len(rows),
-                "orders": [{"reference": o.reference[:8].upper(), "customer_name": o.customer_name, "total": str(o.total_amount), "created_at": o.created_at, "state": _order_state_label(o)} for o in rows],
+                "new_count": sum(1 for o in rows if o.received_at is None),  # pas encore confirmees : l'alerte clignote et sonne
+                "orders": [{"reference": o.reference[:8].upper(), "customer_name": o.customer_name, "total": str(o.total_amount), "created_at": o.created_at, "state": _order_state_label(o), "received": o.received_at is not None} for o in rows],
             }
         )
+
+
+class POSAcknowledgeOrdersView(APIView):
+    """POST /api/pos/customer-orders/acknowledge/ : le caissier confirme la reception des nouvelles commandes du site ; l'alerte cesse de clignoter et de sonner (les commandes restent a finaliser)."""
+
+    permission_classes = [IsCashier]
+
+    def post(self, request):
+        store = request.user.cashier_profile.point_of_sale
+        n = _pending_online_orders(store).filter(received_at__isnull=True).update(received_at=timezone.now())
+        return Response({"acknowledged": n})
 
 
 class POSFinalizeOrderView(APIView):
@@ -471,5 +484,6 @@ class POSFinalizeOrderView(APIView):
             raise NotFound("Commande introuvable.")
         if order.handled_at is None:
             order.handled_at = timezone.now()
-            order.save(update_fields=["handled_at"])
+            order.received_at = order.received_at or order.handled_at
+            order.save(update_fields=["handled_at", "received_at"])
         return Response({"handled": True})

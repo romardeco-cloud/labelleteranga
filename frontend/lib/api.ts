@@ -477,6 +477,7 @@ export type POSCustomerOrder = {
   reference: string;
   full_reference?: string;
   handled?: boolean;
+  received?: boolean;
   created_at: string;
   status: string;
   status_label: string;
@@ -507,9 +508,13 @@ export async function fetchPOSCustomerOrders() {
   return (await api.get<POSCustomerOrder[]>("/pos/customer-orders/")).data;
 }
 export type PendingOnlineOrders = {
-  count: number;
-  orders: { reference: string; customer_name: string; total: string; created_at: string; state: string }[];
+  count: number; // commandes a finaliser
+  new_count: number; // dont reception pas encore confirmee (alerte rouge + son)
+  orders: { reference: string; customer_name: string; total: string; created_at: string; state: string; received?: boolean }[];
 };
+export async function acknowledgeOnlineOrders() {
+  await api.post("/pos/customer-orders/acknowledge/");
+}
 export async function fetchPendingOnlineOrders() {
   return (await api.get<PendingOnlineOrders>("/pos/customer-orders/pending/")).data;
 }

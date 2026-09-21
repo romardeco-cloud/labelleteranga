@@ -22,6 +22,7 @@ import {
   createPOSSale,
   fetchDrawerOpenings,
   fetchPOSCustomerOrders,
+  acknowledgeOnlineOrders,
   fetchPendingOnlineOrders,
   finalizeOnlineOrder,
   PendingOnlineOrders,
@@ -76,7 +77,7 @@ export default function CaissePage() {
   const [storeCats, setStoreCats] = useState<{ name: string; label?: string; order: number }[]>([]);
   const [dailyMenu, setDailyMenu] = useState<{ lunch: { product: number; number: number }[]; special: { product: number; number: number }[] }>({ lunch: [], special: [] });
   const [customerOrders, setCustomerOrders] = useState<POSCustomerOrder[]>([]);
-  const [pendingOnline, setPendingOnline] = useState<PendingOnlineOrders>({ count: 0, orders: [] });
+  const [pendingOnline, setPendingOnline] = useState<PendingOnlineOrders>({ count: 0, new_count: 0, orders: [] });
   const lastPendingCount = useRef(0);
   const [ordersLoading, setOrdersLoading] = useState(false);
   const [drawerRows, setDrawerRows] = useState<DrawerOpening[]>([]);
@@ -204,12 +205,23 @@ export default function CaissePage() {
       lastChime.current = Date.now();
     } catch {}
   }, []);
+  // « Reception confirmee » : l'alerte s'arrete (clignotement et son) ; les commandes restent a finaliser
+  const confirmReceipt = useCallback(async () => {
+    try {
+      audioRef.current?.suspend(); // coupe le son en cours
+    } catch {}
+    lastPendingCount.current = 0;
+    setPendingOnline((p) => ({ ...p, new_count: 0, orders: p.orders.map((o) => ({ ...o, received: true })) }));
+    try {
+      await acknowledgeOnlineOrders();
+    } catch {}
+  }, []);
   const checkPending = useCallback(async () => {
     try {
       const data = await fetchPendingOnlineOrders();
       // le son retentit deux fois seulement, a chaque nouvelle commande (l'alerte rouge, elle, reste jusqu'a la finalisation)
-      if (data.count > lastPendingCount.current) beep();
-      lastPendingCount.current = data.count;
+      if (data.new_count > lastPendingCount.current) beep();
+      lastPendingCount.current = data.new_count;
       setPendingOnline(data);
     } catch {}
   }, [beep]);
@@ -226,18 +238,18 @@ export default function CaissePage() {
   }, [session, checkPending]);
   useEffect(() => {
     // le titre de l'onglet clignote aussi : visible meme si la caisse est derriere une autre fenetre
-    if (pendingOnline.count === 0) return;
+    if (pendingOnline.new_count === 0) return;
     const base = document.title;
     let on = false;
     const t = setInterval(() => {
       on = !on;
-      document.title = on ? `🔴 (${pendingOnline.count}) COMMANDE EN LIGNE` : base;
+      document.title = on ? `🔴 (${pendingOnline.new_count}) COMMANDE EN LIGNE` : base;
     }, 1000);
     return () => {
       clearInterval(t);
       document.title = base;
     };
-  }, [pendingOnline.count]);
+  }, [pendingOnline.new_count]);
 
   // Catalogue a jour sans recharger : un produit active ou reapprovisionne apparait dans la minute.
   useEffect(() => {
@@ -650,14 +662,25 @@ export default function CaissePage() {
 
   return (
     <div className="admin-shell min-h-screen lg:h-screen flex flex-col print:h-auto print:block">
-      {pendingOnline.count > 0 && (
+      {pendingOnline.count > 0 && pendingOnline.new_count === 0 && (
         <button
           onClick={() => openCustomerOrders()}
-          className="lbt-blink w-full shrink-0 flex flex-wrap items-center justify-center gap-x-4 gap-y-1 px-4 py-3 text-white font-bold text-base sm:text-lg print:hidden"
+          className="w-full shrink-0 flex flex-wrap items-center justify-center gap-x-4 gap-y-1 px-4 py-2 bg-amber-600 text-white font-semibold text-sm print:hidden"
+        >
+          <span>
+            ✓ {pendingOnline.count} commande{pendingOnline.count > 1 ? "s" : ""} en ligne recue{pendingOnline.count > 1 ? "s" : ""} - a finaliser
+          </span>
+          <span className="bg-white text-amber-700 rounded-full px-3 py-0.5 text-xs">Ouvrir</span>
+        </button>
+      )}
+      {pendingOnline.new_count > 0 && (
+        <div
+          role="alert"
+          className="lbt-blink w-full shrink-0 flex flex-wrap items-center justify-center gap-x-4 gap-y-2 px-4 py-3 text-white font-bold text-base sm:text-lg print:hidden"
           aria-live="assertive"
         >
           <span>
-            🔔 {pendingOnline.count} COMMANDE{pendingOnline.count > 1 ? "S" : ""} EN LIGNE A TRAITER
+            🔔 {pendingOnline.new_count} NOUVELLE{pendingOnline.new_count > 1 ? "S" : ""} COMMANDE{pendingOnline.new_count > 1 ? "S" : ""} EN LIGNE
           </span>
           <span className="text-sm font-medium opacity-95">
             {pendingOnline.orders
@@ -666,8 +689,15 @@ export default function CaissePage() {
               .join("  |  ")}
             {pendingOnline.count > 2 ? `  | +${pendingOnline.count - 2}` : ""}
           </span>
-          <span className="bg-white text-[#b3261e] rounded-full px-4 py-1 text-sm">Ouvrir</span>
-        </button>
+          <span className="flex items-center gap-2">
+            <button onClick={confirmReceipt} className="bg-white text-[#b3261e] rounded-full px-5 py-2 text-sm font-bold shadow">
+              ✓ Confirmer la reception
+            </button>
+            <button onClick={() => openCustomerOrders()} className="border border-white/70 rounded-full px-4 py-2 text-sm font-semibold">
+              Voir
+            </button>
+          </span>
+        </div>
       )}
       <div className="flex flex-col flex-1 min-h-0 print:hidden">
         {/* Barre du haut */}
@@ -776,6 +806,18 @@ export default function CaissePage() {
               <span className="w-9 h-9 rounded-full bg-sky-500/20 text-sky-400 font-bold flex items-center justify-center">
                 {session.username.slice(0, 1).toUpperCase()}
               </span>
+              <button
+                onClick={() => {
+                  if (lines.length > 0 && !confirm("Le panier en cours sera perdu par l'actualisation (les ventes mises en attente sont conservees). Actualiser ?")) return;
+                  window.location.reload();
+                }}
+                aria-label="Actualiser l'application"
+                title="Actualiser l'application (derniere version, catalogue, commandes)"
+                className="border rounded-xl px-2.5 py-2 text-sm text-sky-400 hover:bg-white/5 flex items-center gap-1.5"
+              >
+                <span className="text-base leading-none">↻</span>
+                <span className="hidden md:inline">Actualiser</span>
+              </button>
               <button onClick={logout} aria-label="Deconnexion" title="Deconnexion" className="border rounded-xl p-2 text-red-400 hover:bg-white/5">
                 <Icon name="logout" className="w-4 h-4" />
               </button>
@@ -977,6 +1019,18 @@ export default function CaissePage() {
                           {o.handled ? (
                             <p className="text-sm text-emerald-400">✓ Commande finalisee</p>
                           ) : (
+                            <>
+                              {!o.received && (
+                                <button
+                                  onClick={async () => {
+                                    await confirmReceipt();
+                                    await openCustomerOrders();
+                                  }}
+                                  className="w-full mb-2 rounded-xl border-2 border-[#b3261e] text-[#ff6b60] font-semibold py-2.5 text-base"
+                                >
+                                  🔔 Confirmer la reception
+                                </button>
+                              )}
                             <button
                               onClick={async () => {
                                 await finalizeOnlineOrder(o.full_reference!);
@@ -986,6 +1040,7 @@ export default function CaissePage() {
                             >
                               ✓ Finaliser la commande
                             </button>
+                            </>
                           )}
                         </div>
                       )}
