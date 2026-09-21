@@ -23,6 +23,7 @@ import {
   fetchDrawerOpenings,
   fetchPOSCustomerOrders,
   acknowledgeOnlineOrders,
+  markAckSent,
   AckMessage,
   fetchPendingOnlineOrders,
   finalizeOnlineOrder,
@@ -680,7 +681,18 @@ export default function CaissePage() {
         <div className="w-full shrink-0 bg-emerald-700 text-white px-4 py-2 flex flex-wrap items-center gap-x-3 gap-y-1.5 text-sm print:hidden">
           <span className="font-semibold">📲 Confirmer la prise en charge au client sur WhatsApp :</span>
           {ackMessages.map((m) => (
-            <a key={m.reference} href={m.link!} target="_blank" rel="noopener noreferrer" className="bg-white text-emerald-800 font-semibold rounded-full px-3 py-1">
+            <a
+              key={m.reference}
+              href={m.link!}
+              target="_blank"
+              rel="noopener noreferrer"
+              onClick={() => {
+                // une fois le lien ouvert (message envoye), il ne s'affiche plus
+                setAckMessages((l) => l.filter((x) => x.reference !== m.reference));
+                if (m.full_reference) markAckSent(m.full_reference).catch(() => {});
+              }}
+              className="bg-white text-emerald-800 font-semibold rounded-full px-3 py-1"
+            >
               {m.customer_name || m.reference} - envoyer
             </a>
           ))}
@@ -1041,7 +1053,16 @@ export default function CaissePage() {
                                   {o.ack_status === "sent" ? (
                                     <span className="text-emerald-400">✓ Message WhatsApp de prise en charge envoye au client</span>
                                   ) : o.ack_link ? (
-                                    <a href={o.ack_link} target="_blank" rel="noopener noreferrer" className="text-emerald-400 underline">
+                                    <a
+                                      href={o.ack_link}
+                                      target="_blank"
+                                      rel="noopener noreferrer"
+                                      onClick={() => {
+                                        setAckMessages((l) => l.filter((x) => x.reference !== o.reference));
+                                        if (o.full_reference) markAckSent(o.full_reference).then(() => openCustomerOrders()).catch(() => {});
+                                      }}
+                                      className="text-emerald-400 underline"
+                                    >
                                       📲 Envoyer le message WhatsApp de prise en charge au client
                                     </a>
                                   ) : (

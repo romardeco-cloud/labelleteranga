@@ -481,8 +481,25 @@ class POSAcknowledgeOrdersView(APIView):
                 res = send_order_acknowledged(o)  # message de prise en charge au client (WhatsApp)
             except Exception:  # une panne d'envoi ne doit jamais bloquer la caisse
                 res = {"status": "failed", "error": "Envoi impossible.", "link": None}
-            messages.append({"reference": o.reference[:8].upper(), "customer_name": o.customer_name, "status": res["status"], "link": res["link"]})
+            messages.append({"reference": o.reference[:8].upper(), "full_reference": o.reference, "customer_name": o.customer_name, "status": res["status"], "link": res["link"]})
         return Response({"acknowledged": len(orders), "messages": messages})
+
+
+class POSAckSentView(APIView):
+    """POST /api/pos/customer-orders/<reference>/ack-sent/ : le caissier a envoye le message de prise en charge a la main (lien WhatsApp) ; il n'est plus propose."""
+
+    permission_classes = [IsCashier]
+
+    def post(self, request, reference):
+        store = request.user.cashier_profile.point_of_sale
+        order = Order.objects.filter(reference=reference, channel=Order.Channel.ONLINE, point_of_sale=store).first()
+        if order is None:
+            from rest_framework.exceptions import NotFound
+
+            raise NotFound("Commande introuvable.")
+        order.ack_whatsapp_status = "sent"
+        order.save(update_fields=["ack_whatsapp_status"])
+        return Response({"sent": True})
 
 
 class POSFinalizeOrderView(APIView):

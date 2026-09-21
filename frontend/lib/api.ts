@@ -514,7 +514,10 @@ export type PendingOnlineOrders = {
   new_count: number; // dont reception pas encore confirmee (alerte rouge + son)
   orders: { reference: string; customer_name: string; total: string; created_at: string; state: string; received?: boolean }[];
 };
-export type AckMessage = { reference: string; customer_name: string; status: string; link: string | null };
+export type AckMessage = { reference: string; full_reference?: string; customer_name: string; status: string; link: string | null };
+export async function markAckSent(fullReference: string) {
+  await api.post(`/pos/customer-orders/${fullReference}/ack-sent/`);
+}
 export async function acknowledgeOnlineOrders() {
   return (await api.post<{ acknowledged: number; messages: AckMessage[] }>("/pos/customer-orders/acknowledge/")).data;
 }
