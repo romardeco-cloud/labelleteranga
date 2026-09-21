@@ -6,7 +6,7 @@ import Icon from "@/components/admin/Icon";
 import { LoyaltyStatus, PosMember, PosMenus, fetchPosLoyalty, fetchPosMenus, redeemPosReward, savePosMenu, searchPosMembers } from "@/lib/engage";
 import ProductVisual from "@/components/ProductVisual";
 import { PAYMENT_QR, categoryEmoji, storeImage } from "@/lib/branding";
-import { isMeal } from "@/lib/meals";
+import { categoryRank, effectiveCategories, loadMenuCategories, saveMenuCategories } from "@/lib/meals";
 import {
   API_URL,
   CashierClosingState,
@@ -88,7 +88,8 @@ export default function CaissePage() {
   const [menus, setMenus] = useState<PosMenus>({ lunch: null, special: null });
   const [menuKind, setMenuKind] = useState<"lunch" | "special">("lunch");
   const [menuPicked, setMenuPicked] = useState<number[]>([]);
-  const [menuAll, setMenuAll] = useState(false); // false : seuls les repas sont proposes pour le menu du jour
+  const [menuCats, setMenuCats] = useState<string[] | null>(null); // categories affichees dans le choix des plats (null : les 4 categories du menu)
+  useEffect(() => setMenuCats(loadMenuCategories()), []);
   const [menuPublished, setMenuPublished] = useState(true);
   const [menuSearch, setMenuSearch] = useState("");
   const [menuNumber, setMenuNumber] = useState("");
@@ -1288,22 +1289,49 @@ export default function CaissePage() {
                     placeholder="Ajouter un plat : rechercher..."
                     className="w-full border rounded-xl px-3 py-2 text-sm"
                   />
-                  <label className="mt-1.5 flex items-center gap-2 text-xs text-gray-500">
-                    <input type="checkbox" checked={menuAll} onChange={(e) => setMenuAll(e.target.checked)} /> Afficher aussi les autres categories (pizzas, poulet, desserts...)
-                  </label>
-                  <ul className="mt-2 max-h-52 overflow-y-auto divide-y border rounded-xl">
-                    {products
-                      .filter((p) => !menuPicked.includes(p.id) && (menuAll || isMeal(p.name, p.category)) && (!menuSearch.trim() || p.name.toLowerCase().includes(menuSearch.trim().toLowerCase())))
-                      .slice(0, 40)
-                      .map((p) => (
-                        <li key={p.id}>
-                          <button onClick={() => setMenuPicked((l) => [...l, p.id])} className="w-full flex justify-between px-3 py-2 text-sm text-left hover:bg-white/5">
-                            <span className="truncate">{p.name}</span>
-                            <span className="text-gray-500 ml-2 shrink-0">{xof(p.price)}</span>
-                          </button>
-                        </li>
-                      ))}
-                  </ul>
+                  {(() => {
+                    const allCats = Array.from(new Set(products.map((p) => p.category ?? "Sans categorie"))).sort((x, y) => categoryRank(x) - categoryRank(y) || x.localeCompare(y, "fr"));
+                    const active = effectiveCategories(allCats, menuCats);
+                    const toggle = (c: string) => {
+                      const next = active.includes(c) ? active.filter((x) => x !== c) : [...active, c];
+                      setMenuCats(next);
+                      saveMenuCategories(next);
+                    };
+                    const shown = products
+                      .filter((p) => !menuPicked.includes(p.id) && active.includes(p.category ?? "Sans categorie") && (!menuSearch.trim() || p.name.toLowerCase().includes(menuSearch.trim().toLowerCase())))
+                      .sort((x, y) => categoryRank(x.category) - categoryRank(y.category) || (x.category ?? "").localeCompare(y.category ?? "", "fr") || x.name.localeCompare(y.name, "fr"));
+                    return (
+                      <>
+                        <p className="mt-2 text-xs text-gray-500">Categories affichees (touchez pour afficher ou masquer) :</p>
+                        <div className="mt-1 flex flex-wrap gap-1.5">
+                          {allCats.map((c) => (
+                            <button
+                              key={c}
+                              onClick={() => toggle(c)}
+                              className={`px-2.5 py-1 rounded-full text-xs border ${active.includes(c) ? "bg-[#f5b942] text-[#241010] border-[#f5b942]" : "text-gray-400"}`}
+                            >
+                              {active.includes(c) ? "✓ " : ""}
+                              {c}
+                            </button>
+                          ))}
+                        </div>
+                        <ul className="mt-2 max-h-60 overflow-y-auto border rounded-xl">
+                          {shown.slice(0, 100).map((p, i, arr) => (
+                            <li key={p.id}>
+                              {(i === 0 || (arr[i - 1].category ?? "") !== (p.category ?? "")) && (
+                                <p className="sticky top-0 bg-[#251c1a] px-3 py-1 text-[11px] font-semibold uppercase tracking-wide text-[#f5b942]">{p.category ?? "Sans categorie"}</p>
+                              )}
+                              <button onClick={() => setMenuPicked((l) => [...l, p.id])} className="w-full flex justify-between px-3 py-2 text-sm text-left hover:bg-white/5 border-b">
+                                <span className="truncate">{p.name}</span>
+                                <span className="text-gray-500 ml-2 shrink-0">{xof(p.price)}</span>
+                              </button>
+                            </li>
+                          ))}
+                          {shown.length === 0 && <li className="px-3 py-4 text-center text-sm text-gray-500">Aucun plat a ajouter dans ces categories.</li>}
+                        </ul>
+                      </>
+                    );
+                  })()}
                 </div>
 
                 <label className="flex items-center gap-2 text-sm">

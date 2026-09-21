@@ -4,7 +4,7 @@ import { useCallback, useEffect, useMemo, useState } from "react";
 import ProductVisual from "@/components/ProductVisual";
 import { PointOfSale, Product, api, fetchPointsOfSale } from "@/lib/api";
 import { apiErrorMessage, formatXof } from "@/lib/documents";
-import { isMeal } from "@/lib/meals";
+import { categoryRank, effectiveCategories, loadMenuCategories, saveMenuCategories } from "@/lib/meals";
 import { MenuKind, deleteDailyMenu, fetchDailyMenuAdmin, saveDailyMenu } from "@/lib/store-admin";
 
 const today = () => new Date().toISOString().slice(0, 10);
@@ -30,7 +30,8 @@ export default function DailyMenuAdminPage() {
   const [previousDate, setPreviousDate] = useState<string | null>(null);
   const [existing, setExisting] = useState(false);
   const [search, setSearch] = useState("");
-  const [showAll, setShowAll] = useState(false); // false : seuls les repas sont proposes
+  const [catsSel, setCatsSel] = useState<string[] | null>(null); // categories affichees dans le choix des plats (null : les 4 categories du menu)
+  useEffect(() => setCatsSel(loadMenuCategories()), []);
   const [msg, setMsg] = useState<{ ok: boolean; text: string } | null>(null);
   const [busy, setBusy] = useState(false);
 
@@ -68,13 +69,16 @@ export default function DailyMenuAdminPage() {
   const byId = useMemo(() => new Map(products.map((p) => [p.id, p])), [products]);
   const pickedIds = new Set(picked.map((p) => p.product));
   const q = search.trim().toLowerCase();
-  // plats "repas midi" en premier pour le menu du midi
+  const allCats = useMemo(() => Array.from(new Set(products.map((p) => p.category?.name ?? "Sans categorie"))).sort((x, y) => categoryRank(x) - categoryRank(y) || x.localeCompare(y, "fr")), [products]);
+  const activeCats = effectiveCategories(allCats, catsSel);
+  const toggleCat = (c: string) => {
+    const next = activeCats.includes(c) ? activeCats.filter((x) => x !== c) : [...activeCats, c];
+    setCatsSel(next);
+    saveMenuCategories(next);
+  };
   const available = products
-    .filter((p) => !pickedIds.has(p.id) && (showAll || isMeal(p.name, p.category?.name)) && (!q || p.name.toLowerCase().includes(q) || p.sku.toLowerCase().includes(q)))
-    .sort((a, b) => {
-      const pri = (p: Product) => (kind === "lunch" && /repas midi/i.test(p.category?.name ?? "") ? 0 : 1);
-      return pri(a) - pri(b) || a.name.localeCompare(b.name, "fr");
-    });
+    .filter((p) => !pickedIds.has(p.id) && activeCats.includes(p.category?.name ?? "Sans categorie") && (!q || p.name.toLowerCase().includes(q) || p.sku.toLowerCase().includes(q)))
+    .sort((a, b) => categoryRank(a.category?.name) - categoryRank(b.category?.name) || (a.category?.name ?? "").localeCompare(b.category?.name ?? "", "fr") || a.name.localeCompare(b.name, "fr"));
 
   const move = (idx: number, dir: -1 | 1) =>
     setPicked((list) => {
@@ -254,12 +258,23 @@ export default function DailyMenuAdminPage() {
         <section className="border rounded-2xl bg-[#1c1514] p-5 space-y-3">
           <h2 className="font-semibold">Plats du point de vente</h2>
           <input type="search" value={search} onChange={(e) => setSearch(e.target.value)} placeholder="Rechercher un plat..." className="w-full border rounded-lg px-3 py-2" />
-          <label className="flex items-center gap-2 text-xs text-gray-500 mt-1.5">
-            <input type="checkbox" checked={showAll} onChange={(e) => setShowAll(e.target.checked)} /> Afficher aussi les autres categories (pizzas, poulet, desserts...)
-          </label>
+          <div>
+            <p className="text-xs text-gray-500 mb-1">Categories affichees (cliquez pour afficher ou masquer) :</p>
+            <div className="flex flex-wrap gap-1.5">
+              {allCats.map((c) => (
+                <button key={c} onClick={() => toggleCat(c)} className={`px-2.5 py-1 rounded-full text-xs border ${activeCats.includes(c) ? "bg-[#f5b942] text-[#241010] border-[#f5b942]" : "text-gray-400"}`}>
+                  {activeCats.includes(c) ? "✓ " : ""}
+                  {c}
+                </button>
+              ))}
+            </div>
+          </div>
           <ul className="max-h-[32rem] overflow-y-auto space-y-1.5 pr-1">
-            {available.map((p) => (
+            {available.map((p, i) => (
               <li key={p.id}>
+                {(i === 0 || (available[i - 1].category?.name ?? "") !== (p.category?.name ?? "")) && (
+                  <p className="sticky top-0 z-10 bg-[#251c1a] px-2 py-1 text-[11px] font-semibold uppercase tracking-wide text-[#f5b942] rounded">{p.category?.name ?? "Sans categorie"}</p>
+                )}
                 <button
                   onClick={() => setPicked((l) => [...l, { product: p.id, special_price: "" }])}
                   className="w-full flex items-center gap-3 border rounded-xl p-2 hover:border-[#f5b942] text-left"
