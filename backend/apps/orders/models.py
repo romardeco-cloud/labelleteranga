@@ -72,6 +72,7 @@ class Order(models.Model):
     # paiement par QR (Wave / Orange Money) : le client declare avoir paye et donne la reference de sa transaction
     payment_reference = models.CharField(max_length=60, blank=True)
     payment_declared_at = models.DateTimeField(null=True, blank=True)
+    handled_at = models.DateTimeField("Commande finalisee a la caisse", null=True, blank=True)  # tant qu'elle est vide, l'alerte clignote a la caisse
     tip_amount = models.DecimalField("Pourboire", max_digits=12, decimal_places=2, default=0)
     discount_amount = models.DecimalField("Remise fidelite", max_digits=12, decimal_places=2, default=0)
     reward_label = models.CharField(max_length=160, blank=True)

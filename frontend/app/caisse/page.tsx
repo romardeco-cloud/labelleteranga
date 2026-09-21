@@ -22,6 +22,9 @@ import {
   createPOSSale,
   fetchDrawerOpenings,
   fetchPOSCustomerOrders,
+  fetchPendingOnlineOrders,
+  finalizeOnlineOrder,
+  PendingOnlineOrders,
   fetchPOSProducts,
   fetchPOSSalesToday,
   recordDrawerOpening,
@@ -73,6 +76,8 @@ export default function CaissePage() {
   const [storeCats, setStoreCats] = useState<{ name: string; label?: string; order: number }[]>([]);
   const [dailyMenu, setDailyMenu] = useState<{ lunch: { product: number; number: number }[]; special: { product: number; number: number }[] }>({ lunch: [], special: [] });
   const [customerOrders, setCustomerOrders] = useState<POSCustomerOrder[]>([]);
+  const [pendingOnline, setPendingOnline] = useState<PendingOnlineOrders>({ count: 0, orders: [] });
+  const lastPendingCount = useRef(0);
   const [ordersLoading, setOrdersLoading] = useState(false);
   const [drawerRows, setDrawerRows] = useState<DrawerOpening[]>([]);
   const [drawerReason, setDrawerReason] = useState("");
@@ -150,6 +155,58 @@ export default function CaissePage() {
     }
     heldLoaded.current = true;
   }, [session, loadProducts, loadClosing]);
+
+  // Alerte commandes en ligne : verifiee toutes les 10 s ; clignote en rouge (avec un bip) tant qu'une commande n'est pas finalisee
+  const beep = useCallback(() => {
+    try {
+      const Ctx = window.AudioContext || (window as unknown as { webkitAudioContext: typeof AudioContext }).webkitAudioContext;
+      const ctx = new Ctx();
+      [0, 0.35, 0.7].forEach((t) => {
+        const o = ctx.createOscillator();
+        const g = ctx.createGain();
+        o.frequency.value = 880;
+        g.gain.value = 0.25;
+        o.connect(g);
+        g.connect(ctx.destination);
+        o.start(ctx.currentTime + t);
+        o.stop(ctx.currentTime + t + 0.2);
+      });
+      setTimeout(() => ctx.close(), 1500);
+    } catch {}
+  }, []);
+  const checkPending = useCallback(async () => {
+    try {
+      const data = await fetchPendingOnlineOrders();
+      if (data.count > lastPendingCount.current) beep();
+      lastPendingCount.current = data.count;
+      setPendingOnline(data);
+    } catch {}
+  }, [beep]);
+  useEffect(() => {
+    if (!session) return;
+    checkPending();
+    const t = setInterval(checkPending, 10000);
+    const onVisible = () => document.visibilityState === "visible" && checkPending();
+    document.addEventListener("visibilitychange", onVisible);
+    return () => {
+      clearInterval(t);
+      document.removeEventListener("visibilitychange", onVisible);
+    };
+  }, [session, checkPending]);
+  useEffect(() => {
+    // le titre de l'onglet clignote aussi : visible meme si la caisse est derriere une autre fenetre
+    if (pendingOnline.count === 0) return;
+    const base = document.title;
+    let on = false;
+    const t = setInterval(() => {
+      on = !on;
+      document.title = on ? `🔴 (${pendingOnline.count}) COMMANDE EN LIGNE` : base;
+    }, 1000);
+    return () => {
+      clearInterval(t);
+      document.title = base;
+    };
+  }, [pendingOnline.count]);
 
   // Catalogue a jour sans recharger : un produit active ou reapprovisionne apparait dans la minute.
   useEffect(() => {
@@ -562,6 +619,25 @@ export default function CaissePage() {
 
   return (
     <div className="admin-shell min-h-screen lg:h-screen flex flex-col print:h-auto print:block">
+      {pendingOnline.count > 0 && (
+        <button
+          onClick={() => openCustomerOrders()}
+          className="lbt-blink w-full shrink-0 flex flex-wrap items-center justify-center gap-x-4 gap-y-1 px-4 py-3 text-white font-bold text-base sm:text-lg print:hidden"
+          aria-live="assertive"
+        >
+          <span>
+            🔔 {pendingOnline.count} COMMANDE{pendingOnline.count > 1 ? "S" : ""} EN LIGNE A TRAITER
+          </span>
+          <span className="text-sm font-medium opacity-95">
+            {pendingOnline.orders
+              .slice(0, 2)
+              .map((o) => `${o.customer_name} · ${xof(o.total)}`)
+              .join("  |  ")}
+            {pendingOnline.count > 2 ? `  | +${pendingOnline.count - 2}` : ""}
+          </span>
+          <span className="bg-white text-[#b3261e] rounded-full px-4 py-1 text-sm">Ouvrir</span>
+        </button>
+      )}
       <div className="flex flex-col flex-1 min-h-0 print:hidden">
         {/* Barre du haut */}
         <header className="flex flex-wrap items-center gap-2.5 px-4 py-3 border-b bg-[#170f0e]">
@@ -863,6 +939,23 @@ export default function CaissePage() {
                               </button>
                             </div>
                           ))}
+                        </div>
+                      )}
+                      {o.full_reference && (
+                        <div className="mt-3">
+                          {o.handled ? (
+                            <p className="text-sm text-emerald-400">✓ Commande finalisee</p>
+                          ) : (
+                            <button
+                              onClick={async () => {
+                                await finalizeOnlineOrder(o.full_reference!);
+                                await Promise.all([openCustomerOrders(), checkPending()]);
+                              }}
+                              className="w-full rounded-xl bg-emerald-600 hover:bg-emerald-500 text-white font-semibold py-3 text-base"
+                            >
+                              ✓ Finaliser la commande
+                            </button>
+                          )}
                         </div>
                       )}
                       <div className="flex items-center justify-between mt-2">

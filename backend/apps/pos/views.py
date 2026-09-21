@@ -245,6 +245,8 @@ class POSCustomerOrdersView(APIView):
             [
                 {
                     "reference": o.reference[:8].upper(),
+                    "full_reference": o.reference,
+                    "handled": o.handled_at is not None,
                     "created_at": o.created_at,
                     "discount_amount": str(o.discount_amount),
                     "reward_label": o.reward_label,
@@ -425,3 +427,49 @@ class POSDailyMenuView(APIView):
             ]
         )
         return Response(self._payload(menu))
+
+
+def _pending_online_orders(store):
+    """Commandes du site a traiter par la caisse : ni finalisees ni annulees/echouees, des dernieres 24 h (l'alerte clignote tant qu'il en reste)."""
+    since = timezone.now() - timezone.timedelta(hours=24)
+    return Order.objects.filter(
+        channel=Order.Channel.ONLINE,
+        point_of_sale=store,
+        handled_at__isnull=True,
+        status__in=[Order.Status.PENDING, Order.Status.PAID],
+        created_at__gte=since,
+    ).order_by("created_at")
+
+
+class POSPendingOrdersView(APIView):
+    """GET /api/pos/customer-orders/pending/ : nombre et resume des commandes du site a traiter (interroge toutes les quelques secondes par la caisse)."""
+
+    permission_classes = [IsCashier]
+
+    def get(self, request):
+        store = request.user.cashier_profile.point_of_sale
+        rows = list(_pending_online_orders(store)[:20])
+        return Response(
+            {
+                "count": len(rows),
+                "orders": [{"reference": o.reference[:8].upper(), "customer_name": o.customer_name, "total": str(o.total_amount), "created_at": o.created_at, "state": _order_state_label(o)} for o in rows],
+            }
+        )
+
+
+class POSFinalizeOrderView(APIView):
+    """POST /api/pos/customer-orders/<reference>/finalize/ : la commande du site est traitee ; l'alerte s'arrete pour elle."""
+
+    permission_classes = [IsCashier]
+
+    def post(self, request, reference):
+        store = request.user.cashier_profile.point_of_sale
+        order = Order.objects.filter(reference=reference, channel=Order.Channel.ONLINE, point_of_sale=store).first()
+        if order is None:
+            from rest_framework.exceptions import NotFound
+
+            raise NotFound("Commande introuvable.")
+        if order.handled_at is None:
+            order.handled_at = timezone.now()
+            order.save(update_fields=["handled_at"])
+        return Response({"handled": True})

@@ -475,6 +475,8 @@ export type POSSettings = {
 
 export type POSCustomerOrder = {
   reference: string;
+  full_reference?: string;
+  handled?: boolean;
   created_at: string;
   status: string;
   status_label: string;
@@ -503,6 +505,16 @@ export type DrawerOpening = { id: number; reason: string; cashier: string | null
 
 export async function fetchPOSCustomerOrders() {
   return (await api.get<POSCustomerOrder[]>("/pos/customer-orders/")).data;
+}
+export type PendingOnlineOrders = {
+  count: number;
+  orders: { reference: string; customer_name: string; total: string; created_at: string; state: string }[];
+};
+export async function fetchPendingOnlineOrders() {
+  return (await api.get<PendingOnlineOrders>("/pos/customer-orders/pending/")).data;
+}
+export async function finalizeOnlineOrder(fullReference: string) {
+  await api.post(`/pos/customer-orders/${fullReference}/finalize/`);
 }
 export async function fetchDrawerOpenings() {
   return (await api.get<DrawerOpening[]>("/pos/drawer/")).data;

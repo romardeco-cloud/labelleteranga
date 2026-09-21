@@ -128,3 +128,24 @@ body {
     color: #000 !important;
   }
 }
+
+/* Alerte de la caisse : commande en ligne a traiter (clignote en rouge jusqu'a la finalisation) */
+@keyframes lbt-blink {
+  0%,
+  100% {
+    background-color: #b3261e;
+    box-shadow: 0 0 0 0 rgba(255, 60, 50, 0.7);
+  }
+  50% {
+    background-color: #ff2d20;
+    box-shadow: 0 0 0 10px rgba(255, 60, 50, 0);
+  }
+}
+.lbt-blink {
+  animation: lbt-blink 0.9s ease-in-out infinite;
+}
+@media (prefers-reduced-motion: reduce) {
+  .lbt-blink {
+    animation-duration: 2s;
+  }
+}
