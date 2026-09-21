@@ -1289,7 +1289,7 @@ export default function CaissePage() {
                     className="w-full border rounded-xl px-3 py-2 text-sm"
                   />
                   <label className="mt-1.5 flex items-center gap-2 text-xs text-gray-500">
-                    <input type="checkbox" checked={menuAll} onChange={(e) => setMenuAll(e.target.checked)} /> Afficher aussi les boissons, desserts et autres produits
+                    <input type="checkbox" checked={menuAll} onChange={(e) => setMenuAll(e.target.checked)} /> Afficher aussi les autres categories (pizzas, poulet, desserts...)
                   </label>
                   <ul className="mt-2 max-h-52 overflow-y-auto divide-y border rounded-xl">
                     {products

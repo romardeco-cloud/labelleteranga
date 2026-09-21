@@ -255,7 +255,7 @@ export default function DailyMenuAdminPage() {
           <h2 className="font-semibold">Plats du point de vente</h2>
           <input type="search" value={search} onChange={(e) => setSearch(e.target.value)} placeholder="Rechercher un plat..." className="w-full border rounded-lg px-3 py-2" />
           <label className="flex items-center gap-2 text-xs text-gray-500 mt-1.5">
-            <input type="checkbox" checked={showAll} onChange={(e) => setShowAll(e.target.checked)} /> Afficher aussi les boissons, desserts et autres produits
+            <input type="checkbox" checked={showAll} onChange={(e) => setShowAll(e.target.checked)} /> Afficher aussi les autres categories (pizzas, poulet, desserts...)
           </label>
           <ul className="max-h-[32rem] overflow-y-auto space-y-1.5 pr-1">
             {available.map((p) => (
