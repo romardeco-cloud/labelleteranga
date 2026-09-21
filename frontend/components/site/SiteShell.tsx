@@ -2,6 +2,7 @@
 
 import Image from "next/image";
 import Link from "next/link";
+import { usePathname } from "next/navigation";
 import { useEffect, useState } from "react";
 import InstallApp from "@/components/site/InstallApp";
 import InstallBanner from "@/components/site/InstallBanner";
@@ -133,6 +134,37 @@ function Footer() {
   );
 }
 
+/** Barre du panier collee en bas de l'ecran : nombre d'articles, total et acces direct au panier. */
+function CartBar() {
+  const { base } = useSite();
+  const pathname = usePathname() ?? "";
+  const [cart, setCart] = useState<{ count: number; total: number }>({ count: 0, total: 0 });
+
+  useEffect(() => {
+    const refresh = () =>
+      fetchCart()
+        .then((c) => setCart({ count: c.items.reduce((n, i) => n + i.quantity, 0), total: Number(c.total) }))
+        .catch(() => setCart({ count: 0, total: 0 }));
+    refresh();
+    window.addEventListener("lbt-cart-changed", refresh);
+    return () => window.removeEventListener("lbt-cart-changed", refresh);
+  }, []);
+
+  if (cart.count === 0 || /\/(cart|checkout)/.test(pathname)) return null;
+  return (
+    <Link
+      href={`${base}/cart`}
+      className="fixed inset-x-3 bottom-3 z-30 mx-auto max-w-md flex items-center justify-between gap-3 rounded-2xl bg-brand text-white px-5 py-3.5 shadow-xl ring-2 ring-brand-accent/60 active:scale-[0.99] transition"
+    >
+      <span className="flex items-center gap-2 font-semibold">
+        <span className="bg-brand-accent text-brand-dark text-sm font-bold rounded-full min-w-7 h-7 px-2 flex items-center justify-center">{cart.count}</span>
+        Voir mon panier
+      </span>
+      <span className="font-bold text-brand-accent">{new Intl.NumberFormat("fr-SN", { maximumFractionDigits: 0 }).format(cart.total)} FCFA</span>
+    </Link>
+  );
+}
+
 function WhatsAppButton() {
   const { site } = useSite();
   const href = socialHref("whatsapp", siteSocials(site).whatsapp);
@@ -143,7 +175,7 @@ function WhatsAppButton() {
       target="_blank"
       rel="noopener noreferrer"
       aria-label="Nous ecrire sur WhatsApp"
-      className="fixed bottom-4 right-4 z-30 w-12 h-12 rounded-full bg-[#25d366] text-white shadow-lg flex items-center justify-center hover:scale-105 transition"
+      className="fixed bottom-20 right-4 z-30 w-12 h-12 rounded-full bg-[#25d366] text-white shadow-lg flex items-center justify-center hover:scale-105 transition"
     >
       <SocialIcon name="whatsapp" size={26} />
     </a>
@@ -158,6 +190,7 @@ export default function SiteShell({ site, children }: { site: Site; children: Re
       <PendingPaymentBanner />
       <main className="min-h-[70vh]">{children}</main>
       <Footer />
+      <CartBar />
       <WhatsAppButton />
     </SiteProvider>
   );

@@ -26,20 +26,23 @@ export default function InstallBanner() {
 
   if (!show) return null;
   return (
-    <div className="bg-brand-light border-b border-brand-accent/40 px-4 py-2.5 flex items-center justify-center gap-3 flex-wrap text-sm">
-      <span className="text-brand-dark font-medium">Installez l&apos;application {shortName(site.name)} sur votre telephone</span>
-      <InstallApp appName={shortName(site.name)} className="bg-brand text-white rounded-full px-4 py-1.5 text-xs font-medium" />
-      <button
-        onClick={() => {
-          setShow(false);
-          try {
-            localStorage.setItem(key, "1");
-          } catch {}
-        }}
-        className="text-gray-500 text-xs underline"
-      >
-        Plus tard
-      </button>
+    <div className="bg-brand-light border-b border-brand-accent/40 pl-4 pr-2 py-1.5 flex items-center justify-between gap-2 text-sm">
+      <span className="text-brand-dark font-medium truncate">Installer {shortName(site.name)} sur mon telephone</span>
+      <div className="flex items-center gap-1 shrink-0">
+        <InstallApp appName={shortName(site.name)} className="bg-brand text-white rounded-full px-3.5 py-1.5 text-xs font-semibold" />
+        <button
+          aria-label="Fermer"
+          onClick={() => {
+            setShow(false);
+            try {
+              localStorage.setItem(key, "1");
+            } catch {}
+          }}
+          className="w-8 h-8 rounded-full text-gray-500 hover:bg-black/5 text-lg leading-none"
+        >
+          ×
+        </button>
+      </div>
     </div>
   );
 }

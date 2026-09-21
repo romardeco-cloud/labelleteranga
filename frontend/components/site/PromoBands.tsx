@@ -24,26 +24,26 @@ export default function PromoBands() {
   const { contact } = data;
 
   return (
-    <div className="space-y-6 mb-8">
+    <div className="space-y-4 sm:space-y-6 mb-6 sm:mb-8">
       {data.bands.map((b) => (
         <section key={b.id} className="grid lg:grid-cols-[5fr_8fr] overflow-hidden rounded-3xl border border-black/5 shadow-lg" aria-label={b.title}>
-          <div className="bg-gradient-to-br from-[#7a1414] via-[#6a1010] to-[#450909] text-white p-6 sm:p-8 flex flex-col justify-center">
-            <Image src="/logo.jpg" alt="La Belle Teranga" width={72} height={72} className="h-16 w-16 rounded-full ring-2 ring-white/70 shadow mb-5" />
+          <div className="bg-gradient-to-br from-[#7a1414] via-[#6a1010] to-[#450909] text-white p-4 sm:p-8 flex flex-col justify-center">
+            <Image src="/logo.jpg" alt="La Belle Teranga" width={72} height={72} className="hidden sm:block h-16 w-16 rounded-full ring-2 ring-white/70 shadow mb-5" />
             <p className="text-[11px] font-bold tracking-[0.3em] text-[#f5b942]">LA BELLE TERANGA</p>
-            <h2 className="mt-2 font-serif text-3xl sm:text-4xl font-bold leading-tight text-[#fde9b8]">{b.title}</h2>
-            <span className="my-4 block h-0.5 w-16 bg-[#f5b942]" />
-            {b.text && <p className="text-base sm:text-lg leading-snug text-white/90 max-w-md">{b.text}</p>}
-            <div className="mt-5 text-xs sm:text-sm text-white/80 space-y-0.5">
+            <h2 className="mt-1 sm:mt-2 font-serif text-2xl sm:text-4xl font-bold leading-tight text-[#fde9b8]">{b.title}</h2>
+            <span className="my-2 sm:my-4 block h-0.5 w-12 sm:w-16 bg-[#f5b942]" />
+            {b.text && <p className="text-sm sm:text-lg leading-snug text-white/90 max-w-md">{b.text}</p>}
+            <div className="hidden sm:block mt-5 text-xs sm:text-sm text-white/80 space-y-0.5">
               {contact.address && <p>{contact.address}</p>}
               <p>{[contact.phone, contact.email].filter(Boolean).join("  •  ")}</p>
             </div>
           </div>
-          <div className="bg-[#fbf6ec] p-4 sm:p-5 flex gap-3 sm:gap-4 overflow-x-auto snap-x snap-mandatory items-stretch">
+          <div className="bg-[#fbf6ec] p-3 sm:p-5 flex gap-3 sm:gap-4 overflow-x-auto snap-x snap-mandatory items-stretch">
             {b.items.map((it) => (
               <Link
                 key={`${it.kind}-${it.id}`}
                 href={it.kind === "combo" ? `${base}/evenements` : `${base}/product/${it.id}`}
-                className="relative snap-start shrink-0 w-40 sm:w-44 h-64 sm:h-72 overflow-hidden rounded-2xl shadow-md bg-brand-light group"
+                className="relative snap-start shrink-0 w-36 sm:w-44 h-56 sm:h-72 overflow-hidden rounded-2xl shadow-md bg-brand-light group"
               >
                 <div className="absolute inset-0">
                   <ProductVisual image={it.image} name={it.name} category={null} cover />
