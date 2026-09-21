@@ -11,6 +11,9 @@ type Draft = { id: number | null; name: string; address: string; phone: string; 
 
 const emptyDraft: Draft = { id: null, name: "", address: "", phone: "", description: "", slug: "", online_enabled: true, is_active: true };
 
+/** Nom saisi = nom du point de vente, sans tenir compte des majuscules ni des espaces en trop. */
+const sameName = (a: string, b: string) => a.trim().replace(/\s+/g, " ").toLowerCase() === b.trim().replace(/\s+/g, " ").toLowerCase();
+
 export default function AdminStoresPage() {
   const [stores, setStores] = useState<PointOfSale[]>([]);
   const [draft, setDraft] = useState<Draft | null>(null);
@@ -266,12 +269,25 @@ export default function AdminStoresPage() {
                 <span className="block text-gray-400 mb-1">
                   2. Saisissez exactement : <strong className="text-white">{reset.store.name}</strong>
                 </span>
-                <input value={reset.typed} onChange={(e) => setReset({ ...reset, typed: e.target.value })} className="w-full border rounded-lg px-3 py-2" />
+                <div className="flex gap-2">
+                  <input
+                    name="confirm-store-name"
+                    autoComplete="off"
+                    value={reset.typed}
+                    onChange={(e) => setReset({ ...reset, typed: e.target.value })}
+                    className="w-full border rounded-lg px-3 py-2"
+                  />
+                  <button type="button" onClick={() => setReset({ ...reset, typed: reset.store.name })} className="shrink-0 border rounded-lg px-3 text-sm text-[#f5b942]">
+                    Remplir
+                  </button>
+                </div>
               </label>
               <label className="text-sm block">
                 <span className="block text-gray-400 mb-1">3. Code secret (4 chiffres)</span>
                 <input
                   type="password"
+                  name="confirm-security-code"
+                  autoComplete="new-password"
                   inputMode="numeric"
                   maxLength={4}
                   value={reset.pin}
@@ -281,13 +297,21 @@ export default function AdminStoresPage() {
               </label>
             </div>
             <p className="text-xs text-red-400">Irreversible. Les autres points de vente ne sont pas touches.</p>
+            {(() => {
+              const missing = [
+                !reset.backedUp && "telecharger la sauvegarde (etape 1)",
+                sameName(reset.typed, reset.store.name) ? "" : "saisir le nom exact du point de vente (etape 2)",
+                reset.pin.length === 4 ? "" : "saisir le code secret a 4 chiffres (etape 3)",
+              ].filter(Boolean);
+              return missing.length > 0 ? <p className="text-xs text-amber-400">Il reste a faire : {missing.join(" · ")}.</p> : <p className="text-xs text-emerald-400">Tout est pret : vous pouvez confirmer.</p>;
+            })()}
             <div className="flex justify-end gap-2">
               <button onClick={() => setReset(null)} className="border rounded-lg px-4 py-2">
                 Annuler
               </button>
               <button
                 onClick={confirmReset}
-                disabled={busy || !reset.backedUp || reset.typed.trim() !== reset.store.name || reset.pin.length !== 4}
+                disabled={busy || !reset.backedUp || !sameName(reset.typed, reset.store.name) || reset.pin.length !== 4}
                 className="bg-red-600 text-white rounded-lg px-5 py-2 font-medium disabled:opacity-40"
               >
                 {busy ? "Remise a zero..." : "Remettre a zero definitivement"}

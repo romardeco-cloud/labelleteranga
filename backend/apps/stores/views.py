@@ -117,7 +117,7 @@ class PointOfSaleViewSet(viewsets.ModelViewSet):
         from .reset import reset_store
 
         store = self.get_object()
-        if str(request.data.get("confirm_name", "")).strip() != store.name:
+        if " ".join(str(request.data.get("confirm_name", "")).split()).lower() != " ".join(store.name.split()).lower():
             raise ValidationError({"confirm_name": "Saisissez exactement le nom du point de vente."})
         AdminSecurityCode.current().verify(str(request.data.get("pin") or ""))
         done = reset_store(store, include_stock_levels=str(request.data.get("include_stock_levels", "")).lower() in ("1", "true", "yes"))
