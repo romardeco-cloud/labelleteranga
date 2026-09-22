@@ -187,6 +187,10 @@ WHATSAPP_ACK_TEMPLATE_NAME = os.environ.get("WHATSAPP_ACK_TEMPLATE_NAME", "")
 # Numero WhatsApp de la boutique (format international sans "+", ex: 221771234567)
 WHATSAPP_SHOP_NUMBER = os.environ.get("WHATSAPP_SHOP_NUMBER", "")
 
+# cle secrete d'appel programme (cron externe gratuit type cron-job.org ou UptimeRobot) pour declencher, a heure fixe,
+# la fermeture automatique des caisses de caissiers oubliees (voir apps.reports.views.AutoCloseCronView)
+AUTO_CLOSE_SECRET = os.environ.get("AUTO_CLOSE_SECRET", "")
+
 if not DEBUG:
     SECURE_SSL_REDIRECT = True
     SESSION_COOKIE_SECURE = True

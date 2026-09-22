@@ -868,10 +868,16 @@ export default function CaissePage() {
               <div className="p-4 lg:overflow-y-auto">
                 <div className="max-w-xl mx-auto bg-[#1c1514] border rounded-2xl p-5">
                   <h2 className="text-lg font-bold mb-1">{closed ? "Corriger ma fermeture de caisse" : "Fermeture de caisse"}</h2>
-                  <p className="text-sm text-gray-500 mb-4">
+                  <p className="text-sm text-gray-500 mb-2">
                     {closingState?.sales_count ?? 0} vente(s) aujourd&apos;hui. Comptez ce que vous avez encaisse pour chaque moyen de paiement :
                     l&apos;ecart avec le montant attendu s&apos;affiche tout de suite.
                   </p>
+                  {closingState?.carried_over && (
+                    <p className="text-sm text-amber-400 bg-amber-500/10 border border-amber-500/30 rounded-lg px-3 py-2 mb-4">
+                      ⚠️ La caisse n&apos;a pas ete fermee depuis le {closingState.carried_over_since}. L&apos;argent de ces jours est reste dans le
+                      tiroir : le montant attendu ci-dessous l&apos;inclut deja, comptez tout ensemble en une seule fois.
+                    </p>
+                  )}
 
                   <form onSubmit={submitClosing} className="space-y-4">
                     <table className="w-full text-sm">

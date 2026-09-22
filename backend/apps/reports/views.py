@@ -4,7 +4,7 @@ from datetime import timedelta
 from django.db.models import Count, F, Sum
 from django.db.models.functions import TruncDate, TruncMonth, TruncYear
 from django.utils import timezone
-from rest_framework import status, viewsets
+from rest_framework import permissions, status, viewsets
 from rest_framework.decorators import action
 from rest_framework.exceptions import ValidationError
 from rest_framework.permissions import IsAdminUser
@@ -12,6 +12,8 @@ from rest_framework.response import Response
 from rest_framework.views import APIView
 
 from apps.orders.models import Order, OrderItem
+
+from apps.pos.services import auto_close_overdue_cashiers
 
 from .models import DailyClosing
 from .serializers import DailyClosingSerializer
@@ -299,9 +301,10 @@ class DailyClosingViewSet(viewsets.ModelViewSet):
         from apps.accounts.models import CashierProfile
         from apps.pos.services import cashier_sales_totals
 
+        store = request.query_params.get("point_of_sale")
+        auto_close_overdue_cashiers(store=int(store) if store else None)  # ferme d'abord les journees oubliees avant d'afficher l'etat
         for_date = self._date_param(request.query_params.get("date"))
         profiles = CashierProfile.objects.select_related("user", "point_of_sale").filter(is_active=True)
-        store = request.query_params.get("point_of_sale")
         if store:
             profiles = profiles.filter(point_of_sale_id=store)
         rows = []
@@ -322,6 +325,37 @@ class DailyClosingViewSet(viewsets.ModelViewSet):
                 }
             )
         return Response(rows)
+
+    @action(detail=False, methods=["post"], url_path="auto-close")
+    def force_auto_close(self, request):
+        """POST : force tout de suite la fermeture automatique des caisses oubliees (bouton « Verifier maintenant » de l'admin)."""
+        n = auto_close_overdue_cashiers()
+        return Response({"closed": n})
+
+
+class AutoCloseCronView(APIView):
+    """
+    GET/POST /api/reports/auto-close-cron/?key=... : point d'entree sans authentification, protege par une cle secrete
+    (variable d'environnement AUTO_CLOSE_SECRET), a appeler une fois par jour vers 2h05 par un service de rappel gratuit
+    (cron-job.org, UptimeRobot...) pour que la fermeture automatique des caisses ait lieu meme si personne n'utilise
+    l'application a ce moment-la. Sans AUTO_CLOSE_SECRET configuree, l'appel est refuse.
+    """
+
+    permission_classes = [permissions.AllowAny]
+
+    def _run(self, request):
+        from django.conf import settings
+
+        if not settings.AUTO_CLOSE_SECRET or request.query_params.get("key") != settings.AUTO_CLOSE_SECRET:
+            return Response({"detail": "Cle invalide."}, status=status.HTTP_403_FORBIDDEN)
+        n = auto_close_overdue_cashiers()
+        return Response({"closed": n})
+
+    def get(self, request):
+        return self._run(request)
+
+    def post(self, request):
+        return self._run(request)
 
     @action(detail=False, methods=["get"], url_path="store-gaps")
     def store_gaps(self, request):
@@ -398,7 +432,9 @@ class DailyClosingViewSet(viewsets.ModelViewSet):
 
         for_date = self._date_param(request.query_params.get("date"))
         profile = self._profile(request.query_params.get("cashier"))
-        totals, n = cashier_sales_totals(profile, for_date)
+        from apps.pos.services import cashier_expected_with_carryover
+
+        combined, own, carried, prior_dates, n = cashier_expected_with_carryover(profile, for_date)
         closing = DailyClosing.objects.filter(date=for_date, point_of_sale=profile.point_of_sale, cashier=profile.user).first()
         return Response(
             {
@@ -407,12 +443,15 @@ class DailyClosingViewSet(viewsets.ModelViewSet):
                 "username": profile.user.username,
                 "point_of_sale_name": profile.point_of_sale.name,
                 "sales_count": n,
+                # "expected" inclut le solde des jours precedents jamais fermes (compte une seule fois avec celui-ci)
                 "expected": {
-                    "card": totals["card"],
-                    "wave": totals["wave"],
-                    "orange_money": totals["orange_money"],
-                    "cash": totals["cash"],
+                    "card": combined["card"],
+                    "wave": combined["wave"],
+                    "orange_money": combined["orange_money"],
+                    "cash": combined["cash"],
                 },
+                "carried_over": carried if prior_dates else None,
+                "carried_over_since": prior_dates[0] if prior_dates else None,
                 "closing": DailyClosingSerializer(closing).data if closing else None,
             }
         )

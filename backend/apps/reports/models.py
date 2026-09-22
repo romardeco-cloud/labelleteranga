@@ -49,6 +49,11 @@ class DailyClosing(models.Model):
     # Suivi des corrections faites par un caissier apres avoir vu son ecart
     initial_discrepancy_total = models.DecimalField(max_digits=12, decimal_places=2, default=0)
     revision_count = models.PositiveIntegerField(default=0)
+    # fermeture d'un caissier oubliee : le systeme la ferme lui-meme (equilibree, sans ecart) apres 2h du matin
+    auto_closed = models.BooleanField("Fermeture automatique (caisse non fermee par le caissier)", default=False)
+    # si cette fermeture regroupe plusieurs jours non fermes (l'argent non retire s'accumule dans le tiroir),
+    # date du plus ancien jour couvert ; vide si elle ne porte que sur sa propre journee
+    covers_from = models.DateField("Solde reporte depuis", null=True, blank=True)
 
     class Meta:
         ordering = ["-date"]

@@ -14,7 +14,7 @@ from django.utils import timezone
 from apps.reports.models import DailyClosing
 from apps.reports.serializers import DailyClosingSerializer
 
-from .services import cashier_sales_totals, close_cashier_day, create_pos_sale
+from .services import auto_close_overdue_cashiers, cashier_expected_with_carryover, cashier_sales_totals, close_cashier_day, create_pos_sale
 
 
 class POSProductListView(APIView):
@@ -23,7 +23,9 @@ class POSProductListView(APIView):
     permission_classes = [IsCashier]
 
     def get(self, request):
-        store = request.user.cashier_profile.point_of_sale
+        profile = request.user.cashier_profile
+        auto_close_overdue_cashiers(only_profile=profile)  # ferme les journees oubliees avant que le caissier ne recommence a vendre
+        store = profile.point_of_sale
         # seuls les produits rattaches a ce point de vente (une ligne de stock, meme a 0)
         qs = Product.objects.filter(is_active=True, stocks__point_of_sale=store).select_related("category")
         search = request.query_params.get("search", "").strip()
@@ -170,21 +172,25 @@ class POSClosingView(APIView):
 
     def get(self, request):
         profile = request.user.cashier_profile
+        auto_close_overdue_cashiers(only_profile=profile)
         closing = self._closing_today(profile)
-        totals, sales_count = cashier_sales_totals(profile, timezone.localdate())
+        combined, own, carried, prior_dates, sales_count = cashier_expected_with_carryover(profile, timezone.localdate())
         return Response(
             {
                 "date": timezone.localdate(),
                 "point_of_sale": profile.point_of_sale.name,
                 "closed": closing is not None,
                 "sales_count": sales_count,
-                # le caissier voit l'attendu et son ecart des la fermeture (comptage en direct)
+                # le caissier voit l'attendu et son ecart des la fermeture (comptage en direct) ; "expected" inclut
+                # le solde des jours non fermes precedents (argent jamais retire du tiroir, compte une seule fois)
                 "expected": {
-                    "cash": totals["cash"],
-                    "wave": totals["wave"],
-                    "orange_money": totals["orange_money"],
-                    "card": totals["card"],
+                    "cash": combined["cash"],
+                    "wave": combined["wave"],
+                    "orange_money": combined["orange_money"],
+                    "card": combined["card"],
                 },
+                "carried_over": carried if prior_dates else None,
+                "carried_over_since": prior_dates[0] if prior_dates else None,
                 "closing": DailyClosingSerializer(closing).data if closing else None,
             }
         )

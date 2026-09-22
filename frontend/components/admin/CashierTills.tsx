@@ -21,6 +21,8 @@ type Preview = {
   point_of_sale_name: string;
   sales_count: number;
   expected: { card: number; wave: number; orange_money: number; cash: number };
+  carried_over: { card: number; wave: number; orange_money: number; cash: number } | null;
+  carried_over_since: string | null;
   closing: DailyClosing | null;
 };
 
@@ -40,6 +42,8 @@ export default function CashierTills({ date, storeId, onChanged }: { date: strin
   const [notes, setNotes] = useState("");
   const [busy, setBusy] = useState(false);
   const [error, setError] = useState("");
+  const [checking, setChecking] = useState(false);
+  const [checkMsg, setCheckMsg] = useState("");
 
   const load = useCallback(() => {
     api
@@ -102,13 +106,37 @@ export default function CashierTills({ date, storeId, onChanged }: { date: strin
 
   const gap = (m: string) => Number(declared[m] || 0) - Number(preview?.expected[m as keyof Preview["expected"]] ?? 0);
 
+  async function checkNow() {
+    setChecking(true);
+    setCheckMsg("");
+    try {
+      const { data } = await api.post<{ closed: number }>("/reports/closings/auto-close/");
+      setCheckMsg(data.closed > 0 ? `${data.closed} journee(s) fermee(s) automatiquement.` : "Rien a fermer : toutes les caisses en retard sont a jour.");
+      load();
+      onChanged();
+    } catch {
+      setCheckMsg("Verification impossible.");
+    } finally {
+      setChecking(false);
+    }
+  }
+
   return (
     <section className="border rounded-lg bg-white p-4 space-y-3">
-      <div>
-        <h2 className="font-semibold">Caisses des caissiers</h2>
-        <p className="text-sm text-gray-500">
-          Fermez la caisse d&apos;un caissier a sa place (oubli, depart...) ou corrigez son comptage pour la journee choisie.
-        </p>
+      <div className="flex flex-wrap items-start justify-between gap-3">
+        <div>
+          <h2 className="font-semibold">Caisses des caissiers</h2>
+          <p className="text-sm text-gray-500">
+            Fermez la caisse d&apos;un caissier a sa place (oubli, depart...) ou corrigez son comptage pour la journee choisie. Une caisse non
+            fermee la veille avant 2h du matin est fermee automatiquement, a l&apos;equilibre.
+          </p>
+        </div>
+        <div className="text-right">
+          <button onClick={checkNow} disabled={checking} className="text-xs border rounded px-3 py-1.5 disabled:opacity-50">
+            {checking ? "Verification..." : "Verifier maintenant"}
+          </button>
+          {checkMsg && <p className="text-xs text-gray-500 mt-1">{checkMsg}</p>}
+        </div>
       </div>
       <div className="overflow-x-auto">
         <table className="w-full text-sm">
@@ -138,6 +166,7 @@ export default function CashierTills({ date, storeId, onChanged }: { date: strin
                   ) : (
                     <span className="text-amber-600">Ouverte</span>
                   )}
+                  {t.closing?.auto_closed && <span className="ml-2 text-xs bg-gray-200 text-gray-700 rounded px-1.5 py-0.5">Auto</span>}
                 </td>
                 <td className="py-2 text-right">
                   <button onClick={() => openForm(t)} className="text-xs bg-brand text-white rounded px-3 py-1.5">
@@ -167,6 +196,12 @@ export default function CashierTills({ date, storeId, onChanged }: { date: strin
               <p className="text-sm text-gray-500">
                 {open.point_of_sale_name} · journee du {date} · {preview?.sales_count ?? 0} vente(s)
               </p>
+              {preview?.carried_over && (
+                <p className="text-sm text-amber-700 bg-amber-50 border border-amber-200 rounded-lg px-3 py-2 mt-2">
+                  ⚠️ Caisse non fermee depuis le {preview.carried_over_since} : le solde de ces jours (non retire du tiroir) est ajoute a
+                  l&apos;attendu ci-dessous.
+                </p>
+              )}
             </div>
             {!preview ? (
               <p className="text-gray-500">Chargement...</p>

@@ -347,6 +347,8 @@ export type DailyClosing = {
   discrepancy_cash: string;
   discrepancy_total: string;
   notes: string;
+  auto_closed: boolean;
+  covers_from: string | null;
 };
 
 export type ClosingPreview = {
@@ -594,6 +596,8 @@ export type CashierClosingState = {
   closed: boolean;
   sales_count: number;
   expected: { cash: number; wave: number; orange_money: number; card: number };
+  carried_over: { cash: number; wave: number; orange_money: number; card: number } | null;
+  carried_over_since: string | null;
   closing: DailyClosing | null;
 };
 

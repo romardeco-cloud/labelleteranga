@@ -1,3 +1,4 @@
+from datetime import time as dt_time
 from decimal import Decimal
 
 from django.db import transaction
@@ -10,6 +11,7 @@ from apps.orders.services import parse_tip
 from apps.reports.models import DailyClosing
 from apps.stores.models import Stock, StockMovement
 from apps.stores.services import change_stock
+from django.db.models.functions import TruncDate
 
 POS_PAYMENT_METHODS = {m for m, _ in Order.PaymentMethod.choices}
 
@@ -111,6 +113,47 @@ def create_pos_sale(cashier_profile, items, payment_method, customer_name="", am
     return order, received
 
 
+def _unclosed_prior_dates(cashier_profile, before_date):
+    """Jours strictement avant `before_date` ou ce caissier a vendu, sans fermeture enregistree (argent jamais retire du tiroir)."""
+    store = cashier_profile.point_of_sale
+    dates = (
+        Order.objects.filter(
+            status=Order.Status.PAID,
+            channel=Order.Channel.POS,
+            cashier=cashier_profile.user,
+            point_of_sale=store,
+            paid_at__date__lt=before_date,
+        )
+        .annotate(d=TruncDate("paid_at"))
+        .order_by()  # sans ceci, le tri par defaut du modele (-created_at) empeche le DISTINCT de dedoublonner les dates
+        .values_list("d", flat=True)
+        .distinct()
+    )
+    dates = list(dates)
+    if not dates:
+        return []
+    closed = set(
+        DailyClosing.objects.filter(point_of_sale=store, cashier=cashier_profile.user, date__in=dates).values_list("date", flat=True)
+    )
+    return sorted(d for d in dates if d not in closed)
+
+
+def cashier_expected_with_carryover(cashier_profile, for_date):
+    """
+    Attendu du jour + solde des jours precedents jamais fermes (le caissier ne compte qu'une seule fois l'argent
+    accumule dans le tiroir). Retourne (attendu_total, attendu_du_jour, solde_reporte, jours_reportes, ventes_du_jour).
+    """
+    own, sales_count = cashier_sales_totals(cashier_profile, for_date)
+    prior_dates = _unclosed_prior_dates(cashier_profile, for_date)
+    carried = {k: Decimal("0") for k in own}
+    for d in prior_dates:
+        t, _ = cashier_sales_totals(cashier_profile, d)
+        for k in carried:
+            carried[k] += t[k]
+    combined = {k: own[k] + carried[k] for k in own}
+    return combined, own, carried, prior_dates, sales_count
+
+
 def cashier_sales_totals(cashier_profile, for_date):
     """Totaux attendus par moyen de paiement pour les ventes de CE caissier, ce jour-la."""
     from django.db.models import Count, Sum
@@ -138,6 +181,24 @@ def close_cashier_day(cashier_profile, declared, notes="", for_date=None, closed
     """
     today = for_date or timezone.localdate()
 
+    # jours anterieurs jamais fermes : leur argent est melange a celui d'aujourd'hui dans le tiroir, on les
+    # cloture donc automatiquement a l'equilibre (le caissier ne les compte pas separement)
+    combined_expected, _own_expected, carried, prior_dates, _ = cashier_expected_with_carryover(cashier_profile, today)
+    for d in prior_dates:
+        if DailyClosing.objects.filter(date=d, point_of_sale=cashier_profile.point_of_sale, cashier=cashier_profile.user).exists():
+            continue
+        t, _ = cashier_sales_totals(cashier_profile, d)
+        DailyClosing.objects.create(
+            date=d,
+            point_of_sale=cashier_profile.point_of_sale,
+            cashier=cashier_profile.user,
+            closed_by=closed_by or cashier_profile.user,
+            notes=f"Solde reporte : cloture avec la journee du {today.strftime('%d/%m/%Y')}.",
+            expected_card=t["card"], expected_wave=t["wave"], expected_orange_money=t["orange_money"], expected_cash=t["cash"],
+            declared_card=t["card"], declared_wave=t["wave"], declared_orange_money=t["orange_money"], declared_cash=t["cash"],
+            auto_closed=True,
+        )
+
     def amount(key):
         try:
             value = Decimal(str(declared.get(key, 0) or 0))
@@ -153,13 +214,13 @@ def close_cashier_day(cashier_profile, declared, notes="", for_date=None, closed
         "declared_orange_money": amount("orange_money"),
         "declared_cash": amount("cash"),
     }
-    totals, _ = cashier_sales_totals(cashier_profile, today)
     expected = {
-        "expected_card": totals["card"],
-        "expected_wave": totals["wave"],
-        "expected_orange_money": totals["orange_money"],
-        "expected_cash": totals["cash"],
+        "expected_card": combined_expected["card"],
+        "expected_wave": combined_expected["wave"],
+        "expected_orange_money": combined_expected["orange_money"],
+        "expected_cash": combined_expected["cash"],
     }
+    covers_from = prior_dates[0] if prior_dates else None
     notes = (notes or "")[:1000]
 
     closing = DailyClosing.objects.select_for_update().filter(
@@ -173,6 +234,7 @@ def close_cashier_day(cashier_profile, declared, notes="", for_date=None, closed
             cashier=cashier_profile.user,
             closed_by=closed_by or cashier_profile.user,
             notes=notes,
+            covers_from=covers_from,
             **values,
             **expected,
         )
@@ -187,3 +249,48 @@ def close_cashier_day(cashier_profile, declared, notes="", for_date=None, closed
     closing.revision_count += 1
     closing.save()
     return closing, False
+
+
+def auto_close_overdue_cashiers(only_profile=None, store=None):
+    """
+    Ferme automatiquement, a l'equilibre (sans ecart, personne n'a compte), la caisse de chaque caissier
+    qui ne l'a pas fermee la veille avant 2h du matin (ou un jour plus ancien, toujours en retard). Appelee
+    a chaque usage de la caisse/de l'admin (voir apps.pos.views et apps.reports.views) et, si configuree,
+    par un appel programme externe (voir AUTO_CLOSE_SECRET). Retourne le nombre de journees fermees.
+    """
+    from datetime import timedelta
+
+    from apps.accounts.models import CashierProfile
+
+    now = timezone.localtime()
+    today = now.date()
+    yesterday = today - timedelta(days=1)
+    yesterday_ready = now.time() >= dt_time(2, 0)  # avant 2h, on laisse encore la chance au caissier de fermer hier lui-meme
+
+    profiles = CashierProfile.objects.filter(is_active=True).select_related("user", "point_of_sale")
+    if only_profile is not None:
+        profiles = profiles.filter(pk=only_profile.pk)
+    if store is not None:
+        profiles = profiles.filter(point_of_sale_id=store)
+
+    closed = 0
+    for profile in profiles:
+        if not profile.point_of_sale_id:
+            continue
+        overdue = _unclosed_prior_dates(profile, today)
+        for d in overdue:
+            if d == yesterday and not yesterday_ready:
+                continue
+            totals, _ = cashier_sales_totals(profile, d)
+            DailyClosing.objects.create(
+                date=d,
+                point_of_sale=profile.point_of_sale,
+                cashier=profile.user,
+                closed_by=None,
+                notes="Fermeture automatique : caisse non fermee par le caissier avant 2h du matin.",
+                expected_card=totals["card"], expected_wave=totals["wave"], expected_orange_money=totals["orange_money"], expected_cash=totals["cash"],
+                declared_card=totals["card"], declared_wave=totals["wave"], declared_orange_money=totals["orange_money"], declared_cash=totals["cash"],
+                auto_closed=True,
+            )
+            closed += 1
+    return closed

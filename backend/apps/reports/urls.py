@@ -11,6 +11,7 @@ from .advanced import (
 )
 from .dashboard import DashboardView
 from .views import (
+    AutoCloseCronView,
     DailyClosingViewSet,
     DailySalesView,
     MonthlySalesView,
@@ -40,6 +41,7 @@ urlpatterns = [
     path("receivables/", ReceivablesView.as_view()),
     path("payables/", PayablesView.as_view()),
     path("cash-discrepancies/", CashDiscrepancyReportView.as_view()),
+    path("auto-close-cron/", AutoCloseCronView.as_view()),
     path("export/", ExportView.as_view()),
     path("", include(router.urls)),
 ]
