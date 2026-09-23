@@ -997,6 +997,7 @@ export default function CaissePage() {
                                 <td className="py-2">{xof(expected)}</td>
                                 <td className="py-2">
                                   <input
+                                    required
                                     type="number"
                                     min={0}
                                     value={counted[key]}
@@ -1043,6 +1044,7 @@ export default function CaissePage() {
                                 <td className="py-2">{xof(openingCash)}</td>
                                 <td className="py-2">
                                   <input
+                                    required
                                     type="number"
                                     min={0}
                                     value={countedFloat}
