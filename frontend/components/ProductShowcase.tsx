@@ -37,6 +37,42 @@ function formatXof(value: string | number) {
 export default function ProductShowcase({ product, site }: { product: Product; site: Site }) {
   const features = FEATURES[product.category?.name ?? ""] ?? DEFAULT_FEATURES;
   const contact = [site.address, site.phone, site.email].filter(Boolean).join("   •   ");
+  const isCombo = product.category?.name === "Combos";
+
+  // Combos : le visuel (collage + « Pour X personnes » + titre) est deja compose dans la photo elle-meme -
+  // on la garde telle quelle (pas de recadrage, pas de second bandeau par-dessus) et on ajoute juste le prix,
+  // toujours a jour, en medaillon.
+  if (isCombo) {
+    return (
+      <div className="rounded-2xl overflow-hidden shadow-lg bg-[#4a0a0e]">
+        <div className="relative">
+          {product.image && (
+            // eslint-disable-next-line @next/next/no-img-element
+            <img src={product.image} alt={product.name} className="block w-full h-auto" />
+          )}
+          <div className="absolute -bottom-9 right-5 sm:right-10 w-20 h-20 sm:w-24 sm:h-24 rounded-full bg-[#deb25a] ring-4 ring-[#f5e6c8] shadow-xl flex flex-col items-center justify-center">
+            <span className="font-serif font-bold text-[#4a0a0e] text-base sm:text-lg leading-none">{formatXof(product.price).replace(" FCFA", "")}</span>
+            <span className="text-[#4a0a0e] text-[9px] sm:text-[10px] font-bold mt-1">FCFA</span>
+          </div>
+        </div>
+
+        <div className="px-5 sm:px-8 pt-11 sm:pt-12 pb-6 text-center">
+          <p className="text-[#deb25a] text-[11px] sm:text-xs tracking-[0.3em] font-bold uppercase mb-2">La Belle Teranga</p>
+          <h1 className="font-serif text-2xl sm:text-3xl font-bold text-[#f5e6c8]">{product.name}</h1>
+          <div className="w-14 h-0.5 bg-[#deb25a] mx-auto my-3" />
+          {product.combo_items && product.combo_items.length > 0 && (
+            <ul className="text-[#f5e6c8]/90 text-sm sm:text-base space-y-1 text-left inline-block">
+              {product.combo_items.map((it, i) => (
+                <li key={i}>✓ {it}</li>
+              ))}
+            </ul>
+          )}
+        </div>
+
+        {contact && <div className="bg-[#2e0609] text-[#f5e6c8] text-center text-[11px] sm:text-sm py-3 px-4">{contact}</div>}
+      </div>
+    );
+  }
 
   return (
     <div className="rounded-2xl overflow-hidden shadow-lg bg-[#4a0a0e]">

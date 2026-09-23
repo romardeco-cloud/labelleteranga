@@ -49,16 +49,6 @@ export default function ProductDetailPage() {
       <div className="max-w-xl mx-auto px-4 py-8">
         <ProductShowcase product={product} site={site} />
         <div className="mt-6 flex flex-col items-center gap-3 text-center">
-          {product.combo_items && product.combo_items.length > 0 && (
-            <div className="w-full rounded-xl border border-brand/20 bg-brand-light/60 p-4 text-left">
-              <p className="font-semibold text-brand-dark mb-1.5">Ce combo contient :</p>
-              <ul className="space-y-1 text-gray-700">
-                {product.combo_items.map((it, i) => (
-                  <li key={i}>✓ {it}</li>
-                ))}
-              </ul>
-            </div>
-          )}
           {addButton}
           {error && <p className="text-red-600 text-sm">{error}</p>}
           <Link href={base || "/"} className="text-sm text-brand underline">
