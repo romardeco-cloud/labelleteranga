@@ -16,7 +16,7 @@ class ProductSerializer(serializers.ModelSerializer):
     category_id = serializers.PrimaryKeyRelatedField(
         source="category", queryset=Category.objects.all(), write_only=True, required=False, allow_null=True
     )
-    total_stock = serializers.IntegerField(read_only=True)
+    total_stock = serializers.SerializerMethodField()
     stocks = StockSerializer(many=True, read_only=True)
     effective_price = serializers.SerializerMethodField()
     active_promotion_name = serializers.SerializerMethodField()
@@ -51,6 +51,13 @@ class ProductSerializer(serializers.ModelSerializer):
         ]
         read_only_fields = ["id", "slug", "created_at", "updated_at"]
 
+    def _total_stock(self, product):
+        # somme en memoire sur les stocks deja precharges (prefetch_related) : evite une requete SQL par produit
+        return sum(s.quantity for s in product.stocks.all())
+
+    def get_total_stock(self, product):
+        return self._total_stock(product)
+
     def get_combo_items(self, product):
         """Elements du combo du meme nom (site web d'un point de vente) ; liste vide pour un produit ordinaire."""
         store = self.context.get("store")
@@ -81,17 +88,19 @@ class ProductSerializer(serializers.ModelSerializer):
 
     def get_in_stock(self, product):
         q = self._store_quantity(product)
-        return product.in_stock if q is None else q > 0
+        return self._total_stock(product) > 0 if q is None else q > 0
 
     def _price_label(self, product):
-        from apps.stores.services import price_for, special_prices_map
+        from apps.stores.services import load_promotions, price_for, special_prices_map
 
         store = self.context.get("store")
         cache = self.context.setdefault("_specials", {})
         key = store.id if store else 0
         if key not in cache:
             cache[key] = special_prices_map(store)
-        return price_for(product, store, cache[key])
+        if "_promos" not in self.context:
+            self.context["_promos"] = load_promotions()
+        return price_for(product, store, cache[key], self.context["_promos"])
 
     def get_effective_price(self, product):
         return self._price_label(product)[0]
