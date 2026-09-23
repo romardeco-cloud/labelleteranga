@@ -8,6 +8,7 @@ import io
 from xml.sax.saxutils import escape
 from collections import defaultdict
 from datetime import date as date_cls
+from datetime import timedelta
 from decimal import Decimal
 from pathlib import Path
 
@@ -133,8 +134,8 @@ def letterhead(store=None):
     name_style = ParagraphStyle("LetterheadName", parent=BODY, fontName="Helvetica-Bold", fontSize=16, leading=19, textColor=BRAND_DARK, spaceAfter=2)
     text = [Paragraph(escape(name), name_style), Paragraph("<br/>".join(lines), BODY)]
     logo_path = Path(settings.BASE_DIR) / "assets" / "logo.jpg"
-    cells = [[Image(str(logo_path), 22 * mm, 22 * mm) if logo_path.exists() else "", text]]
-    t = Table(cells, colWidths=[27 * mm, 145 * mm])
+    cells = [[Image(str(logo_path), 30 * mm, 30 * mm) if logo_path.exists() else "", text]]
+    t = Table(cells, colWidths=[35 * mm, 137 * mm])
     t.setStyle(TableStyle([("VALIGN", (0, 0), (-1, -1), "MIDDLE"), ("LINEBELOW", (0, 0), (-1, 0), 1.2, BRAND), ("BOTTOMPADDING", (0, 0), (-1, -1), 6)]))
     return t
 
@@ -521,10 +522,14 @@ def sales_report_pdf(start, end, store=None):
             by_day[r["d"]][1] += float(r["v"] or 0)
         for r in cur.inv_pay.values("date").annotate(v=Sum("amount")):
             by_day[r["date"]][1] += float(r["v"] or 0)
-        if by_day:
-            rows = [["Date", "Ventes", "Chiffre d'affaires"]] + [[dfr(d), n, fmt(v)] for d, (n, v) in sorted(by_day.items())]
-            rows.append(["Total", sum(n for n, _ in by_day.values()), fmt(sum(v for _, v in by_day.values()))])
-            story += [Paragraph("Detail par jour", H2), _table(rows, [60 * mm, 40 * mm, 72 * mm], align_right_cols=(1, 2), bold_last=True)]
+        all_days = []  # chaque jour de la periode, meme sans vente (0 FCFA) : le rapport ne saute aucune date
+        d = start
+        while d <= end:
+            all_days.append(d)
+            d += timedelta(days=1)
+        rows = [["Date", "Ventes", "Chiffre d'affaires"]] + [[dfr(d), by_day[d][0], fmt(by_day[d][1])] for d in all_days]
+        rows.append(["Total", sum(n for n, _ in by_day.values()), fmt(sum(v for _, v in by_day.values()))])
+        story += [Paragraph("Detail par jour", H2), _table(rows, [60 * mm, 40 * mm, 72 * mm], align_right_cols=(1, 2), bold_last=True)]
 
     # -- TOTAUX MENSUELS (fin de document) : de janvier de l'annee de debut jusqu'au mois de fin
     rows = [["Mois", "Ventes", "Ventes (FCFA)", "Factures encaissees", "Depenses", "Solde net"]]

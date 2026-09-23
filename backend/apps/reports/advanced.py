@@ -69,9 +69,16 @@ class OverviewReportView(APIView):
         agg = orders.aggregate(revenue=Sum("total_amount"), n=Count("id"))
         revenue, n = _f(agg["revenue"]), agg["n"] or 0
 
-        by_day = (
+        by_day_rows = (
             orders.annotate(day=TruncDate("paid_at")).values("day").annotate(revenue=Sum("total_amount"), n=Count("id")).order_by("day")
         )
+        by_day_map = {r["day"]: r for r in by_day_rows}
+        by_day = []  # tous les jours de la periode, meme sans vente (0 FCFA), pour un graphique sans trous
+        d = start
+        while d <= end:
+            r = by_day_map.get(d)
+            by_day.append({"day": d, "revenue": r["revenue"] if r else 0, "n": r["n"] if r else 0})
+            d += timedelta(days=1)
         by_store = [
             {**r, "label": r["label"] or ONLINE_LABEL}
             for r in [
