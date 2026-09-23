@@ -977,9 +977,17 @@ export default function CaissePage() {
                         </tr>
                       </thead>
                       <tbody>
+                        {Number(closingState?.opening_cash ?? 0) > 0 && (
+                          <tr className="border-t text-gray-400">
+                            <td className="py-2">Fond de caisse (matin)</td>
+                            <td className="py-2">{xof(Number(closingState?.opening_cash ?? 0))}</td>
+                            <td className="py-2">—</td>
+                            <td className="py-2 text-right">—</td>
+                          </tr>
+                        )}
                         {(
                           [
-                            ["cash", "Especes"],
+                            ["cash", "Especes (ventes + fond de caisse)"],
                             ["wave", "Wave"],
                             ["orange_money", "Orange Money"],
                             ["card", "Carte (terminal)"],
@@ -987,19 +995,10 @@ export default function CaissePage() {
                         ).map(([key, label]) => {
                           const expected = Number(closingState?.expected?.[key] ?? 0);
                           const gap = Number(counted[key] || 0) - expected;
-                          const openingCash = Number(closingState?.opening_cash ?? 0);
                           return (
                             <tr key={key} className="border-t">
                               <td className="py-2">{label}</td>
-                              <td className="py-2">
-                                {xof(expected)}
-                                {key === "cash" && openingCash > 0 && (
-                                  <div className="text-xs text-gray-500 mt-0.5 leading-tight">
-                                    dont {xof(openingCash)} fond de caisse
-                                    <br />+ {xof(expected - openingCash)} de ventes
-                                  </div>
-                                )}
-                              </td>
+                              <td className="py-2">{xof(expected)}</td>
                               <td className="py-2">
                                 <input
                                   type="number"
