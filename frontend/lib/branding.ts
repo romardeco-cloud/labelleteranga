@@ -11,6 +11,9 @@ const STORE_IMAGES: [string, string][] = [
   ["fast", "/stores/resto-fastfood.jpg"],
   ["forage", "/stores/forage.jpg"],
   ["supermarche", "/stores/supermarche.jpg"],
+  ["quincaillerie", "/stores/quincaillerie.jpg"],
+  ["depot", "/stores/depot.jpg"],
+  ["ferme", "/stores/ferme.jpg"],
 ];
 
 /** Image vitrine d'un point de vente (logo principal si aucune image dediee). */
