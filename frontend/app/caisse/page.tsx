@@ -11,8 +11,11 @@ import { categoryRank, effectiveCategories, loadMenuCategories, saveMenuCategori
 import {
   API_URL,
   CashierClosingState,
+  CashierOpeningState,
   fetchCashierClosing,
+  fetchCashierOpening,
   submitCashierClosing,
+  submitCashierOpening,
   DrawerOpening,
   POSCustomerOrder,
   POSProduct,
@@ -117,6 +120,12 @@ export default function CaissePage() {
   const [closingNotes, setClosingNotes] = useState("");
   const [closingError, setClosingError] = useState("");
   const [closingBusy, setClosingBusy] = useState(false);
+  const [openingState, setOpeningState] = useState<CashierOpeningState | null>(null);
+  const [openingChecked, setOpeningChecked] = useState(false);
+  const [openingAmount, setOpeningAmount] = useState("");
+  const [openingNotes, setOpeningNotes] = useState("");
+  const [openingError, setOpeningError] = useState("");
+  const [openingBusy, setOpeningBusy] = useState(false);
 
   // reveille le serveur des l'ouverture de la page (pendant que le caissier saisit son code) : premiere vente sans attente
   useEffect(() => {
@@ -150,17 +159,42 @@ export default function CaissePage() {
     } catch {}
   }, []);
 
+  const loadOpening = useCallback(async () => {
+    try {
+      setOpeningState(await fetchCashierOpening());
+    } catch {
+    } finally {
+      setOpeningChecked(true);
+    }
+  }, []);
+
   useEffect(() => {
     if (!session) return;
     loadProducts();
     loadClosing();
+    loadOpening();
     try {
       setHeld(JSON.parse(localStorage.getItem(heldKey(session.username)) ?? "[]"));
     } catch {
       setHeld([]);
     }
     heldLoaded.current = true;
-  }, [session, loadProducts, loadClosing]);
+  }, [session, loadProducts, loadClosing, loadOpening]);
+
+  async function submitOpening(e: React.FormEvent) {
+    e.preventDefault();
+    setOpeningBusy(true);
+    setOpeningError("");
+    try {
+      await submitCashierOpening({ opening_cash: Number(openingAmount || 0), notes: openingNotes });
+      await loadOpening();
+    } catch (err: any) {
+      const d = err?.response?.data;
+      setOpeningError(d?.opening_cash ?? d?.detail ?? "Impossible d'enregistrer l'ouverture.");
+    } finally {
+      setOpeningBusy(false);
+    }
+  }
 
   // Alerte commandes en ligne : verifiee toutes les 10 s ; clignote en rouge (avec un bip) tant qu'une commande n'est pas finalisee
   // son de notification "message recu" (deux notes douces, jouees deux fois, sans rappel) ; le contexte audio est cree une fois et reveille au premier toucher
@@ -331,6 +365,10 @@ export default function CaissePage() {
     setHeld([]);
     setPanel(null);
     setClosingState(null);
+    setOpeningState(null);
+    setOpeningChecked(false);
+    setOpeningAmount("");
+    setOpeningNotes("");
     setClosingMode(false);
   }
 
@@ -669,6 +707,53 @@ export default function CaissePage() {
     );
   }
 
+  /* ---------------- Ouverture de caisse (fond de caisse) ---------------- */
+  if (!openingChecked) return <p className="p-8">Chargement...</p>;
+  if (openingState && !openingState.opened) {
+    return (
+      <div className="admin-shell min-h-screen flex items-center justify-center px-4">
+        <div className="w-full max-w-sm bg-[#1c1514] border rounded-2xl p-6">
+          <Image src="/logo.jpg" alt="La Belle Teranga" width={80} height={80} className="rounded-full mx-auto mb-4 ring-2 ring-brand-accent" />
+          <h1 className="text-2xl font-bold mb-1 text-center">Ouverture de caisse</h1>
+          <p className="text-sm text-gray-500 text-center mb-6">
+            Avant de commencer la journee, comptez et saisissez le fond de caisse (les especes laissees dans le tiroir pour rendre la monnaie).
+          </p>
+          <form onSubmit={submitOpening} className="space-y-3">
+            <label className="text-sm block">
+              Fond de caisse (especes)
+              <input
+                required
+                autoFocus
+                type="number"
+                min={0}
+                placeholder="0"
+                value={openingAmount}
+                onChange={(e) => setOpeningAmount(e.target.value)}
+                className="w-full border rounded-lg px-3 py-2.5 mt-1"
+              />
+            </label>
+            <label className="text-sm block">
+              Remarque (facultatif)
+              <input
+                type="text"
+                value={openingNotes}
+                onChange={(e) => setOpeningNotes(e.target.value)}
+                className="w-full border rounded-lg px-3 py-2.5 mt-1"
+              />
+            </label>
+            {openingError && <p className="text-red-500 text-sm">{openingError}</p>}
+            <button disabled={openingBusy} className="w-full bg-brand text-white py-2.5 rounded-lg font-medium hover:opacity-90 disabled:opacity-50">
+              {openingBusy ? "Enregistrement..." : "Commencer la journee"}
+            </button>
+            <button type="button" onClick={logout} className="w-full text-sm text-gray-500 hover:text-gray-300 py-1">
+              Deconnexion
+            </button>
+          </form>
+        </div>
+      </div>
+    );
+  }
+
   const closed = !!closingState?.closed;
   const showCatalog = !closingMode && !closed && mode !== "orders";
 
@@ -871,6 +956,7 @@ export default function CaissePage() {
                   <p className="text-sm text-gray-500 mb-2">
                     {closingState?.sales_count ?? 0} vente(s) aujourd&apos;hui. Comptez ce que vous avez encaisse pour chaque moyen de paiement :
                     l&apos;ecart avec le montant attendu s&apos;affiche tout de suite.
+                    {closingState?.opening_cash ? ` Le fond de caisse du matin (${xof(closingState.opening_cash)}) est deja inclus dans l'attendu en especes.` : ""}
                   </p>
                   {closingState?.carried_over && (
                     <p className="text-sm text-amber-400 bg-amber-500/10 border border-amber-500/30 rounded-lg px-3 py-2 mb-4">

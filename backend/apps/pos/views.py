@@ -14,7 +14,15 @@ from django.utils import timezone
 from apps.reports.models import DailyClosing
 from apps.reports.serializers import DailyClosingSerializer
 
-from .services import auto_close_overdue_cashiers, cashier_expected_with_carryover, cashier_sales_totals, close_cashier_day, create_pos_sale
+from .services import (
+    auto_close_overdue_cashiers,
+    cashier_expected_with_carryover,
+    cashier_sales_totals,
+    close_cashier_day,
+    create_pos_sale,
+    open_cashier_day,
+    opening_cash_for,
+)
 
 
 class POSProductListView(APIView):
@@ -191,6 +199,7 @@ class POSClosingView(APIView):
                 },
                 "carried_over": carried if prior_dates else None,
                 "carried_over_since": prior_dates[0] if prior_dates else None,
+                "opening_cash": opening_cash_for(profile, timezone.localdate()),
                 "closing": DailyClosingSerializer(closing).data if closing else None,
             }
         )
@@ -209,6 +218,35 @@ class POSClosingView(APIView):
             data.get("notes", ""),
         )
         return Response(DailyClosingSerializer(closing).data, status=201 if created else 200)
+
+
+class POSOpeningView(APIView):
+    """
+    Ouverture de caisse du caissier connecte, avant de commencer les ventes du jour.
+
+    GET  /api/pos/opening/ -> {date, point_of_sale, opened, opening_cash}. Tant que ce n'est pas fait, les
+                              ventes sont refusees (voir apps.pos.services.create_pos_sale).
+    POST /api/pos/opening/  -> body {opening_cash, notes?} : saisit le fond de caisse du jour (especes,
+                              compte a la main). Peut etre rappele pour corriger le montant du jour.
+    """
+
+    permission_classes = [IsCashier]
+
+    def get(self, request):
+        profile = request.user.cashier_profile
+        return Response(
+            {
+                "date": timezone.localdate(),
+                "point_of_sale": profile.point_of_sale.name,
+                "opened": opening_cash_for(profile, timezone.localdate()) is not None,
+                "opening_cash": opening_cash_for(profile, timezone.localdate()),
+            }
+        )
+
+    def post(self, request):
+        profile = request.user.cashier_profile
+        opening, created = open_cashier_day(profile, request.data.get("opening_cash"), request.data.get("notes", ""))
+        return Response({"opening_cash": opening.opening_cash, "created": created}, status=201 if created else 200)
 
 
 def _order_state_label(o):

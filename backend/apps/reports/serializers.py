@@ -1,6 +1,6 @@
 from rest_framework import serializers
 
-from .models import DailyClosing
+from .models import CashierOpening, DailyClosing
 
 
 class DailyClosingSerializer(serializers.ModelSerializer):
@@ -59,3 +59,14 @@ class DailyClosingSerializer(serializers.ModelSerializer):
             "initial_discrepancy_total",
             "revision_count",
         ]
+
+
+class CashierOpeningSerializer(serializers.ModelSerializer):
+    point_of_sale_name = serializers.CharField(source="point_of_sale.name", read_only=True, default=None)
+    cashier_username = serializers.CharField(source="cashier.username", read_only=True, default=None)
+    opened_by_username = serializers.CharField(source="opened_by.username", read_only=True, default=None)
+
+    class Meta:
+        model = CashierOpening
+        fields = ["id", "date", "point_of_sale", "point_of_sale_name", "cashier_username", "opening_cash", "opened_by_username", "notes", "created_at", "updated_at"]
+        read_only_fields = ["id", "created_at", "updated_at"]

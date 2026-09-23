@@ -1,7 +1,7 @@
 "use client";
 
 import { useCallback, useEffect, useState } from "react";
-import { DailyClosing, api } from "@/lib/api";
+import { DailyClosing, api, openCashierAdmin } from "@/lib/api";
 import { apiErrorMessage, formatXof } from "@/lib/documents";
 
 type Till = {
@@ -11,6 +11,7 @@ type Till = {
   point_of_sale_name: string;
   sales_count: number;
   expected_total: number;
+  opening_cash: number | null;
   closed: boolean;
   discrepancy_total: string | null;
   closing: DailyClosing | null;
@@ -44,6 +45,11 @@ export default function CashierTills({ date, storeId, onChanged }: { date: strin
   const [error, setError] = useState("");
   const [checking, setChecking] = useState(false);
   const [checkMsg, setCheckMsg] = useState("");
+  const [openingFor, setOpeningFor] = useState<Till | null>(null);
+  const [openingAmount, setOpeningAmount] = useState("");
+  const [openingNotes, setOpeningNotes] = useState("");
+  const [openingBusy, setOpeningBusy] = useState(false);
+  const [openingError, setOpeningError] = useState("");
 
   const load = useCallback(() => {
     api
@@ -106,6 +112,30 @@ export default function CashierTills({ date, storeId, onChanged }: { date: strin
 
   const gap = (m: string) => Number(declared[m] || 0) - Number(preview?.expected[m as keyof Preview["expected"]] ?? 0);
 
+  function openOpeningForm(t: Till) {
+    setOpeningFor(t);
+    setOpeningAmount(t.opening_cash != null ? String(Number(t.opening_cash)) : "");
+    setOpeningNotes("");
+    setOpeningError("");
+  }
+
+  async function submitOpening(e: React.FormEvent) {
+    e.preventDefault();
+    if (!openingFor) return;
+    setOpeningBusy(true);
+    setOpeningError("");
+    try {
+      await openCashierAdmin({ date, cashier: openingFor.id, opening_cash: Number(openingAmount || 0), notes: openingNotes });
+      setOpeningFor(null);
+      load();
+      onChanged();
+    } catch (err) {
+      setOpeningError(apiErrorMessage(err, "Enregistrement impossible."));
+    } finally {
+      setOpeningBusy(false);
+    }
+  }
+
   async function checkNow() {
     setChecking(true);
     setCheckMsg("");
@@ -145,6 +175,7 @@ export default function CashierTills({ date, storeId, onChanged }: { date: strin
               <th className="pb-2">Caissier</th>
               <th className="pb-2">Point de vente</th>
               <th className="pb-2 text-right">Ventes</th>
+              <th className="pb-2 text-right">Fond de caisse</th>
               <th className="pb-2 text-right">Attendu</th>
               <th className="pb-2">Etat</th>
               <th className="pb-2"></th>
@@ -156,6 +187,13 @@ export default function CashierTills({ date, storeId, onChanged }: { date: strin
                 <td className="py-2 font-medium">{t.username}</td>
                 <td className="py-2">{t.point_of_sale_name}</td>
                 <td className="py-2 text-right">{t.sales_count}</td>
+                <td className="py-2 text-right">
+                  {t.opening_cash != null ? (
+                    formatXof(t.opening_cash)
+                  ) : (
+                    <span className="text-amber-600">Non ouverte</span>
+                  )}
+                </td>
                 <td className="py-2 text-right">{formatXof(t.expected_total)}</td>
                 <td className="py-2">
                   {t.closed ? (
@@ -168,7 +206,10 @@ export default function CashierTills({ date, storeId, onChanged }: { date: strin
                   )}
                   {t.closing?.auto_closed && <span className="ml-2 text-xs bg-gray-200 text-gray-700 rounded px-1.5 py-0.5">Auto</span>}
                 </td>
-                <td className="py-2 text-right">
+                <td className="py-2 text-right space-x-2 whitespace-nowrap">
+                  <button onClick={() => openOpeningForm(t)} className="text-xs border rounded px-3 py-1.5">
+                    {t.opening_cash != null ? "Corriger fond" : "Ouvrir la caisse"}
+                  </button>
                   <button onClick={() => openForm(t)} className="text-xs bg-brand text-white rounded px-3 py-1.5">
                     {t.closed ? "Corriger" : "Fermer la caisse"}
                   </button>
@@ -177,7 +218,7 @@ export default function CashierTills({ date, storeId, onChanged }: { date: strin
             ))}
             {tills.length === 0 && (
               <tr>
-                <td colSpan={6} className="py-6 text-center text-gray-500">
+                <td colSpan={7} className="py-6 text-center text-gray-500">
                   Aucun caissier pour ce point de vente.
                 </td>
               </tr>
@@ -254,6 +295,46 @@ export default function CashierTills({ date, storeId, onChanged }: { date: strin
             <p className="text-xs text-gray-500">
               La fermeture est enregistree au nom de l&apos;administrateur. Si la journee est celle d&apos;aujourd&apos;hui, le caissier ne peut plus vendre.
             </p>
+          </form>
+        </div>
+      )}
+
+      {openingFor && (
+        <div className="fixed inset-0 z-40 bg-black/60 flex items-center justify-center p-4" onClick={() => setOpeningFor(null)}>
+          <form onSubmit={submitOpening} onClick={(e) => e.stopPropagation()} className="bg-white rounded-2xl p-5 w-full max-w-sm space-y-4">
+            <div>
+              <h3 className="font-bold text-lg">
+                {openingFor.opening_cash != null ? "Corriger le fond de caisse" : "Ouvrir la caisse"} de {openingFor.username}
+              </h3>
+              <p className="text-sm text-gray-500">
+                {openingFor.point_of_sale_name} · journee du {date}
+              </p>
+            </div>
+            <label className="block text-sm">
+              Fond de caisse (especes)
+              <input
+                required
+                autoFocus
+                type="number"
+                min={0}
+                value={openingAmount}
+                onChange={(e) => setOpeningAmount(e.target.value)}
+                className="w-full border rounded px-3 py-2 mt-1"
+              />
+            </label>
+            <label className="block text-sm">
+              Remarque (facultatif)
+              <textarea value={openingNotes} onChange={(e) => setOpeningNotes(e.target.value)} rows={2} className="w-full border rounded px-3 py-2 mt-1" />
+            </label>
+            {openingError && <p className="text-sm text-red-600">{openingError}</p>}
+            <div className="flex gap-2">
+              <button disabled={openingBusy} className="flex-1 bg-brand text-white rounded-lg py-2.5 font-medium disabled:opacity-50">
+                {openingBusy ? "Enregistrement..." : "Enregistrer"}
+              </button>
+              <button type="button" onClick={() => setOpeningFor(null)} className="border rounded-lg px-4">
+                Annuler
+              </button>
+            </div>
           </form>
         </div>
       )}

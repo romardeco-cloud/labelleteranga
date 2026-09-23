@@ -598,11 +598,34 @@ export type CashierClosingState = {
   expected: { cash: number; wave: number; orange_money: number; card: number };
   carried_over: { cash: number; wave: number; orange_money: number; card: number } | null;
   carried_over_since: string | null;
+  opening_cash: number | null;
   closing: DailyClosing | null;
 };
 
 export async function fetchCashierClosing() {
   const { data } = await api.get<CashierClosingState>("/pos/closing/");
+  return data;
+}
+
+export type CashierOpeningState = {
+  date: string;
+  point_of_sale: string;
+  opened: boolean;
+  opening_cash: number | null;
+};
+
+export async function fetchCashierOpening() {
+  const { data } = await api.get<CashierOpeningState>("/pos/opening/");
+  return data;
+}
+
+export async function submitCashierOpening(input: { opening_cash: number; notes?: string }) {
+  const { data } = await api.post<{ opening_cash: number; created: boolean }>("/pos/opening/", input);
+  return data;
+}
+
+export async function openCashierAdmin(input: { date: string; cashier: number; opening_cash: number; notes?: string }) {
+  const { data } = await api.post("/reports/closings/open-cashier/", input);
   return data;
 }
 

@@ -308,6 +308,8 @@ class DailyClosingViewSet(viewsets.ModelViewSet):
         if store:
             profiles = profiles.filter(point_of_sale_id=store)
         rows = []
+        from apps.pos.services import opening_cash_for
+
         for pr in profiles.order_by("point_of_sale__name", "user__username"):
             totals, n = cashier_sales_totals(pr, for_date)
             closing = DailyClosing.objects.filter(date=for_date, point_of_sale=pr.point_of_sale, cashier=pr.user).first()
@@ -319,12 +321,26 @@ class DailyClosingViewSet(viewsets.ModelViewSet):
                     "point_of_sale_name": pr.point_of_sale.name,
                     "sales_count": n,
                     "expected_total": sum(totals.values()),
+                    "opening_cash": opening_cash_for(pr, for_date),
                     "closed": closing is not None,
                     "discrepancy_total": closing.discrepancy_total if closing else None,
                     "closing": DailyClosingSerializer(closing).data if closing else None,
                 }
             )
         return Response(rows)
+
+    @action(detail=False, methods=["post"], url_path="open-cashier")
+    def open_cashier(self, request):
+        """POST {date, cashier, opening_cash, notes} : ouvre (ou corrige) le fond de caisse d'un caissier au nom de l'administrateur."""
+        from apps.pos.services import open_cashier_day
+
+        d = request.data
+        for_date = self._date_param(d.get("date"))
+        profile = self._profile(d.get("cashier"))
+        opening, created = open_cashier_day(profile, d.get("opening_cash"), d.get("notes", ""), for_date=for_date, opened_by=request.user)
+        from .serializers import CashierOpeningSerializer
+
+        return Response(CashierOpeningSerializer(opening).data, status=status.HTTP_201_CREATED if created else status.HTTP_200_OK)
 
     @action(detail=False, methods=["post"], url_path="auto-close")
     def force_auto_close(self, request):

@@ -8,7 +8,7 @@ from rest_framework.exceptions import ValidationError
 from apps.catalog.models import Product
 from apps.orders.models import Order, OrderItem
 from apps.orders.services import parse_tip
-from apps.reports.models import DailyClosing
+from apps.reports.models import CashierOpening, DailyClosing
 from apps.stores.models import Stock, StockMovement
 from apps.stores.services import change_stock
 from django.db.models.functions import TruncDate
@@ -37,6 +37,8 @@ def create_pos_sale(cashier_profile, items, payment_method, customer_name="", am
         date=timezone.localdate(), point_of_sale=store, cashier=cashier_profile.user
     ).exists():
         raise ValidationError({"detail": "Votre caisse est fermee pour aujourd'hui."})
+    if not CashierOpening.objects.filter(date=timezone.localdate(), point_of_sale=store, cashier=cashier_profile.user).exists():
+        raise ValidationError({"detail": "Ouvrez votre caisse (fond de caisse) avant de commencer a vendre."})
 
     order = Order.objects.create(
         channel=Order.Channel.POS,
@@ -154,8 +156,43 @@ def cashier_expected_with_carryover(cashier_profile, for_date):
     return combined, own, carried, prior_dates, sales_count
 
 
+def opening_cash_for(cashier_profile, for_date):
+    """Fond de caisse (especes) ouvert ce jour-la par ce caissier, ou None si sa caisse n'a pas ete ouverte."""
+    opening = CashierOpening.objects.filter(date=for_date, point_of_sale=cashier_profile.point_of_sale, cashier=cashier_profile.user).first()
+    return opening.opening_cash if opening else None
+
+
+@transaction.atomic
+def open_cashier_day(cashier_profile, opening_cash, notes="", for_date=None, opened_by=None):
+    """
+    Ouverture de caisse : fond de caisse (especes) saisi manuellement avant de commencer les ventes du jour.
+    Une seule ouverture par jour et par caissier (voir CashierOpening.Meta.unique_together) ; l'administrateur
+    peut la corriger via cette meme fonction (create_or_update). Retourne (ouverture, creee).
+    """
+    today = for_date or timezone.localdate()
+    try:
+        amount = Decimal(str(opening_cash or 0))
+    except Exception:
+        raise ValidationError({"opening_cash": "Montant invalide."})
+    if amount < 0:
+        raise ValidationError({"opening_cash": "Le fond de caisse ne peut pas etre negatif."})
+
+    opening, created = CashierOpening.objects.get_or_create(
+        date=today,
+        point_of_sale=cashier_profile.point_of_sale,
+        cashier=cashier_profile.user,
+        defaults={"opening_cash": amount, "notes": (notes or "")[:200], "opened_by": opened_by or cashier_profile.user},
+    )
+    if not created:
+        opening.opening_cash = amount
+        opening.notes = (notes or "")[:200]
+        opening.opened_by = opened_by or opening.opened_by
+        opening.save(update_fields=["opening_cash", "notes", "opened_by", "updated_at"])
+    return opening, created
+
+
 def cashier_sales_totals(cashier_profile, for_date):
-    """Totaux attendus par moyen de paiement pour les ventes de CE caissier, ce jour-la."""
+    """Totaux attendus par moyen de paiement pour CE caissier, ce jour-la : ventes, + le fond de caisse en especes."""
     from django.db.models import Count, Sum
 
     totals = {key: Decimal("0") for key, _ in Order.PaymentMethod.choices}
@@ -168,6 +205,9 @@ def cashier_sales_totals(cashier_profile, for_date):
     )
     for row in qs.values("payment_method").annotate(total=Sum("total_amount")):
         totals[row["payment_method"]] = row["total"] or Decimal("0")
+    opening_cash = opening_cash_for(cashier_profile, for_date)
+    if opening_cash:
+        totals["cash"] += opening_cash  # le tiroir doit contenir le fond de caisse du matin + les ventes en especes
     return totals, qs.aggregate(n=Count("id"))["n"]
 
 
