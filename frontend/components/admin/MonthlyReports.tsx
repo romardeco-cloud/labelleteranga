@@ -10,6 +10,8 @@ const pad = (n: number) => String(n).padStart(2, "0");
 export default function MonthlyReports({ storeId, months = 12, compact = false }: { storeId: number | null; months?: number; compact?: boolean }) {
   const [busy, setBusy] = useState<string | null>(null);
   const now = new Date();
+  const todayIso = `${now.getFullYear()}-${pad(now.getMonth() + 1)}-${pad(now.getDate())}`;
+  const [custom, setCustom] = useState({ start: `${now.getFullYear()}-${pad(now.getMonth() + 1)}-01`, end: todayIso });
   const rows = Array.from({ length: months }, (_, i) => {
     const d = new Date(now.getFullYear(), now.getMonth() - i, 1);
     const y = d.getFullYear();
@@ -78,6 +80,45 @@ export default function MonthlyReports({ storeId, months = 12, compact = false }
           ))}
         </div>
       )}
+
+      <div className="mt-4 pt-3 border-t flex flex-wrap items-center gap-2">
+        <span className="text-sm font-medium">Periode personnalisee :</span>
+        <span className="text-xs text-gray-500">Du</span>
+        <input
+          type="date"
+          value={custom.start}
+          max={custom.end}
+          onChange={(e) => setCustom({ ...custom, start: e.target.value })}
+          className="border rounded px-2 py-1 text-sm"
+        />
+        <span className="text-xs text-gray-500">au</span>
+        <input
+          type="date"
+          value={custom.end}
+          min={custom.start}
+          max={todayIso}
+          onChange={(e) => setCustom({ ...custom, end: e.target.value })}
+          className="border rounded px-2 py-1 text-sm"
+        />
+        <button
+          disabled={busy === "custom-pdf"}
+          onClick={() =>
+            run("custom-pdf", () => openPdf("/reports/pdf/", { start: custom.start, end: custom.end, ...(storeId ? { point_of_sale: storeId } : {}) }))
+          }
+          className="text-xs bg-brand text-white rounded px-3 py-1.5 disabled:opacity-50"
+        >
+          {busy === "custom-pdf" ? "..." : "PDF"}
+        </button>
+        {!compact && (
+          <button
+            disabled={busy === "custom-xlsx"}
+            onClick={() => run("custom-xlsx", () => downloadExport(custom.start, custom.end, storeId))}
+            className="text-xs border rounded px-3 py-1.5 disabled:opacity-50"
+          >
+            {busy === "custom-xlsx" ? "..." : "Excel"}
+          </button>
+        )}
+      </div>
     </section>
   );
 }
