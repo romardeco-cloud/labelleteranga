@@ -34,25 +34,26 @@ function formatXof(value: string | number) {
   return new Intl.NumberFormat("fr-SN", { maximumFractionDigits: 0 }).format(Number(value)) + " FCFA";
 }
 
+// Categories dont la photo actuelle est deja composee (collage combo, ancien visuel pizza avec son propre
+// bandeau/prix incrustes) : on ne re-habille pas par-dessus (ca doublait les bandeaux et melangeait deux
+// rouges differents), on garde la photo telle quelle et on ajoute juste le prix, toujours a jour, en medaillon.
+const PRE_COMPOSED = new Set(["Combos", "PIZZA", "Pizzas"]);
+
 export default function ProductShowcase({ product, site }: { product: Product; site: Site }) {
   const features = FEATURES[product.category?.name ?? ""] ?? DEFAULT_FEATURES;
   const contact = [site.address, site.phone, site.email].filter(Boolean).join("   •   ");
-  const isCombo = product.category?.name === "Combos";
 
-  // Combos : le visuel (collage + « Pour X personnes » + titre) est deja compose dans la photo elle-meme -
-  // on la garde telle quelle (pas de recadrage, pas de second bandeau par-dessus) et on ajoute juste le prix,
-  // toujours a jour, en medaillon.
-  if (isCombo) {
+  if (PRE_COMPOSED.has(product.category?.name ?? "")) {
     return (
-      <div className="rounded-2xl overflow-hidden shadow-lg bg-[#4a0a0e]">
+      <div className="rounded-2xl overflow-hidden shadow-lg bg-[#6e0d0d]">
         <div className="relative">
           {product.image && (
             // eslint-disable-next-line @next/next/no-img-element
             <img src={product.image} alt={product.name} className="block w-full h-auto" />
           )}
           <div className="absolute -bottom-9 right-5 sm:right-10 w-20 h-20 sm:w-24 sm:h-24 rounded-full bg-[#deb25a] ring-4 ring-[#f5e6c8] shadow-xl flex flex-col items-center justify-center">
-            <span className="font-serif font-bold text-[#4a0a0e] text-base sm:text-lg leading-none">{formatXof(product.price).replace(" FCFA", "")}</span>
-            <span className="text-[#4a0a0e] text-[9px] sm:text-[10px] font-bold mt-1">FCFA</span>
+            <span className="font-serif font-bold text-[#6e0d0d] text-base sm:text-lg leading-none">{formatXof(product.price).replace(" FCFA", "")}</span>
+            <span className="text-[#6e0d0d] text-[9px] sm:text-[10px] font-bold mt-1">FCFA</span>
           </div>
         </div>
 
@@ -60,30 +61,32 @@ export default function ProductShowcase({ product, site }: { product: Product; s
           <p className="text-[#deb25a] text-[11px] sm:text-xs tracking-[0.3em] font-bold uppercase mb-2">La Belle Teranga</p>
           <h1 className="font-serif text-2xl sm:text-3xl font-bold text-[#f5e6c8]">{product.name}</h1>
           <div className="w-14 h-0.5 bg-[#deb25a] mx-auto my-3" />
-          {product.combo_items && product.combo_items.length > 0 && (
+          {product.combo_items && product.combo_items.length > 0 ? (
             <ul className="text-[#f5e6c8]/90 text-sm sm:text-base space-y-1 text-left inline-block">
               {product.combo_items.map((it, i) => (
                 <li key={i}>✓ {it}</li>
               ))}
             </ul>
+          ) : (
+            product.description && <p className="text-[#f5e6c8]/90 text-sm sm:text-base">{product.description}</p>
           )}
         </div>
 
-        {contact && <div className="bg-[#2e0609] text-[#f5e6c8] text-center text-[11px] sm:text-sm py-3 px-4">{contact}</div>}
+        {contact && <div className="bg-[#3a0707] text-[#f5e6c8] text-center text-[11px] sm:text-sm py-3 px-4">{contact}</div>}
       </div>
     );
   }
 
   return (
-    <div className="rounded-2xl overflow-hidden shadow-lg bg-[#4a0a0e]">
+    <div className="rounded-2xl overflow-hidden shadow-lg bg-[#6e0d0d]">
       <div className="relative aspect-[1080/560]">
         {product.image ? (
           // eslint-disable-next-line @next/next/no-img-element
           <img src={product.image} alt={product.name} className="absolute inset-0 w-full h-full object-cover" />
         ) : (
-          <div className="absolute inset-0 bg-gradient-to-br from-[#6a1418] to-[#4a0a0e]" />
+          <div className="absolute inset-0 bg-gradient-to-br from-[#8a1414] to-[#6e0d0d]" />
         )}
-        <div className="absolute inset-x-0 bottom-0 h-20 bg-gradient-to-b from-transparent to-[#4a0a0e]" />
+        <div className="absolute inset-x-0 bottom-0 h-20 bg-gradient-to-b from-transparent to-[#6e0d0d]" />
 
         {/* eslint-disable-next-line @next/next/no-img-element */}
         <img
@@ -91,13 +94,13 @@ export default function ProductShowcase({ product, site }: { product: Product; s
           alt="La Belle Teranga"
           className="absolute top-4 left-4 w-14 h-14 sm:w-20 sm:h-20 rounded-full shadow-lg ring-2 ring-white/40 object-cover"
         />
-        <span className="absolute top-4 right-4 bg-[#e9c46a] text-[#4a0a0e] font-bold text-[11px] sm:text-sm px-3.5 sm:px-4 py-1.5 sm:py-2 rounded-full shadow">
+        <span className="absolute top-4 right-4 bg-[#e9c46a] text-[#6e0d0d] font-bold text-[11px] sm:text-sm px-3.5 sm:px-4 py-1.5 sm:py-2 rounded-full shadow">
           FAIT MAISON
         </span>
 
         <div className="absolute -bottom-9 right-5 sm:right-10 w-20 h-20 sm:w-28 sm:h-28 rounded-full bg-[#deb25a] ring-4 ring-[#f5e6c8] shadow-xl flex flex-col items-center justify-center">
-          <span className="font-serif font-bold text-[#4a0a0e] text-base sm:text-xl leading-none">{formatXof(product.price).replace(" FCFA", "")}</span>
-          <span className="text-[#4a0a0e] text-[9px] sm:text-[10px] font-bold mt-1">FCFA</span>
+          <span className="font-serif font-bold text-[#6e0d0d] text-base sm:text-xl leading-none">{formatXof(product.price).replace(" FCFA", "")}</span>
+          <span className="text-[#6e0d0d] text-[9px] sm:text-[10px] font-bold mt-1">FCFA</span>
         </div>
       </div>
 
@@ -119,7 +122,7 @@ export default function ProductShowcase({ product, site }: { product: Product; s
         </div>
       </div>
 
-      {contact && <div className="bg-[#2e0609] text-[#f5e6c8] text-center text-[11px] sm:text-sm py-3 px-4">{contact}</div>}
+      {contact && <div className="bg-[#3a0707] text-[#f5e6c8] text-center text-[11px] sm:text-sm py-3 px-4">{contact}</div>}
     </div>
   );
 }
