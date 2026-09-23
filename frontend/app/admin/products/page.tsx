@@ -572,6 +572,26 @@ export default function AdminProductsPage() {
             Classer automatiquement ({products.filter((x) => !x.category).length} sans categorie)
           </button>
         )}
+        {storeId &&
+          (() => {
+            const toReclass = products.filter((x) => x.category && ["Produits laitiers", "Boucherie / Volaille"].includes(x.category.name));
+            return (
+              toReclass.length > 0 && (
+                <button
+                  onClick={() => {
+                    const ids = toReclass.map((x) => x.id);
+                    setSelected(new Set(ids));
+                    setTimeout(() => runBulkFor(ids, "auto_category", { only_empty: false }), 0);
+                  }}
+                  disabled={bulkBusy}
+                  className="border border-brand text-brand rounded-lg px-3 py-1.5 text-sm bg-white"
+                  title="Deplace les fromages vers Fromagerie et la charcuterie vers Charcuterie, d'apres le nom du produit (les autres produits de Produits laitiers / Boucherie-Volaille ne bougent pas)"
+                >
+                  Reclasser fromages / charcuterie ({toReclass.length})
+                </button>
+              )
+            );
+          })()}
         {selected.size > 0 && !storeId && (
           <span className="text-sm text-amber-500">
             {selected.size} selectionne(s) : choisissez d&apos;abord un point de vente (boutons ci-dessus) - les modifications ne s&apos;appliquent qu&apos;a lui.
