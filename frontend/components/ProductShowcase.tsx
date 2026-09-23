@@ -1,6 +1,5 @@
 "use client";
 
-import Image from "next/image";
 import { Product } from "@/lib/api";
 import { Site } from "@/lib/site";
 
@@ -50,12 +49,11 @@ export default function ProductShowcase({ product, site }: { product: Product; s
         )}
         <div className="absolute inset-x-0 bottom-0 h-20 bg-gradient-to-b from-transparent to-[#4a0a0e]" />
 
-        <Image
+        {/* eslint-disable-next-line @next/next/no-img-element */}
+        <img
           src="/logo.jpg"
           alt="La Belle Teranga"
-          width={80}
-          height={80}
-          className="absolute top-4 left-4 w-14 h-14 sm:w-20 sm:h-20 rounded-full shadow-lg ring-2 ring-white/40"
+          className="absolute top-4 left-4 w-14 h-14 sm:w-20 sm:h-20 rounded-full shadow-lg ring-2 ring-white/40 object-cover"
         />
         <span className="absolute top-4 right-4 bg-[#e9c46a] text-[#4a0a0e] font-bold text-[11px] sm:text-sm px-3.5 sm:px-4 py-1.5 sm:py-2 rounded-full shadow">
           FAIT MAISON
