@@ -348,31 +348,6 @@ class DailyClosingViewSet(viewsets.ModelViewSet):
         n = auto_close_overdue_cashiers()
         return Response({"closed": n})
 
-
-class AutoCloseCronView(APIView):
-    """
-    GET/POST /api/reports/auto-close-cron/?key=... : point d'entree sans authentification, protege par une cle secrete
-    (variable d'environnement AUTO_CLOSE_SECRET), a appeler une fois par jour vers 2h05 par un service de rappel gratuit
-    (cron-job.org, UptimeRobot...) pour que la fermeture automatique des caisses ait lieu meme si personne n'utilise
-    l'application a ce moment-la. Sans AUTO_CLOSE_SECRET configuree, l'appel est refuse.
-    """
-
-    permission_classes = [permissions.AllowAny]
-
-    def _run(self, request):
-        from django.conf import settings
-
-        if not settings.AUTO_CLOSE_SECRET or request.query_params.get("key") != settings.AUTO_CLOSE_SECRET:
-            return Response({"detail": "Cle invalide."}, status=status.HTTP_403_FORBIDDEN)
-        n = auto_close_overdue_cashiers()
-        return Response({"closed": n})
-
-    def get(self, request):
-        return self._run(request)
-
-    def post(self, request):
-        return self._run(request)
-
     @action(detail=False, methods=["get"], url_path="store-gaps")
     def store_gaps(self, request):
         """
@@ -448,7 +423,7 @@ class AutoCloseCronView(APIView):
 
         for_date = self._date_param(request.query_params.get("date"))
         profile = self._profile(request.query_params.get("cashier"))
-        from apps.pos.services import cashier_expected_with_carryover
+        from apps.pos.services import cashier_expected_with_carryover, opening_cash_for
 
         combined, own, carried, prior_dates, n = cashier_expected_with_carryover(profile, for_date)
         closing = DailyClosing.objects.filter(date=for_date, point_of_sale=profile.point_of_sale, cashier=profile.user).first()
@@ -466,6 +441,7 @@ class AutoCloseCronView(APIView):
                     "orange_money": combined["orange_money"],
                     "cash": combined["cash"],
                 },
+                "opening_cash": opening_cash_for(profile, for_date),
                 "carried_over": carried if prior_dates else None,
                 "carried_over_since": prior_dates[0] if prior_dates else None,
                 "closing": DailyClosingSerializer(closing).data if closing else None,
@@ -526,6 +502,31 @@ class AutoCloseCronView(APIView):
                 "closing": DailyClosingSerializer(existing).data if existing else None,
             }
         )
+
+
+class AutoCloseCronView(APIView):
+    """
+    GET/POST /api/reports/auto-close-cron/?key=... : point d'entree sans authentification, protege par une cle secrete
+    (variable d'environnement AUTO_CLOSE_SECRET), a appeler une fois par jour vers 2h05 par un service de rappel gratuit
+    (cron-job.org, UptimeRobot...) pour que la fermeture automatique des caisses ait lieu meme si personne n'utilise
+    l'application a ce moment-la. Sans AUTO_CLOSE_SECRET configuree, l'appel est refuse.
+    """
+
+    permission_classes = [permissions.AllowAny]
+
+    def _run(self, request):
+        from django.conf import settings
+
+        if not settings.AUTO_CLOSE_SECRET or request.query_params.get("key") != settings.AUTO_CLOSE_SECRET:
+            return Response({"detail": "Cle invalide."}, status=status.HTTP_403_FORBIDDEN)
+        n = auto_close_overdue_cashiers()
+        return Response({"closed": n})
+
+    def get(self, request):
+        return self._run(request)
+
+    def post(self, request):
+        return self._run(request)
 
 
 class SalesReportPdfView(APIView):

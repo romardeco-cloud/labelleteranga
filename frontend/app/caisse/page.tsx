@@ -117,6 +117,7 @@ export default function CaissePage() {
   const [closingState, setClosingState] = useState<CashierClosingState | null>(null);
   const [closingMode, setClosingMode] = useState(false);
   const [counted, setCounted] = useState({ cash: "", wave: "", orange_money: "", card: "" });
+  const [countedFloat, setCountedFloat] = useState(""); // fond de caisse compte separement des ventes, a la fermeture
   const [closingNotes, setClosingNotes] = useState("");
   const [closingError, setClosingError] = useState("");
   const [closingBusy, setClosingBusy] = useState(false);
@@ -318,16 +319,18 @@ export default function CaissePage() {
 
   function startClosing() {
     const c = closingState?.closing;
+    const openingCash = Number(closingState?.opening_cash ?? 0);
     setCounted(
       c
         ? {
-            cash: String(Number(c.declared_cash)),
+            cash: String(Number(c.declared_cash) - openingCash),
             wave: String(Number(c.declared_wave)),
             orange_money: String(Number(c.declared_orange_money)),
             card: String(Number(c.declared_card)),
           }
         : { cash: "", wave: "", orange_money: "", card: "" }
     );
+    setCountedFloat(c ? String(openingCash) : "");
     setClosingNotes(c?.notes ?? "");
     setClosingError("");
     setPanel(null);
@@ -340,7 +343,8 @@ export default function CaissePage() {
     setClosingError("");
     try {
       await submitCashierClosing({
-        declared_cash: Number(counted.cash || 0),
+        // le tiroir reunit les deux : ventes du jour comptees separement + fond de caisse recompte a la fermeture
+        declared_cash: Number(counted.cash || 0) + Number(countedFloat || 0),
         declared_wave: Number(counted.wave || 0),
         declared_orange_money: Number(counted.orange_money || 0),
         declared_card: Number(counted.card || 0),
@@ -977,55 +981,49 @@ export default function CaissePage() {
                         </tr>
                       </thead>
                       <tbody>
-                        {Number(closingState?.opening_cash ?? 0) > 0 && (
-                          <tr className="border-t text-gray-400">
-                            <td className="py-2">Fond de caisse (matin)</td>
-                            <td className="py-2">{xof(Number(closingState?.opening_cash ?? 0))}</td>
-                            <td className="py-2">—</td>
-                            <td className="py-2 text-right">—</td>
-                          </tr>
-                        )}
-                        {(
-                          [
-                            ["cash", "Especes (ventes + fond de caisse)"],
-                            ["wave", "Wave"],
-                            ["orange_money", "Orange Money"],
-                            ["card", "Carte (terminal)"],
-                          ] as const
-                        ).map(([key, label]) => {
-                          const expected = Number(closingState?.expected?.[key] ?? 0);
-                          const gap = Number(counted[key] || 0) - expected;
-                          return (
-                            <tr key={key} className="border-t">
-                              <td className="py-2">{label}</td>
-                              <td className="py-2">{xof(expected)}</td>
-                              <td className="py-2">
-                                <input
-                                  type="number"
-                                  min={0}
-                                  value={counted[key]}
-                                  onChange={(e) => setCounted({ ...counted, [key]: e.target.value })}
-                                  placeholder="0"
-                                  className="w-28 border rounded-lg px-2 py-1.5"
-                                />
-                              </td>
-                              <td
-                                className={`py-2 text-right font-medium ${
-                                  counted[key] === "" ? "text-gray-500" : gap === 0 ? "text-green-500" : "text-red-400"
-                                }`}
-                              >
-                                {counted[key] === "" ? "-" : `${gap > 0 ? "+" : ""}${xof(gap)}`}
-                              </td>
-                            </tr>
-                          );
-                        })}
                         {(() => {
-                          const exp = Object.values(closingState?.expected ?? {}).reduce((n, v) => n + Number(v), 0);
+                          const openingCash = Number(closingState?.opening_cash ?? 0);
+                          const rows = [
+                            ["cash", "Especes (ventes du jour)", Number(closingState?.expected?.cash ?? 0) - openingCash],
+                            ["wave", "Wave", Number(closingState?.expected?.wave ?? 0)],
+                            ["orange_money", "Orange Money", Number(closingState?.expected?.orange_money ?? 0)],
+                            ["card", "Carte (terminal)", Number(closingState?.expected?.card ?? 0)],
+                          ] as const;
+                          return rows.map(([key, label, expected]) => {
+                            const gap = Number(counted[key] || 0) - expected;
+                            return (
+                              <tr key={key} className="border-t">
+                                <td className="py-2">{label}</td>
+                                <td className="py-2">{xof(expected)}</td>
+                                <td className="py-2">
+                                  <input
+                                    type="number"
+                                    min={0}
+                                    value={counted[key]}
+                                    onChange={(e) => setCounted({ ...counted, [key]: e.target.value })}
+                                    placeholder="0"
+                                    className="w-28 border rounded-lg px-2 py-1.5"
+                                  />
+                                </td>
+                                <td
+                                  className={`py-2 text-right font-medium ${
+                                    counted[key] === "" ? "text-gray-500" : gap === 0 ? "text-green-500" : "text-red-400"
+                                  }`}
+                                >
+                                  {counted[key] === "" ? "-" : `${gap > 0 ? "+" : ""}${xof(gap)}`}
+                                </td>
+                              </tr>
+                            );
+                          });
+                        })()}
+                        {(() => {
+                          const openingCash = Number(closingState?.opening_cash ?? 0);
+                          const exp = Number(closingState?.expected?.cash ?? 0) - openingCash + ["wave", "orange_money", "card"].reduce((n, k) => n + Number(closingState?.expected?.[k as "wave" | "orange_money" | "card"] ?? 0), 0);
                           const cnt = Object.values(counted).reduce((n, v) => n + Number(v || 0), 0);
                           const gap = cnt - exp;
                           return (
                             <tr className="border-t font-semibold">
-                              <td className="py-2">Total</td>
+                              <td className="py-2">Total ventes du jour</td>
                               <td className="py-2">{xof(exp)}</td>
                               <td className="py-2">{xof(cnt)}</td>
                               <td className={`py-2 text-right ${gap === 0 ? "text-green-500" : "text-red-400"}`}>
@@ -1035,6 +1033,34 @@ export default function CaissePage() {
                             </tr>
                           );
                         })()}
+                        {Number(closingState?.opening_cash ?? 0) > 0 &&
+                          (() => {
+                            const openingCash = Number(closingState?.opening_cash ?? 0);
+                            const gap = Number(countedFloat || 0) - openingCash;
+                            return (
+                              <tr className="border-t">
+                                <td className="py-2">Fond de caisse (matin)</td>
+                                <td className="py-2">{xof(openingCash)}</td>
+                                <td className="py-2">
+                                  <input
+                                    type="number"
+                                    min={0}
+                                    value={countedFloat}
+                                    onChange={(e) => setCountedFloat(e.target.value)}
+                                    placeholder="0"
+                                    className="w-28 border rounded-lg px-2 py-1.5"
+                                  />
+                                </td>
+                                <td
+                                  className={`py-2 text-right font-medium ${
+                                    countedFloat === "" ? "text-gray-500" : gap === 0 ? "text-green-500" : "text-red-400"
+                                  }`}
+                                >
+                                  {countedFloat === "" ? "-" : `${gap > 0 ? "+" : ""}${xof(gap)}`}
+                                </td>
+                              </tr>
+                            );
+                          })()}
                       </tbody>
                     </table>
 

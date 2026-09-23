@@ -63,8 +63,8 @@ export default function AdminClosingPage() {
         });
         setNotes(data.closing.notes);
       } else {
-        // pre-remplit avec les montants attendus : l'admin n'ajuste que les ecarts constates
-        setDeclared({ ...data.expected });
+        // exige une saisie manuelle du comptage (pas de pre-remplissage avec l'attendu)
+        setDeclared({ card: 0, wave: 0, orange_money: 0, cash: 0 });
         setNotes("");
       }
     });

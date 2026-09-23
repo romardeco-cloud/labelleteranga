@@ -22,6 +22,7 @@ type Preview = {
   point_of_sale_name: string;
   sales_count: number;
   expected: { card: number; wave: number; orange_money: number; cash: number };
+  opening_cash: number | null;
   carried_over: { card: number; wave: number; orange_money: number; cash: number } | null;
   carried_over_since: string | null;
   closing: DailyClosing | null;
@@ -40,6 +41,7 @@ export default function CashierTills({ date, storeId, onChanged }: { date: strin
   const [open, setOpen] = useState<Till | null>(null);
   const [preview, setPreview] = useState<Preview | null>(null);
   const [declared, setDeclared] = useState<Record<string, string>>({ cash: "", wave: "", orange_money: "", card: "" });
+  const [declaredFloat, setDeclaredFloat] = useState(""); // fond de caisse, compte et saisi separement des ventes
   const [notes, setNotes] = useState("");
   const [busy, setBusy] = useState(false);
   const [error, setError] = useState("");
@@ -66,22 +68,20 @@ export default function CashierTills({ date, storeId, onChanged }: { date: strin
     const { data } = await api.get<Preview>("/reports/closings/cashier-preview/", { params: { date, cashier: t.id } });
     setPreview(data);
     const c = data.closing;
+    const openingCash = Number(data.opening_cash ?? 0);
     setDeclared(
+      // exige toujours une saisie manuelle du comptage (pas de pre-remplissage avec l'attendu), meme pour une
+      // premiere fermeture manuelle faite par l'administrateur
       c
         ? {
-            cash: String(Number(c.declared_cash)),
+            cash: String(Number(c.declared_cash) - openingCash),
             wave: String(Number(c.declared_wave)),
             orange_money: String(Number(c.declared_orange_money)),
             card: String(Number(c.declared_card)),
           }
-        : // pre-rempli avec l'attendu : on ne corrige que les ecarts constates au comptage
-          {
-            cash: String(data.expected.cash),
-            wave: String(data.expected.wave),
-            orange_money: String(data.expected.orange_money),
-            card: String(data.expected.card),
-          }
+        : { cash: "", wave: "", orange_money: "", card: "" }
     );
+    setDeclaredFloat(c ? String(openingCash) : "");
     setNotes(c?.notes ?? "");
   }
 
@@ -94,7 +94,8 @@ export default function CashierTills({ date, storeId, onChanged }: { date: strin
       await api.post("/reports/closings/close-cashier/", {
         date,
         cashier: open.id,
-        declared_cash: Number(declared.cash || 0),
+        // le tiroir reunit les deux : ventes du jour comptees separement + fond de caisse recompte a la fermeture
+        declared_cash: Number(declared.cash || 0) + Number(declaredFloat || 0),
         declared_wave: Number(declared.wave || 0),
         declared_orange_money: Number(declared.orange_money || 0),
         declared_card: Number(declared.card || 0),
@@ -110,7 +111,10 @@ export default function CashierTills({ date, storeId, onChanged }: { date: strin
     }
   }
 
-  const gap = (m: string) => Number(declared[m] || 0) - Number(preview?.expected[m as keyof Preview["expected"]] ?? 0);
+  const openingCash = Number(preview?.opening_cash ?? 0);
+  const expectedFor = (m: string) => (m === "cash" ? Number(preview?.expected.cash ?? 0) - openingCash : Number(preview?.expected[m as keyof Preview["expected"]] ?? 0));
+  const gap = (m: string) => Number(declared[m] || 0) - expectedFor(m);
+  const floatGap = Number(declaredFloat || 0) - openingCash;
 
   function openOpeningForm(t: Till) {
     setOpeningFor(t);
@@ -259,10 +263,11 @@ export default function CashierTills({ date, storeId, onChanged }: { date: strin
                 <tbody>
                   {METHODS.map((m) => (
                     <tr key={m.key} className="border-t">
-                      <td className="py-1.5">{m.label}</td>
-                      <td>{formatXof(preview.expected[m.key])}</td>
+                      <td className="py-1.5">{m.key === "cash" ? "Especes (ventes du jour)" : m.label}</td>
+                      <td>{formatXof(expectedFor(m.key))}</td>
                       <td>
                         <input
+                          required
                           type="number"
                           min={0}
                           value={declared[m.key]}
@@ -276,6 +281,26 @@ export default function CashierTills({ date, storeId, onChanged }: { date: strin
                       </td>
                     </tr>
                   ))}
+                  {openingCash > 0 && (
+                    <tr className="border-t">
+                      <td className="py-1.5">Fond de caisse (matin)</td>
+                      <td>{formatXof(openingCash)}</td>
+                      <td>
+                        <input
+                          required
+                          type="number"
+                          min={0}
+                          value={declaredFloat}
+                          onChange={(e) => setDeclaredFloat(e.target.value)}
+                          className="w-28 border rounded px-2 py-1"
+                        />
+                      </td>
+                      <td className={floatGap === 0 ? "text-green-600" : "text-red-600 font-medium"}>
+                        {floatGap > 0 ? "+" : ""}
+                        {formatXof(floatGap)}
+                      </td>
+                    </tr>
+                  )}
                 </tbody>
               </table>
             )}
