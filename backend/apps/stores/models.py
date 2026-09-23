@@ -164,6 +164,7 @@ class StoreSettings(models.Model):
     module_customer_orders = models.BooleanField("Commandes client", default=True)
     module_drawer = models.BooleanField("Tiroir-caisse", default=True)
     module_xreport = models.BooleanField("Rapport X", default=True)
+    module_daily_menu = models.BooleanField("Menu du jour", default=True)
     # reseaux sociaux du point de vente (cle -> lien ou numero) : facebook, instagram, tiktok, x, youtube, telegram, whatsapp, phone, website
     social_links = models.JSONField("Reseaux sociaux", default=dict, blank=True)
     # programme de fidelite : recompense apres N commandes OU apres un montant cumule (au choix du gerant)

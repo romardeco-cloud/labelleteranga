@@ -131,7 +131,7 @@ class InventoryCountDetailSerializer(InventoryCountSerializer):
 SETTINGS_FIELDS = [
     "timezone", "email", "legal_form", "share_capital", "ninea", "rccm", "vat_rate", "prices_include_vat",
     "payment_methods", "wave_pay_url", "orange_pay_url", "wave_number", "orange_number", "track_stock", "receipt_slogan", "receipt_footer", "module_hold", "module_history", "module_qr",
-    "module_dine_in", "module_customer_orders", "module_drawer", "module_xreport",
+    "module_dine_in", "module_customer_orders", "module_drawer", "module_xreport", "module_daily_menu",
     "social_links", "loyalty_enabled", "loyalty_mode", "loyalty_threshold", "loyalty_min_order", "loyalty_reward_type",
     "loyalty_reward_value", "loyalty_reward_label", "loyalty_valid_days",
 ]
@@ -213,6 +213,7 @@ def pos_settings(store):
             "customer_orders": st.module_customer_orders,
             "drawer": st.module_drawer,
             "xreport": st.module_xreport,
+            "daily_menu": st.module_daily_menu,
         },
         "receipt_slogan": st.receipt_slogan,
         "receipt_footer": st.receipt_footer,

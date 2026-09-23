@@ -56,7 +56,7 @@ type Mode = "direct" | "dine_in" | "orders";
 
 const DEFAULT_SETTINGS: POSSettings = {
   payment_methods: ["cash", "wave", "orange_money", "card"],
-  modules: { hold: true, history: true, qr: true, dine_in: true, customer_orders: true, drawer: true, xreport: true },
+  modules: { hold: true, history: true, qr: true, dine_in: true, customer_orders: true, drawer: true, xreport: true, daily_menu: true },
   receipt_slogan: "L'art du service",
   receipt_footer: "Merci de votre visite !",
 };
@@ -876,14 +876,16 @@ export default function CaissePage() {
           </div>
 
           <div className="flex flex-wrap items-center gap-2 ml-auto">
-            <button
-              onClick={openMenuPanel}
-              className={`flex items-center gap-2 border rounded-xl px-3 py-2 text-sm ${
-                dailyMenu.lunch.length || dailyMenu.special.length ? "border-[#f5b942]/60 text-[#f5b942]" : "text-gray-300 hover:bg-white/5"
-              }`}
-            >
-              <Icon name="utensils" className="w-4 h-4" /> Menu du jour
-            </button>
+            {settings.modules.daily_menu && (
+              <button
+                onClick={openMenuPanel}
+                className={`flex items-center gap-2 border rounded-xl px-3 py-2 text-sm ${
+                  dailyMenu.lunch.length || dailyMenu.special.length ? "border-[#f5b942]/60 text-[#f5b942]" : "text-gray-300 hover:bg-white/5"
+                }`}
+              >
+                <Icon name="utensils" className="w-4 h-4" /> Menu du jour
+              </button>
+            )}
             {settings.modules.hold && (
               <button
                 onClick={() => setPanel(panel === "held" ? null : "held")}

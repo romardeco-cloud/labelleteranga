@@ -469,6 +469,7 @@ export type POSSettings = {
     customer_orders: boolean;
     drawer: boolean;
     xreport: boolean;
+    daily_menu: boolean;
   };
   receipt_slogan: string;
   receipt_footer: string;

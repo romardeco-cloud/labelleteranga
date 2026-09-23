@@ -74,6 +74,7 @@ export type StoreConfig = {
   module_customer_orders: boolean;
   module_drawer: boolean;
   module_xreport: boolean;
+  module_daily_menu: boolean;
 };
 
 export async function fetchStoreConfig(storeId: number) {

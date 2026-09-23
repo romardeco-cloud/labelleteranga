@@ -49,6 +49,7 @@ const MODULES: { key: keyof StoreConfig; label: string; hint: string }[] = [
   { key: "module_hold", label: "Ventes en attente", hint: "Mettre une vente de cote et la reprendre." },
   { key: "module_history", label: "Historique du jour", hint: "Liste des ventes du caissier et reimpression des tickets." },
   { key: "module_dine_in", label: "Vente sur place", hint: "Associer une vente a une table (restaurant)." },
+  { key: "module_daily_menu", label: "Menu du jour", hint: "Bouton et panneau « Menu du jour » a la caisse (restaurant : plats du midi/speciaux du jour)." },
   { key: "module_customer_orders", label: "Commandes client", hint: "Voir les commandes du site rattachees a ce point de vente." },
   { key: "module_qr", label: "QR Wave / Orange Money", hint: "Afficher le QR code de paiement a l'encaissement." },
   { key: "module_drawer", label: "Tiroir-caisse", hint: "Journal des ouvertures du tiroir hors vente." },
@@ -71,7 +72,7 @@ const EDITABLE: (keyof StoreConfig)[] = [
   "name", "address", "phone", "slug", "online_enabled", "description", "timezone", "email", "legal_form", "share_capital", "ninea", "rccm", "vat_rate",
   "prices_include_vat", "payment_methods", "wave_pay_url", "orange_pay_url", "wave_number", "orange_number", "social_links", "loyalty_enabled", "loyalty_mode", "loyalty_threshold", "loyalty_min_order",
   "loyalty_reward_type", "loyalty_reward_value", "loyalty_reward_label", "loyalty_valid_days", "track_stock", "receipt_slogan", "receipt_footer",
-  "module_hold", "module_history", "module_qr", "module_dine_in", "module_customer_orders", "module_drawer", "module_xreport",
+  "module_hold", "module_history", "module_qr", "module_dine_in", "module_customer_orders", "module_drawer", "module_xreport", "module_daily_menu",
 ];
 
 function Card({ icon, title, children, tone = "text-sky-400" }: { icon: IconName; title: string; children: React.ReactNode; tone?: string }) {
