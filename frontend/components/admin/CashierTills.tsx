@@ -115,6 +115,8 @@ export default function CashierTills({ date, storeId, onChanged }: { date: strin
   const expectedFor = (m: string) => (m === "cash" ? Number(preview?.expected.cash ?? 0) - openingCash : Number(preview?.expected[m as keyof Preview["expected"]] ?? 0));
   const gap = (m: string) => Number(declared[m] || 0) - expectedFor(m);
   const floatGap = Number(declaredFloat || 0) - openingCash;
+  // un ecart de caisse (n'importe quel moyen, ou le fond de caisse) doit etre explique dans la remarque
+  const hasGap = METHODS.some((m) => gap(m.key) !== 0) || floatGap !== 0;
 
   function openOpeningForm(t: Till) {
     setOpeningFor(t);
@@ -305,8 +307,19 @@ export default function CashierTills({ date, storeId, onChanged }: { date: strin
               </table>
             )}
             <label className="block text-sm">
-              Remarque (facultatif)
-              <textarea value={notes} onChange={(e) => setNotes(e.target.value)} rows={2} className="w-full border rounded px-3 py-2 mt-1" />
+              {hasGap ? (
+                <span className="text-red-600 font-medium">Remarque — expliquez l&apos;ecart de caisse (obligatoire)</span>
+              ) : (
+                "Remarque (facultatif)"
+              )}
+              <textarea
+                required={hasGap}
+                value={notes}
+                onChange={(e) => setNotes(e.target.value)}
+                rows={2}
+                placeholder={hasGap ? "Ex. pourboire laisse dans le tiroir, erreur de rendu monnaie..." : ""}
+                className={`w-full border rounded px-3 py-2 mt-1 ${hasGap ? "border-red-400" : ""}`}
+              />
             </label>
             {error && <p className="text-sm text-red-600">{error}</p>}
             <div className="flex gap-2">

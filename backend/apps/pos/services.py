@@ -267,6 +267,13 @@ def close_cashier_day(cashier_profile, declared, notes="", for_date=None, closed
         date=today, point_of_sale=cashier_profile.point_of_sale, cashier=cashier_profile.user
     ).first()
 
+    # un ecart de caisse (compte different de l'attendu) doit toujours etre explique
+    declared_total = sum(values.values())
+    expected_total = sum(expected.values())
+    final_notes = notes or (closing.notes if closing else "")
+    if declared_total != expected_total and not final_notes:
+        raise ValidationError({"notes": "Il y a un ecart de caisse : expliquez la raison dans la remarque avant de fermer."})
+
     if closing is None:
         closing = DailyClosing(
             date=today,

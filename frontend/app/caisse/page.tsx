@@ -760,6 +760,11 @@ export default function CaissePage() {
 
   const closed = !!closingState?.closed;
   const showCatalog = !closingMode && !closed && mode !== "orders";
+  // un ecart de caisse (compte total different de l'attendu) doit etre explique dans la remarque
+  const closingHasGap =
+    !!closingState &&
+    Number(counted.cash || 0) + Number(countedFloat || 0) + Number(counted.wave || 0) + Number(counted.orange_money || 0) + Number(counted.card || 0) !==
+      Number(closingState.expected?.cash ?? 0) + Number(closingState.expected?.wave ?? 0) + Number(closingState.expected?.orange_money ?? 0) + Number(closingState.expected?.card ?? 0);
 
   return (
     <div className="admin-shell min-h-screen lg:h-screen flex flex-col print:h-auto print:block">
@@ -1074,12 +1079,18 @@ export default function CaissePage() {
                     )}
 
                     <label className="text-sm block">
-                      Remarque (facultatif)
+                      {closingHasGap ? (
+                        <span className="text-red-400 font-medium">Remarque — expliquez l&apos;ecart de caisse (obligatoire)</span>
+                      ) : (
+                        "Remarque (facultatif)"
+                      )}
                       <textarea
+                        required={closingHasGap}
                         value={closingNotes}
                         onChange={(e) => setClosingNotes(e.target.value)}
                         rows={2}
-                        className="w-full border rounded-lg px-3 py-2 mt-1"
+                        placeholder={closingHasGap ? "Ex. pourboire laisse dans le tiroir, erreur de rendu monnaie..." : ""}
+                        className={`w-full border rounded-lg px-3 py-2 mt-1 ${closingHasGap ? "border-red-400" : ""}`}
                       />
                     </label>
                     {closingError && <p className="text-red-500 text-sm">{closingError}</p>}
