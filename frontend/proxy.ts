@@ -14,7 +14,17 @@ const HOSTS: Record<string, string> = {
 
 // Espaces professionnels : admin.labelleteranga.com (administration) et caisse.labelleteranga.com (caisse).
 // L'adresse racine du sous-domaine ouvre directement l'espace ; les autres chemins (/admin/..., /caisse/...) fonctionnent tels quels.
-const APPS: Record<string, string> = { admin: "/admin", caisse: "/caisse" };
+// caisse-<magasin>.labelleteranga.com : meme caisse (le caissier se connecte comme d'habitude et voit son propre
+// magasin), juste une adresse dediee et facile a retenir par point de vente.
+const APPS: Record<string, string> = {
+  admin: "/admin",
+  caisse: "/caisse",
+  "caisse-supermarche": "/caisse",
+  "caisse-resto": "/caisse",
+  "caisse-depot": "/caisse",
+  "caisse-quincaillerie": "/caisse",
+  "caisse-ferme": "/caisse",
+};
 
 // Sur les adresses publiques (labelleteranga.com, www, resto., supermarche., ...), /admin et /caisse ne sont jamais servis :
 // les clients sont renvoyes a l'accueil. Les espaces pro s'ouvrent uniquement sur admin. et caisse.labelleteranga.com.
