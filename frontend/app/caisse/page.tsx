@@ -958,7 +958,6 @@ export default function CaissePage() {
                   <p className="text-sm text-gray-500 mb-2">
                     {closingState?.sales_count ?? 0} vente(s) aujourd&apos;hui. Comptez ce que vous avez encaisse pour chaque moyen de paiement :
                     l&apos;ecart avec le montant attendu s&apos;affiche tout de suite.
-                    {closingState?.opening_cash ? ` Le fond de caisse du matin (${xof(closingState.opening_cash)}) est deja inclus dans l'attendu en especes.` : ""}
                   </p>
                   {closingState?.carried_over && (
                     <p className="text-sm text-amber-400 bg-amber-500/10 border border-amber-500/30 rounded-lg px-3 py-2 mb-4">
@@ -988,10 +987,19 @@ export default function CaissePage() {
                         ).map(([key, label]) => {
                           const expected = Number(closingState?.expected?.[key] ?? 0);
                           const gap = Number(counted[key] || 0) - expected;
+                          const openingCash = Number(closingState?.opening_cash ?? 0);
                           return (
                             <tr key={key} className="border-t">
                               <td className="py-2">{label}</td>
-                              <td className="py-2">{xof(expected)}</td>
+                              <td className="py-2">
+                                {xof(expected)}
+                                {key === "cash" && openingCash > 0 && (
+                                  <div className="text-xs text-gray-500 mt-0.5 leading-tight">
+                                    dont {xof(openingCash)} fond de caisse
+                                    <br />+ {xof(expected - openingCash)} de ventes
+                                  </div>
+                                )}
+                              </td>
                               <td className="py-2">
                                 <input
                                   type="number"
