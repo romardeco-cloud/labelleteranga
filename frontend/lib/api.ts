@@ -246,6 +246,9 @@ export type Order = {
   created_at: string;
   paid_at: string | null;
   voided_at?: string | null;
+  payment_method_changed_at?: string | null;
+  payment_method_changed_by_username?: string | null;
+  payment_method_change_reason?: string;
   order_number?: string;
   whatsapp_status?: string;
   payment_reference?: string;

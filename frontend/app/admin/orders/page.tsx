@@ -61,6 +61,32 @@ export default function AdminOrdersPage() {
     }
   }
 
+  const [changingPayment, setChangingPayment] = useState<Order | null>(null);
+  const [newMethod, setNewMethod] = useState<string>("cash");
+  const [payPin, setPayPin] = useState("");
+  const [payReason, setPayReason] = useState("");
+  const [payError, setPayError] = useState("");
+  const [payBusy, setPayBusy] = useState(false);
+
+  async function confirmChangePayment(e: React.FormEvent) {
+    e.preventDefault();
+    if (!changingPayment) return;
+    setPayBusy(true);
+    setPayError("");
+    try {
+      await api.post(`/orders/${changingPayment.reference}/change-payment/`, { payment_method: newMethod, pin: payPin, reason: payReason });
+      setChangingPayment(null);
+      setPayPin("");
+      setPayReason("");
+      reload();
+    } catch (err) {
+      setPayError(apiErrorMessage(err, "Correction impossible."));
+      setPayPin("");
+    } finally {
+      setPayBusy(false);
+    }
+  }
+
   const [filter, setFilter] = useState<"all" | "unfinished" | "paid" | "cancelled">("all");
   const [selected, setSelected] = useState<Set<string>>(new Set());
   const [bulkMsg, setBulkMsg] = useState<{ ok: boolean; text: string } | null>(null);
@@ -157,6 +183,56 @@ export default function AdminOrdersPage() {
         Seul l&apos;administrateur peut supprimer une vente validee, avec son code secret a 4 chiffres. La vente est annulee (motif et auteur
         conserves), retiree des rapports, et le stock est remis en rayon.
       </p>
+      {changingPayment && (
+        <div className="fixed inset-0 z-40 bg-black/60 flex items-center justify-center p-4" onClick={() => setChangingPayment(null)}>
+          <form onSubmit={confirmChangePayment} onClick={(e) => e.stopPropagation()} className="bg-white rounded-2xl p-5 w-full max-w-sm space-y-3">
+            <h2 className="font-bold text-lg">Corriger le paiement {changingPayment.reference.slice(0, 8).toUpperCase()}</h2>
+            <p className="text-sm text-gray-500">
+              {formatXof(changingPayment.total_amount)} · actuellement {paymentLabel[changingPayment.payment_method] ?? changingPayment.payment_method}
+            </p>
+            <label className="block text-sm">
+              Nouveau mode de paiement
+              <select value={newMethod} onChange={(e) => setNewMethod(e.target.value)} className="w-full border rounded px-3 py-2 mt-1">
+                {Object.entries(paymentLabel).map(([key, label]) => (
+                  <option key={key} value={key}>
+                    {label}
+                  </option>
+                ))}
+              </select>
+            </label>
+            <label className="block text-sm">
+              Motif
+              <input required value={payReason} onChange={(e) => setPayReason(e.target.value)} placeholder="Ex. erreur de saisie a la caisse" className="w-full border rounded px-3 py-2 mt-1" />
+            </label>
+            <label className="block text-sm">
+              Code secret (4 chiffres)
+              <input
+                required
+                autoFocus
+                type="password"
+                inputMode="numeric"
+                pattern="[0-9]{4}"
+                maxLength={4}
+                value={payPin}
+                onChange={(e) => setPayPin(e.target.value.replace(/\D/g, ""))}
+                className="w-full border rounded px-3 py-2 mt-1 tracking-[0.6em] text-center text-lg"
+              />
+            </label>
+            {payError && <p className="text-sm text-red-600">{payError}</p>}
+            <div className="flex gap-2">
+              <button
+                disabled={payBusy || payPin.length !== 4 || !payReason.trim() || newMethod === changingPayment.payment_method}
+                className="flex-1 bg-brand text-white rounded-lg py-2.5 font-medium disabled:opacity-40"
+              >
+                {payBusy ? "Verification..." : "Corriger le paiement"}
+              </button>
+              <button type="button" onClick={() => setChangingPayment(null)} className="border rounded-lg px-4">
+                Annuler
+              </button>
+            </div>
+          </form>
+        </div>
+      )}
       {voiding && (
         <div className="fixed inset-0 z-40 bg-black/60 flex items-center justify-center p-4" onClick={() => setVoiding(null)}>
           <form onSubmit={confirmVoid} onClick={(e) => e.stopPropagation()} className="bg-white rounded-2xl p-5 w-full max-w-sm space-y-3">
@@ -318,7 +394,14 @@ export default function AdminOrdersPage() {
                   ))}
                 </select>
               </td>
-              <td className="p-2">{paymentLabel[o.payment_method] ?? o.payment_method}</td>
+              <td className="p-2">
+                {paymentLabel[o.payment_method] ?? o.payment_method}
+                {o.payment_method_changed_at && (
+                  <div className="text-xs text-gray-400" title={o.payment_method_change_reason}>
+                    corrige par {o.payment_method_changed_by_username ?? "admin"}
+                  </div>
+                )}
+              </td>
               <td className="p-2">
                 {statusLabel[o.status] ?? o.status}
                 {o.status === "pending" && o.payment_declared_at && (
@@ -346,6 +429,20 @@ export default function AdminOrdersPage() {
                     className="block text-xs bg-brand text-white px-2 py-1 rounded disabled:opacity-50"
                   >
                     Marquer payee
+                  </button>
+                )}
+                {o.status === "paid" && (
+                  <button
+                    onClick={() => {
+                      setChangingPayment(o);
+                      setNewMethod(o.payment_method);
+                      setPayPin("");
+                      setPayReason("");
+                      setPayError("");
+                    }}
+                    className="block text-xs border border-brand/40 text-brand px-2 py-1 rounded w-full"
+                  >
+                    Corriger paiement
                   </button>
                 )}
                 {o.status !== "cancelled" && (
