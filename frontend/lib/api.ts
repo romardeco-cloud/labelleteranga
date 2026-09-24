@@ -249,6 +249,11 @@ export type Order = {
   payment_method_changed_at?: string | null;
   payment_method_changed_by_username?: string | null;
   payment_method_change_reason?: string;
+  pending_action?: "" | "void" | "change_payment";
+  pending_payment_method?: PaymentMethod | "";
+  pending_reason?: string;
+  pending_requested_by_username?: string | null;
+  pending_requested_at?: string | null;
   order_number?: string;
   whatsapp_status?: string;
   payment_reference?: string;
@@ -448,6 +453,9 @@ export type POSReceipt = {
   receipt_footer?: string;
   payment_method: PaymentMethod;
   payment_method_label: string;
+  pending_action?: "" | "void" | "change_payment";
+  pending_payment_method?: PaymentMethod | "";
+  pending_reason?: string;
   items: { name: string; quantity: number; unit_price: string; subtotal: string }[];
   total: string;
   tip_amount?: string;

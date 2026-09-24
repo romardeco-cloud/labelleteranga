@@ -87,6 +87,41 @@ export default function AdminOrdersPage() {
     }
   }
 
+  const [confirming, setConfirming] = useState<Order | null>(null);
+  const [confirmPin, setConfirmPin] = useState("");
+  const [confirmError, setConfirmError] = useState("");
+  const [confirmBusy, setConfirmBusy] = useState(false);
+  const [rejectingRef, setRejectingRef] = useState<string | null>(null);
+
+  async function confirmPending(e: React.FormEvent) {
+    e.preventDefault();
+    if (!confirming) return;
+    setConfirmBusy(true);
+    setConfirmError("");
+    try {
+      await api.post(`/orders/${confirming.reference}/confirm-correction/`, { pin: confirmPin });
+      setConfirming(null);
+      setConfirmPin("");
+      reload();
+    } catch (err) {
+      setConfirmError(apiErrorMessage(err, "Confirmation impossible."));
+      setConfirmPin("");
+    } finally {
+      setConfirmBusy(false);
+    }
+  }
+
+  async function rejectPending(reference: string) {
+    if (!confirm("Rejeter cette demande du caissier ? La vente ne sera pas modifiee.")) return;
+    setRejectingRef(reference);
+    try {
+      await api.post(`/orders/${reference}/reject-correction/`);
+      reload();
+    } finally {
+      setRejectingRef(null);
+    }
+  }
+
   const [filter, setFilter] = useState<"all" | "unfinished" | "paid" | "cancelled">("all");
   const [selected, setSelected] = useState<Set<string>>(new Set());
   const [bulkMsg, setBulkMsg] = useState<{ ok: boolean; text: string } | null>(null);
@@ -183,6 +218,43 @@ export default function AdminOrdersPage() {
         Seul l&apos;administrateur peut supprimer une vente validee, avec son code secret a 4 chiffres. La vente est annulee (motif et auteur
         conserves), retiree des rapports, et le stock est remis en rayon.
       </p>
+      {confirming && (
+        <div className="fixed inset-0 z-40 bg-black/60 flex items-center justify-center p-4" onClick={() => setConfirming(null)}>
+          <form onSubmit={confirmPending} onClick={(e) => e.stopPropagation()} className="bg-white rounded-2xl p-5 w-full max-w-sm space-y-3">
+            <h2 className="font-bold text-lg">Confirmer la demande {confirming.reference.slice(0, 8).toUpperCase()}</h2>
+            <p className="text-sm text-gray-600">
+              {confirming.pending_action === "void"
+                ? "Annulation demandee"
+                : `Correction demandee vers ${paymentLabel[confirming.pending_payment_method ?? ""] ?? confirming.pending_payment_method}`}{" "}
+              par <strong>{confirming.pending_requested_by_username}</strong>
+              {confirming.pending_reason ? ` : ${confirming.pending_reason}` : ""}
+            </p>
+            <label className="block text-sm">
+              Votre code secret administrateur (4 chiffres)
+              <input
+                required
+                autoFocus
+                type="password"
+                inputMode="numeric"
+                pattern="[0-9]{4}"
+                maxLength={4}
+                value={confirmPin}
+                onChange={(e) => setConfirmPin(e.target.value.replace(/\D/g, ""))}
+                className="w-full border rounded px-3 py-2 mt-1 tracking-[0.6em] text-center text-lg"
+              />
+            </label>
+            {confirmError && <p className="text-sm text-red-600">{confirmError}</p>}
+            <div className="flex gap-2">
+              <button disabled={confirmBusy || confirmPin.length !== 4} className="flex-1 bg-brand text-white rounded-lg py-2.5 font-medium disabled:opacity-40">
+                {confirmBusy ? "Verification..." : "Confirmer et appliquer"}
+              </button>
+              <button type="button" onClick={() => setConfirming(null)} className="border rounded-lg px-4">
+                Annuler
+              </button>
+            </div>
+          </form>
+        </div>
+      )}
       {changingPayment && (
         <div className="fixed inset-0 z-40 bg-black/60 flex items-center justify-center p-4" onClick={() => setChangingPayment(null)}>
           <form onSubmit={confirmChangePayment} onClick={(e) => e.stopPropagation()} className="bg-white rounded-2xl p-5 w-full max-w-sm space-y-3">
@@ -352,7 +424,7 @@ export default function AdminOrdersPage() {
             </tr>
           )}
           {shown.map((o) => (
-            <tr key={o.id} className={`border-t align-top ${selected.has(o.reference) ? "bg-red-50" : ""}`}>
+            <tr key={o.id} className={`border-t align-top ${selected.has(o.reference) ? "bg-red-50" : o.pending_action ? "bg-amber-50" : ""}`}>
               <td className="p-2">
                 {isUnfinished(o) && (
                   <input
@@ -418,10 +490,40 @@ export default function AdminOrdersPage() {
                     {(o as Order & { void_reason?: string }).void_reason ? ` : ${(o as Order & { void_reason?: string }).void_reason}` : ""}
                   </div>
                 )}
+                {o.pending_action && (
+                  <div className="text-xs text-amber-700 font-medium mt-1">
+                    En attente : {o.pending_action === "void" ? "annulation" : `paiement -> ${paymentLabel[o.pending_payment_method ?? ""] ?? o.pending_payment_method}`}
+                    <div className="text-gray-500 font-normal">
+                      demande par {o.pending_requested_by_username}
+                      {o.pending_reason ? ` : ${o.pending_reason}` : ""}
+                    </div>
+                  </div>
+                )}
               </td>
               <td className="p-2">{formatXof(o.total_amount)}</td>
               <td className="p-2">{new Date(o.created_at).toLocaleString("fr-SN")}</td>
               <td className="p-2 space-y-1">
+                {o.pending_action && (
+                  <>
+                    <button
+                      onClick={() => {
+                        setConfirming(o);
+                        setConfirmPin("");
+                        setConfirmError("");
+                      }}
+                      className="block text-xs bg-amber-600 text-white px-2 py-1 rounded w-full"
+                    >
+                      Confirmer la demande
+                    </button>
+                    <button
+                      onClick={() => rejectPending(o.reference)}
+                      disabled={rejectingRef === o.reference}
+                      className="block text-xs border border-gray-300 text-gray-600 px-2 py-1 rounded w-full disabled:opacity-50"
+                    >
+                      Rejeter
+                    </button>
+                  </>
+                )}
                 {o.status === "pending" && o.payment_method !== "card" && (
                   <button
                     onClick={() => handleMarkPaid(o.reference)}
@@ -431,7 +533,7 @@ export default function AdminOrdersPage() {
                     Marquer payee
                   </button>
                 )}
-                {o.status === "paid" && (
+                {o.status === "paid" && !o.pending_action && (
                   <button
                     onClick={() => {
                       setChangingPayment(o);
@@ -445,7 +547,7 @@ export default function AdminOrdersPage() {
                     Corriger paiement
                   </button>
                 )}
-                {o.status !== "cancelled" && (
+                {o.status !== "cancelled" && !o.pending_action && (
                   <button
                     onClick={() => {
                       setVoiding(o);

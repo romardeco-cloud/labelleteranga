@@ -1856,6 +1856,12 @@ export default function CaissePage() {
                           Ticket {r.receipt_number} ·{" "}
                           {new Date(r.created_at).toLocaleTimeString("fr-FR", { hour: "2-digit", minute: "2-digit" })}
                         </p>
+                        {r.pending_action && (
+                          <p className="text-xs text-amber-500 font-medium mt-1">
+                            En attente de confirmation par l&apos;administrateur ·{" "}
+                            {r.pending_action === "void" ? "annulation" : `correction vers ${r.pending_payment_method}`}
+                          </p>
+                        )}
                       </div>
                       <div className="flex flex-col gap-1.5 shrink-0">
                         <button
@@ -1868,29 +1874,33 @@ export default function CaissePage() {
                         >
                           Reimprimer
                         </button>
-                        <button
-                          onClick={() => {
-                            setCorrectingSale(r);
-                            setCorrectMethod(r.payment_method);
-                            setCorrectPin("");
-                            setCorrectReason("");
-                            setCorrectMsg("");
-                          }}
-                          className="border border-brand/40 text-brand rounded-lg px-3 py-1.5 text-sm hover:bg-white/5"
-                        >
-                          Corriger paiement
-                        </button>
-                        <button
-                          onClick={() => {
-                            setVoidingSale(r);
-                            setVoidPin("");
-                            setVoidReason("");
-                            setVoidMsg("");
-                          }}
-                          className="border border-red-500/40 text-red-400 rounded-lg px-3 py-1.5 text-sm hover:bg-white/5"
-                        >
-                          Annuler la vente
-                        </button>
+                        {!r.pending_action && (
+                          <>
+                            <button
+                              onClick={() => {
+                                setCorrectingSale(r);
+                                setCorrectMethod(r.payment_method);
+                                setCorrectPin("");
+                                setCorrectReason("");
+                                setCorrectMsg("");
+                              }}
+                              className="border border-brand/40 text-brand rounded-lg px-3 py-1.5 text-sm hover:bg-white/5"
+                            >
+                              Demander une correction
+                            </button>
+                            <button
+                              onClick={() => {
+                                setVoidingSale(r);
+                                setVoidPin("");
+                                setVoidReason("");
+                                setVoidMsg("");
+                              }}
+                              className="border border-red-500/40 text-red-400 rounded-lg px-3 py-1.5 text-sm hover:bg-white/5"
+                            >
+                              Demander l&apos;annulation
+                            </button>
+                          </>
+                        )}
                       </div>
                     </li>
                   ))}
@@ -1901,10 +1911,11 @@ export default function CaissePage() {
             {voidingSale && (
               <div className="fixed inset-0 z-50 bg-black/70 flex items-center justify-center p-4" onClick={() => setVoidingSale(null)}>
                 <form onSubmit={confirmVoidSale} onClick={(e) => e.stopPropagation()} className="bg-white text-black rounded-2xl p-5 w-full max-w-sm space-y-3">
-                  <h2 className="font-bold text-lg">Annuler la vente {voidingSale.receipt_number}</h2>
+                  <h2 className="font-bold text-lg">Demander l&apos;annulation {voidingSale.receipt_number}</h2>
                   <p className="text-sm text-gray-500">
                     {xof(voidingSale.total)} · {voidingSale.payment_method_label}
                   </p>
+                  <p className="text-xs text-amber-600">Cette demande n&apos;annule rien tout de suite : l&apos;administrateur doit la confirmer avec son propre code.</p>
                   <label className="block text-sm">
                     Motif
                     <input required value={voidReason} onChange={(e) => setVoidReason(e.target.value)} placeholder="Ex. erreur de saisie" className="w-full border rounded px-3 py-2 mt-1" />
@@ -1926,7 +1937,7 @@ export default function CaissePage() {
                   {voidMsg && <p className="text-sm text-red-600">{voidMsg}</p>}
                   <div className="flex gap-2">
                     <button disabled={voidBusy || voidPin.length !== 4 || !voidReason.trim()} className="flex-1 bg-red-600 text-white rounded-lg py-2.5 font-medium disabled:opacity-40">
-                      {voidBusy ? "Verification..." : "Annuler la vente"}
+                      {voidBusy ? "Verification..." : "Envoyer la demande"}
                     </button>
                     <button type="button" onClick={() => setVoidingSale(null)} className="border rounded-lg px-4">
                       Fermer
@@ -1939,10 +1950,11 @@ export default function CaissePage() {
             {correctingSale && (
               <div className="fixed inset-0 z-50 bg-black/70 flex items-center justify-center p-4" onClick={() => setCorrectingSale(null)}>
                 <form onSubmit={confirmCorrectSale} onClick={(e) => e.stopPropagation()} className="bg-white text-black rounded-2xl p-5 w-full max-w-sm space-y-3">
-                  <h2 className="font-bold text-lg">Corriger le paiement {correctingSale.receipt_number}</h2>
+                  <h2 className="font-bold text-lg">Demander une correction {correctingSale.receipt_number}</h2>
                   <p className="text-sm text-gray-500">
                     {xof(correctingSale.total)} · actuellement {correctingSale.payment_method_label}
                   </p>
+                  <p className="text-xs text-amber-600">Cette demande ne change rien tout de suite : l&apos;administrateur doit la confirmer avec son propre code.</p>
                   <label className="block text-sm">
                     Nouveau mode de paiement
                     <select value={correctMethod} onChange={(e) => setCorrectMethod(e.target.value as PaymentMethod)} className="w-full border rounded px-3 py-2 mt-1">
@@ -1983,7 +1995,7 @@ export default function CaissePage() {
                       disabled={correctBusy || correctPin.length !== 4 || !correctReason.trim() || correctMethod === correctingSale.payment_method}
                       className="flex-1 bg-brand text-white rounded-lg py-2.5 font-medium disabled:opacity-40"
                     >
-                      {correctBusy ? "Verification..." : "Corriger le paiement"}
+                      {correctBusy ? "Verification..." : "Envoyer la demande"}
                     </button>
                     <button type="button" onClick={() => setCorrectingSale(null)} className="border rounded-lg px-4">
                       Fermer
