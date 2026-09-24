@@ -218,6 +218,7 @@ export default function DailyMenuShowcase({ menus }: { menus: SiteDailyMenus }) 
 
         <div className="flex-1 min-w-0">
           {menus.lunch && <Carousel title={menus.lunch.title} note={menus.lunch.note} items={menus.lunch.items} slug={site.slug} />}
+          {menus.lunch && menus.special && <div className="h-1.5 rounded-full bg-white/90 mb-6" aria-hidden />}
           {menus.special && <Carousel title={menus.special.title} note={menus.special.note} items={menus.special.items} slug={site.slug} />}
           {menus.lunch && <OrderByNumber menu={menus.lunch} />}
         </div>
