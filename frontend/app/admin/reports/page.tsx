@@ -253,8 +253,9 @@ export default function ReportsPage() {
 
       {tab === "synthese" && o && (
         <div className="space-y-6">
-          <div className="grid grid-cols-2 lg:grid-cols-4 gap-3">
+          <div className="grid grid-cols-2 lg:grid-cols-5 gap-3">
             <Card title="Chiffre d'affaires (ventes)" value={formatXof(o.sales.revenue)} sub={`${o.sales.orders_count} vente(s) · ticket moyen ${formatXof(o.sales.average_ticket)}`} />
+            <Card title="Pourboires" value={formatXof(o.sales.tips)} sub="Deja compris dans les ventes, sans effet sur l'ecart" />
             <Card title="Factures emises" value={formatXof(o.invoices.invoiced_total)} sub={`${o.invoices.count} facture(s) · reste ${formatXof(o.invoices.outstanding)}`} />
             <Card title="Devis" value={formatXof(o.quotes.total)} sub={`${o.quotes.count} devis · conversion ${o.quotes.conversion_rate} %`} />
             <Card title="Achats fournisseurs" value={formatXof(o.purchases.ordered_total)} sub={`${o.purchases.count} bon(s) de commande`} />

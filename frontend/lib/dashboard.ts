@@ -3,7 +3,7 @@ import { api } from "./api";
 export type Period = "day" | "month" | "year";
 
 export type DashboardKpi = {
-  key: "revenue" | "orders" | "expenses" | "net" | "ticket";
+  key: "revenue" | "orders" | "expenses" | "net" | "ticket" | "tips";
   label: string;
   value: number;
   trend: number | null;

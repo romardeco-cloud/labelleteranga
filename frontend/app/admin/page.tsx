@@ -33,6 +33,7 @@ const KPI_STYLE: Record<DashboardKpi["key"], { icon: IconName; tile: string }> =
   expenses: { icon: "wallet", tile: "bg-rose-500/15 text-rose-400" },
   net: { icon: "trendUp", tile: "bg-amber-500/15 text-amber-400" },
   ticket: { icon: "receipt", tile: "bg-teal-500/15 text-teal-400" },
+  tips: { icon: "gift", tile: "bg-fuchsia-500/15 text-fuchsia-400" },
 };
 
 /* ---------- dates (toujours en heure locale, format YYYY-MM-DD) ---------- */
@@ -200,8 +201,8 @@ export default function AdminDashboardPage() {
       {error && <p className="text-sm bg-red-50 text-red-700 p-3 rounded-lg">Impossible de charger les statistiques. Reessayez.</p>}
 
       {/* Indicateurs */}
-      <div className="grid grid-cols-2 lg:grid-cols-5 gap-3">
-        {(data?.kpis ?? Array.from({ length: 5 }, () => null)).map((k, i) => {
+      <div className="grid grid-cols-2 lg:grid-cols-6 gap-3">
+        {(data?.kpis ?? Array.from({ length: 6 }, () => null)).map((k, i) => {
           if (!k) return <div key={i} className="border rounded-xl bg-[#1c1514] h-36 animate-pulse" />;
           const style = KPI_STYLE[k.key];
           const up = (k.trend ?? 0) >= 0;

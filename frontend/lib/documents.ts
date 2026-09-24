@@ -204,6 +204,7 @@ export type Overview = {
   sales: {
     revenue: number;
     orders_count: number;
+    tips: number;
     average_ticket: number;
     by_payment_method: Bucket[];
     by_channel: Bucket[];

@@ -22,6 +22,7 @@ type Preview = {
   point_of_sale_name: string;
   sales_count: number;
   expected: { card: number; wave: number; orange_money: number; cash: number };
+  tips: number;
   opening_cash: number | null;
   carried_over: { card: number; wave: number; orange_money: number; cash: number } | null;
   carried_over_since: string | null;
@@ -301,6 +302,12 @@ export default function CashierTills({ date, storeId, onChanged }: { date: strin
                         {floatGap > 0 ? "+" : ""}
                         {formatXof(floatGap)}
                       </td>
+                    </tr>
+                  )}
+                  {(preview?.tips ?? 0) > 0 && (
+                    <tr className="border-t text-gray-500">
+                      <td className="py-1.5">dont pourboire</td>
+                      <td colSpan={3}>{formatXof(preview!.tips)} — deja compris ci-dessus, sans effet sur l&apos;ecart</td>
                     </tr>
                   )}
                 </tbody>
