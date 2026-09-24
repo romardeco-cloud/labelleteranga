@@ -17,6 +17,7 @@ class OrderSerializer(serializers.ModelSerializer):
     shop_whatsapp_link = serializers.SerializerMethodField()
     point_of_sale_name = serializers.CharField(source="point_of_sale.name", read_only=True, default=None)
     voided_by_username = serializers.CharField(source="voided_by.username", read_only=True, default=None)
+    payment_method_changed_by_username = serializers.CharField(source="payment_method_changed_by.username", read_only=True, default=None)
     order_number = serializers.CharField(read_only=True)
 
     class Meta:
@@ -49,6 +50,9 @@ class OrderSerializer(serializers.ModelSerializer):
             "voided_at",
             "voided_by_username",
             "void_reason",
+            "payment_method_changed_at",
+            "payment_method_changed_by_username",
+            "payment_method_change_reason",
             "order_number",
             "payment_reference",
             "payment_declared_at",
@@ -58,7 +62,20 @@ class OrderSerializer(serializers.ModelSerializer):
             "customer_whatsapp_link",
             "shop_whatsapp_link",
         ]
-        read_only_fields = ["reference", "channel", "status", "total_amount", "created_at", "paid_at", "voided_at", "void_reason", "payment_reference", "payment_declared_at"]
+        read_only_fields = [
+            "reference",
+            "channel",
+            "status",
+            "total_amount",
+            "created_at",
+            "paid_at",
+            "voided_at",
+            "void_reason",
+            "payment_method_changed_at",
+            "payment_method_change_reason",
+            "payment_reference",
+            "payment_declared_at",
+        ]
 
     def _whatsapp_message(self, order):
         from apps.notifications.whatsapp import build_confirmation_message

@@ -135,6 +135,39 @@ def _decrement_store_stock(order):
             change_stock(item.product, order.point_of_sale, set_to=0, **kwargs)
 
 
+def change_order_payment_method(order, user, new_method, reason):
+    """
+    Corrige le mode de paiement d'une vente deja payee (erreur de saisie a la caisse ou en ligne).
+    Refuse si la journee de caisse de cette vente est deja cloturee : la fermeture est un instantane fige
+    (DailyClosing.expected_*), la corriger apres coup fausserait silencieusement une comptabilite deja
+    enregistree. Dans ce cas, annuler la vente puis la resaisir est la seule option sure.
+    """
+    from django.db import transaction
+    from rest_framework.exceptions import ValidationError
+
+    if order.status != Order.Status.PAID:
+        raise ValidationError({"detail": "Seule une vente payee peut avoir son mode de paiement corrige."})
+    if order.channel == Order.Channel.POS and order.cashier_id and order.point_of_sale_id and order.paid_at:
+        from apps.reports.models import DailyClosing
+
+        if DailyClosing.objects.filter(date=order.paid_at.date(), point_of_sale_id=order.point_of_sale_id, cashier_id=order.cashier_id).exists():
+            raise ValidationError(
+                {"detail": "La journee de cette vente est deja cloturee : impossible de corriger le mode de paiement sans fausser la comptabilite. Annulez la vente et resaisissez-la."}
+            )
+
+    with transaction.atomic():
+        order = Order.objects.select_for_update().get(pk=order.pk)
+        old_method = order.payment_method
+        if new_method == old_method:
+            return order
+        order.payment_method = new_method
+        order.payment_method_changed_at = timezone.now()
+        order.payment_method_changed_by = user
+        order.payment_method_change_reason = f"{old_method} -> {new_method} : {reason}"[:200]
+        order.save(update_fields=["payment_method", "payment_method_changed_at", "payment_method_changed_by", "payment_method_change_reason"])
+    return order
+
+
 def void_order(order, user, reason):
     """
     Annule (supprime des ventes) une commande : statut ANNULEE, motif et auteur conserves pour le controle, stock

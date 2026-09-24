@@ -82,6 +82,9 @@ class Order(models.Model):
     voided_at = models.DateTimeField(null=True, blank=True)
     voided_by = models.ForeignKey("auth.User", null=True, blank=True, on_delete=models.SET_NULL, related_name="+")
     void_reason = models.CharField(max_length=200, blank=True)
+    payment_method_changed_at = models.DateTimeField(null=True, blank=True)
+    payment_method_changed_by = models.ForeignKey("auth.User", null=True, blank=True, on_delete=models.SET_NULL, related_name="+")
+    payment_method_change_reason = models.CharField(max_length=200, blank=True)
 
     class Meta:
         ordering = ["-created_at"]

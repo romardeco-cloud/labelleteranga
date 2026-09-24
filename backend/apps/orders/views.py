@@ -6,7 +6,7 @@ from rest_framework.response import Response
 from apps.accounts.models import AdminSecurityCode
 
 from .models import Order
-from .services import void_order
+from .services import change_order_payment_method, void_order
 from .serializers import OrderSerializer
 
 
@@ -18,7 +18,7 @@ class OrderViewSet(
     lookup_field = "reference"
 
     def get_permissions(self):
-        if self.action in ("list", "update", "partial_update", "void", "bulk_delete"):
+        if self.action in ("list", "update", "partial_update", "void", "change_payment", "bulk_delete"):
             return [permissions.IsAdminUser()]
         return [permissions.AllowAny()]
 
@@ -62,4 +62,22 @@ class OrderViewSet(
             raise ValidationError({"reason": "Indiquez le motif de l'annulation."})
         AdminSecurityCode.current().verify(str(request.data.get("pin") or ""))
         order = void_order(order, request.user, reason)
+        return Response(OrderSerializer(order).data)
+
+    @action(detail=True, methods=["post"], permission_classes=[permissions.IsAdminUser], url_path="change-payment")
+    def change_payment(self, request, reference=None):
+        """
+        POST /api/orders/<reference>/change-payment/ {payment_method, pin, reason} : corrige le mode de paiement
+        d'une vente deja payee. Reservee a l'administrateur, motif et code secret a 4 chiffres obligatoires,
+        comme pour l'annulation. Refusee si la journee de caisse concernee est deja cloturee.
+        """
+        order = self.get_object()
+        new_method = str(request.data.get("payment_method") or "")
+        if new_method not in {key for key, _ in Order.PaymentMethod.choices}:
+            raise ValidationError({"payment_method": "Mode de paiement invalide."})
+        reason = str(request.data.get("reason") or "").strip()
+        if not reason:
+            raise ValidationError({"reason": "Indiquez le motif de la correction."})
+        AdminSecurityCode.current().verify(str(request.data.get("pin") or ""))
+        order = change_order_payment_method(order, request.user, new_method, reason)
         return Response(OrderSerializer(order).data)
