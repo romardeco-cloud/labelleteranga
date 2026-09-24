@@ -5,6 +5,7 @@ import Link from "next/link";
 import { useCallback, useEffect, useMemo, useState } from "react";
 import { Area, AreaChart, CartesianGrid, Cell, Pie, PieChart, ResponsiveContainer, Tooltip, XAxis, YAxis } from "recharts";
 import Icon, { IconName } from "@/components/admin/Icon";
+import PendingCorrections from "@/components/admin/PendingCorrections";
 import ProductSalesReport from "@/components/ProductSalesReport";
 import { PointOfSale, fetchPointsOfSale } from "@/lib/api";
 import { Dashboard, DashboardKpi, Period, fetchDashboard } from "@/lib/dashboard";
@@ -116,6 +117,9 @@ export default function AdminDashboardPage() {
           </button>
         </div>
       </div>
+
+      {/* Demandes des caissiers en attente */}
+      <PendingCorrections />
 
       {/* Acces rapide */}
       <div className="grid sm:grid-cols-2 gap-4 print:hidden">
