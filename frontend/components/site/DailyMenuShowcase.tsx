@@ -101,7 +101,19 @@ function DishCard({ item, slug }: { item: DailyMenuItem; slug: string }) {
   );
 }
 
-function Carousel({ title, note, items, slug }: { title: string; note?: string; items: DailyMenuItem[]; slug: string }) {
+function Carousel({
+  title,
+  note,
+  lunchItems,
+  specialItems,
+  slug,
+}: {
+  title: string;
+  note?: string;
+  lunchItems: DailyMenuItem[];
+  specialItems: DailyMenuItem[];
+  slug: string;
+}) {
   return (
     <div className="mb-6 last:mb-0">
       <div className="flex items-baseline gap-2 flex-wrap mb-3 px-1">
@@ -109,8 +121,14 @@ function Carousel({ title, note, items, slug }: { title: string; note?: string; 
         {note && <span className="text-xs sm:text-sm text-[#f5e6c8]/70">{note}</span>}
       </div>
       <div className="flex gap-3 sm:gap-4 overflow-x-auto pb-2 snap-x snap-mandatory [scrollbar-width:none] [&::-webkit-scrollbar]:hidden">
-        {items.map((i) => (
-          <DishCard key={i.product.id} item={i} slug={slug} />
+        {lunchItems.map((i) => (
+          <DishCard key={`lunch-${i.product.id}`} item={i} slug={slug} />
+        ))}
+        {lunchItems.length > 0 && specialItems.length > 0 && (
+          <div className="shrink-0 self-stretch w-1 sm:w-1.5 my-2 rounded-full bg-white/90" aria-hidden />
+        )}
+        {specialItems.map((i) => (
+          <DishCard key={`special-${i.product.id}`} item={i} slug={slug} />
         ))}
       </div>
     </div>
@@ -200,7 +218,7 @@ export default function DailyMenuShowcase({ menus }: { menus: SiteDailyMenus }) 
             className="w-16 h-16 sm:w-20 sm:h-20 rounded-full shadow-lg ring-2 ring-white/40 object-cover mb-4"
           />
           <p className="text-[#deb25a] text-xs tracking-[0.3em] font-bold uppercase mb-2">La Belle Teranga</p>
-          <h1 className="font-serif text-3xl sm:text-4xl font-bold text-[#f5e6c8] leading-tight mb-2">Spéciaux du jour</h1>
+          <h1 className="font-serif text-3xl sm:text-4xl font-bold text-[#f5e6c8] leading-tight mb-2">Menu du jour et spéciaux</h1>
           <div className="w-14 h-0.5 bg-[#deb25a] mb-4" />
           <p className="text-[#f5e6c8]/90 text-sm sm:text-base mb-6">
             {site.description || "Thiéboudienne, yassa, mafé, domoda, étodjey... le goût de chez nous, préparé avec soin et servi chaud."}
@@ -219,7 +237,8 @@ export default function DailyMenuShowcase({ menus }: { menus: SiteDailyMenus }) 
           <Carousel
             title={[menus.lunch?.title, menus.special?.title].filter(Boolean).join(" • ")}
             note={[menus.lunch?.note, menus.special?.note].filter(Boolean).join(" — ")}
-            items={[...(menus.lunch?.items ?? []), ...(menus.special?.items ?? [])]}
+            lunchItems={menus.lunch?.items ?? []}
+            specialItems={menus.special?.items ?? []}
             slug={site.slug}
           />
           {menus.lunch && <OrderByNumber menu={menus.lunch} />}
