@@ -101,15 +101,15 @@ function DishCard({ item, slug }: { item: DailyMenuItem; slug: string }) {
   );
 }
 
-function Carousel({ menu, slug }: { menu: DailyMenu; slug: string }) {
+function Carousel({ title, note, items, slug }: { title: string; note?: string; items: DailyMenuItem[]; slug: string }) {
   return (
     <div className="mb-6 last:mb-0">
       <div className="flex items-baseline gap-2 flex-wrap mb-3 px-1">
-        <h2 className="text-lg sm:text-xl font-bold text-[#f5e6c8]">{menu.title}</h2>
-        {menu.note && <span className="text-xs sm:text-sm text-[#f5e6c8]/70">{menu.note}</span>}
+        <h2 className="text-lg sm:text-xl font-bold text-[#f5e6c8]">{title}</h2>
+        {note && <span className="text-xs sm:text-sm text-[#f5e6c8]/70">{note}</span>}
       </div>
       <div className="flex gap-3 sm:gap-4 overflow-x-auto pb-2 snap-x snap-mandatory [scrollbar-width:none] [&::-webkit-scrollbar]:hidden">
-        {menu.items.map((i) => (
+        {items.map((i) => (
           <DishCard key={i.product.id} item={i} slug={slug} />
         ))}
       </div>
@@ -216,13 +216,13 @@ export default function DailyMenuShowcase({ menus }: { menus: SiteDailyMenus }) 
         </div>
 
         <div className="flex-1 min-w-0">
-          {menus.special && <Carousel menu={menus.special} slug={site.slug} />}
-          {menus.lunch && (
-            <>
-              <Carousel menu={menus.lunch} slug={site.slug} />
-              <OrderByNumber menu={menus.lunch} />
-            </>
-          )}
+          <Carousel
+            title={[menus.lunch?.title, menus.special?.title].filter(Boolean).join(" • ")}
+            note={[menus.lunch?.note, menus.special?.note].filter(Boolean).join(" — ")}
+            items={[...(menus.lunch?.items ?? []), ...(menus.special?.items ?? [])]}
+            slug={site.slug}
+          />
+          {menus.lunch && <OrderByNumber menu={menus.lunch} />}
         </div>
       </div>
     </div>
