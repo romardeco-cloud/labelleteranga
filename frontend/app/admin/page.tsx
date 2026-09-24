@@ -117,6 +117,20 @@ export default function AdminDashboardPage() {
         </div>
       </div>
 
+      {/* Acces rapide */}
+      <div className="grid sm:grid-cols-2 gap-4 print:hidden">
+        <Link
+          href="/admin/orders"
+          className="flex items-center gap-4 border border-[#f5b942]/30 bg-[#f5b942]/10 rounded-xl p-4 hover:bg-[#f5b942]/15"
+        >
+          <Icon name="receipt" className="w-6 h-6 text-[#f5b942]" />
+          <div>
+            <p className="font-semibold">Annuler ou corriger une vente</p>
+            <p className="text-sm text-gray-500">Commandes et ventes : supprimer une vente validee ou corriger son mode de paiement</p>
+          </div>
+        </Link>
+      </div>
+
       {/* Filtres : site + periode */}
       <div className="flex flex-wrap items-center gap-3 print:hidden">
         <div className="flex flex-wrap gap-1 border rounded-xl p-1 bg-[#1c1514]">
