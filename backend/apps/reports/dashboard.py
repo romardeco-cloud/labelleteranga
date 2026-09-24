@@ -53,9 +53,11 @@ class Totals:
             po_pay = po_pay.filter(purchase_order__point_of_sale_id=store)
         self.orders, self.inv_pay, self.po_pay = orders, inv_pay, po_pay
 
-        agg = orders.aggregate(total=Sum("total_amount"), n=Count("id"))
+        agg = orders.aggregate(total=Sum("total_amount"), n=Count("id"), tips=Sum("tip_amount"))
         self.sales = _f(agg["total"])
         self.orders_count = agg["n"] or 0
+        # deja compris dans self.sales (Order.total_amount inclut le pourboire) : purement informatif, jamais retire.
+        self.tips = _f(agg["tips"])
         self.invoices = _f(inv_pay.aggregate(t=Sum("amount"))["t"])
         self.revenue = self.sales + self.invoices
         self.expenses = _f(po_pay.aggregate(t=Sum("amount"))["t"])
@@ -134,6 +136,7 @@ class DashboardView(APIView):
             _kpi("expenses", "Depenses (achats payes)", cur.expenses, prev.expenses),
             _kpi("net", "Solde net", cur.net, prev.net),
             _kpi("ticket", "Panier moyen", cur.average_ticket, prev.average_ticket),
+            _kpi("tips", "Pourboires", cur.tips, prev.tips, hint="Deja compris dans les ventes, sans effet sur l'ecart de caisse."),
         ]
 
         # --- sites

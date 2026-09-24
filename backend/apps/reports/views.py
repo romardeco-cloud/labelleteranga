@@ -423,7 +423,7 @@ class DailyClosingViewSet(viewsets.ModelViewSet):
 
         for_date = self._date_param(request.query_params.get("date"))
         profile = self._profile(request.query_params.get("cashier"))
-        from apps.pos.services import cashier_expected_with_carryover, opening_cash_for
+        from apps.pos.services import cashier_expected_with_carryover, cashier_tips_with_carryover, opening_cash_for
 
         combined, own, carried, prior_dates, n = cashier_expected_with_carryover(profile, for_date)
         closing = DailyClosing.objects.filter(date=for_date, point_of_sale=profile.point_of_sale, cashier=profile.user).first()
@@ -441,6 +441,8 @@ class DailyClosingViewSet(viewsets.ModelViewSet):
                     "orange_money": combined["orange_money"],
                     "cash": combined["cash"],
                 },
+                # purement informatif : deja compris dans "expected" ci-dessus, jamais compare/attendu separement
+                "tips": cashier_tips_with_carryover(profile, for_date),
                 "opening_cash": opening_cash_for(profile, for_date),
                 "carried_over": carried if prior_dates else None,
                 "carried_over_since": prior_dates[0] if prior_dates else None,

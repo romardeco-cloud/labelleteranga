@@ -45,6 +45,11 @@ class DailyClosing(models.Model):
     declared_orange_money = models.DecimalField(max_digits=12, decimal_places=2, default=0)
     declared_cash = models.DecimalField(max_digits=12, decimal_places=2, default=0)
 
+    # Purement informatif : deja compris dans expected_cash/wave/orange_money/card (le pourboire fait partie du
+    # total encaisse), jamais retire de ces montants ni compare a un attendu propre. N'entre dans AUCUN des
+    # discrepancy_* ci-dessous, qui ne portent que sur expected_*/declared_*.
+    tips_total = models.DecimalField("Pourboires (informatif)", max_digits=12, decimal_places=2, default=0)
+
     notes = models.TextField(blank=True)
     # Suivi des corrections faites par un caissier apres avoir vu son ecart
     initial_discrepancy_total = models.DecimalField(max_digits=12, decimal_places=2, default=0)

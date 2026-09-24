@@ -449,6 +449,7 @@ def sales_report_pdf(start, end, store=None):
         [f"   dont ventes caisse et en ligne ({cur.orders_count} vente(s))", fmt(cur.sales)],
         ["   dont factures encaissees", fmt(cur.invoices)],
         ["Panier moyen", fmt(cur.average_ticket)],
+        ["   dont pourboires (deja compris ci-dessus)", fmt(cur.tips)],
         ["Depenses (paiements fournisseurs)", fmt(cur.expenses)],
         ["Solde net", fmt(cur.net)],
     ]

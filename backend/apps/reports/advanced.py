@@ -66,8 +66,9 @@ class OverviewReportView(APIView):
     def get(self, request):
         start, end, store = _period(request)
         orders = _paid_orders(start, end, store)
-        agg = orders.aggregate(revenue=Sum("total_amount"), n=Count("id"))
+        agg = orders.aggregate(revenue=Sum("total_amount"), n=Count("id"), tips=Sum("tip_amount"))
         revenue, n = _f(agg["revenue"]), agg["n"] or 0
+        tips = _f(agg["tips"])  # deja compris dans revenue, purement informatif
 
         by_day_rows = (
             orders.annotate(day=TruncDate("paid_at")).values("day").annotate(revenue=Sum("total_amount"), n=Count("id")).order_by("day")
@@ -139,6 +140,7 @@ class OverviewReportView(APIView):
                 "sales": {
                     "revenue": revenue,
                     "orders_count": n,
+                    "tips": tips,
                     "average_ticket": round(revenue / n, 2) if n else 0,
                     "by_payment_method": _group(orders, "payment_method", lambda k: METHOD_LABELS.get(k, k)),
                     "by_channel": _group(orders, "channel", lambda k: "Caisse (magasin)" if k == "pos" else "En ligne"),

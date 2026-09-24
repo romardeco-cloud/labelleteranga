@@ -36,6 +36,7 @@ class DailyClosingSerializer(serializers.ModelSerializer):
             "declared_orange_money",
             "declared_cash",
             "declared_total",
+            "tips_total",
             "discrepancy_card",
             "discrepancy_wave",
             "discrepancy_orange_money",
@@ -56,6 +57,7 @@ class DailyClosingSerializer(serializers.ModelSerializer):
             "expected_wave",
             "expected_orange_money",
             "expected_cash",
+            "tips_total",
             "initial_discrepancy_total",
             "revision_count",
         ]

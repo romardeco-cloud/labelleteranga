@@ -140,6 +140,29 @@ def _unclosed_prior_dates(cashier_profile, before_date):
     return sorted(d for d in dates if d not in closed)
 
 
+def _tips_for_day(cashier_profile, for_date):
+    """Pourboires (deja compris dans les ventes) de ce caissier ce jour-la. Purement informatif : jamais
+    retire des totaux especes/wave/orange money/carte, jamais compare a un attendu, jamais dans un ecart."""
+    from django.db.models import Sum
+
+    return Order.objects.filter(
+        status=Order.Status.PAID,
+        channel=Order.Channel.POS,
+        cashier=cashier_profile.user,
+        point_of_sale=cashier_profile.point_of_sale,
+        paid_at__date=for_date,
+    ).aggregate(t=Sum("tip_amount"))["t"] or Decimal("0")
+
+
+def cashier_tips_with_carryover(cashier_profile, for_date):
+    """Total des pourboires du jour + des jours anterieurs jamais fermes, regroupes comme pour l'attendu
+    (cf. cashier_expected_with_carryover). Purement informatif, ne participe a aucun calcul d'ecart."""
+    total = _tips_for_day(cashier_profile, for_date)
+    for d in _unclosed_prior_dates(cashier_profile, for_date):
+        total += _tips_for_day(cashier_profile, d)
+    return total
+
+
 def cashier_expected_with_carryover(cashier_profile, for_date):
     """
     Attendu du jour + solde des jours precedents jamais fermes (le caissier ne compte qu'une seule fois l'argent
@@ -236,6 +259,7 @@ def close_cashier_day(cashier_profile, declared, notes="", for_date=None, closed
             notes=f"Solde reporte : cloture avec la journee du {today.strftime('%d/%m/%Y')}.",
             expected_card=t["card"], expected_wave=t["wave"], expected_orange_money=t["orange_money"], expected_cash=t["cash"],
             declared_card=t["card"], declared_wave=t["wave"], declared_orange_money=t["orange_money"], declared_cash=t["cash"],
+            tips_total=_tips_for_day(cashier_profile, d),
             auto_closed=True,
         )
 
@@ -262,6 +286,7 @@ def close_cashier_day(cashier_profile, declared, notes="", for_date=None, closed
     }
     covers_from = prior_dates[0] if prior_dates else None
     notes = (notes or "")[:1000]
+    tips_total = cashier_tips_with_carryover(cashier_profile, today)
 
     closing = DailyClosing.objects.select_for_update().filter(
         date=today, point_of_sale=cashier_profile.point_of_sale, cashier=cashier_profile.user
@@ -282,6 +307,7 @@ def close_cashier_day(cashier_profile, declared, notes="", for_date=None, closed
             closed_by=closed_by or cashier_profile.user,
             notes=notes,
             covers_from=covers_from,
+            tips_total=tips_total,
             **values,
             **expected,
         )
@@ -291,6 +317,7 @@ def close_cashier_day(cashier_profile, declared, notes="", for_date=None, closed
 
     for field, value in {**values, **expected}.items():
         setattr(closing, field, value)
+    closing.tips_total = tips_total
     if notes:
         closing.notes = notes
     closing.revision_count += 1
@@ -337,6 +364,7 @@ def auto_close_overdue_cashiers(only_profile=None, store=None):
                 notes="Fermeture automatique : caisse non fermee par le caissier avant 2h du matin.",
                 expected_card=totals["card"], expected_wave=totals["wave"], expected_orange_money=totals["orange_money"], expected_cash=totals["cash"],
                 declared_card=totals["card"], declared_wave=totals["wave"], declared_orange_money=totals["orange_money"], declared_cash=totals["cash"],
+                tips_total=_tips_for_day(profile, d),
                 auto_closed=True,
             )
             closed += 1
