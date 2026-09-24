@@ -101,19 +101,7 @@ function DishCard({ item, slug }: { item: DailyMenuItem; slug: string }) {
   );
 }
 
-function Carousel({
-  title,
-  note,
-  lunchItems,
-  specialItems,
-  slug,
-}: {
-  title: string;
-  note?: string;
-  lunchItems: DailyMenuItem[];
-  specialItems: DailyMenuItem[];
-  slug: string;
-}) {
+function Carousel({ title, note, items, slug }: { title: string; note?: string; items: DailyMenuItem[]; slug: string }) {
   return (
     <div className="mb-6 last:mb-0">
       <div className="flex items-baseline gap-2 flex-wrap mb-3 px-1">
@@ -121,14 +109,8 @@ function Carousel({
         {note && <span className="text-xs sm:text-sm text-[#f5e6c8]/70">{note}</span>}
       </div>
       <div className="flex gap-3 sm:gap-4 overflow-x-auto pb-2 snap-x snap-mandatory [scrollbar-width:none] [&::-webkit-scrollbar]:hidden">
-        {lunchItems.map((i) => (
-          <DishCard key={`lunch-${i.product.id}`} item={i} slug={slug} />
-        ))}
-        {lunchItems.length > 0 && specialItems.length > 0 && (
-          <div className="shrink-0 self-stretch w-1 sm:w-1.5 my-2 rounded-full bg-white/90" aria-hidden />
-        )}
-        {specialItems.map((i) => (
-          <DishCard key={`special-${i.product.id}`} item={i} slug={slug} />
+        {items.map((i) => (
+          <DishCard key={i.product.id} item={i} slug={slug} />
         ))}
       </div>
     </div>
@@ -235,13 +217,8 @@ export default function DailyMenuShowcase({ menus }: { menus: SiteDailyMenus }) 
         </div>
 
         <div className="flex-1 min-w-0">
-          <Carousel
-            title={[menus.lunch?.title, menus.special?.title].filter(Boolean).join(" • ")}
-            note={[menus.lunch?.note, menus.special?.note].filter(Boolean).join(" — ")}
-            lunchItems={menus.lunch?.items ?? []}
-            specialItems={menus.special?.items ?? []}
-            slug={site.slug}
-          />
+          {menus.lunch && <Carousel title={menus.lunch.title} note={menus.lunch.note} items={menus.lunch.items} slug={site.slug} />}
+          {menus.special && <Carousel title={menus.special.title} note={menus.special.note} items={menus.special.items} slug={site.slug} />}
           {menus.lunch && <OrderByNumber menu={menus.lunch} />}
         </div>
       </div>
