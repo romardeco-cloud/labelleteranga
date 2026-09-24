@@ -84,7 +84,7 @@ export default function StoreHomePage() {
       <div className="max-w-6xl mx-auto px-4 py-4 sm:py-8">
         <PromoBands />
         <LoyaltyBanner />
-        <div className="sticky top-[66px] z-10 -mx-4 px-4 pt-2 pb-2 bg-[#fdf8ee]/95 backdrop-blur border-b border-brand/10 mb-4">
+        <div className="sticky top-[76px] z-10 -mx-4 px-4 pt-2 pb-2 bg-[#fdf8ee]/95 backdrop-blur border-b border-brand/10 mb-4">
         <input
           type="search"
           placeholder={isResto ? "🔍 Rechercher un plat..." : "🔍 Rechercher un produit..."}
