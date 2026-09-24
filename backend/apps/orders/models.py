@@ -86,6 +86,18 @@ class Order(models.Model):
     payment_method_changed_by = models.ForeignKey("auth.User", null=True, blank=True, on_delete=models.SET_NULL, related_name="+")
     payment_method_change_reason = models.CharField(max_length=200, blank=True)
 
+    class PendingAction(models.TextChoices):
+        VOID = "void", "Annulation"
+        CHANGE_PAYMENT = "change_payment", "Correction de paiement"
+
+    # Demande faite par un caissier (code secondaire) depuis la caisse : n'a AUCUN effet tant que l'administrateur
+    # ne l'a pas confirmee (code principal). A tout moment, jamais lie a une heure de fermeture particuliere.
+    pending_action = models.CharField(max_length=20, choices=PendingAction.choices, blank=True)
+    pending_payment_method = models.CharField(max_length=20, choices=PaymentMethod.choices, blank=True)
+    pending_reason = models.CharField(max_length=200, blank=True)
+    pending_requested_by = models.ForeignKey("auth.User", null=True, blank=True, on_delete=models.SET_NULL, related_name="+")
+    pending_requested_at = models.DateTimeField(null=True, blank=True)
+
     class Meta:
         ordering = ["-created_at"]
 

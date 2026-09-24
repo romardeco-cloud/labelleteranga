@@ -164,7 +164,7 @@ class SecondarySecurityCodeView(APIView):
 
     def get_permissions(self):
         if self.request.method == "GET":
-            return [permissions.IsAdminUser() | IsCashier()]
+            return [(permissions.IsAdminUser | IsCashier)()]
         return [permissions.IsAdminUser()]
 
     def get(self, request):

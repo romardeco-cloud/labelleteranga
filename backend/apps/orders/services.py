@@ -168,6 +168,68 @@ def change_order_payment_method(order, user, new_method, reason):
     return order
 
 
+def request_correction(order, user, action, reason, new_payment_method=None):
+    """
+    Demande d'un caissier (code secondaire, depuis la caisse) : annulation ou correction de paiement d'une de
+    SES PROPRES ventes du jour. N'a AUCUN effet sur la vente : elle reste en attente jusqu'a ce que
+    l'administrateur la confirme (code principal) ou la rejette, a n'importe quel moment.
+    """
+    from rest_framework.exceptions import ValidationError
+
+    if order.status != Order.Status.PAID:
+        raise ValidationError({"detail": "Seule une vente payee peut faire l'objet d'une demande."})
+    if order.pending_action:
+        raise ValidationError({"detail": "Une demande est deja en attente de confirmation pour cette vente."})
+    if action == Order.PendingAction.CHANGE_PAYMENT:
+        if new_payment_method not in {k for k, _ in Order.PaymentMethod.choices}:
+            raise ValidationError({"payment_method": "Mode de paiement invalide."})
+        if new_payment_method == order.payment_method:
+            raise ValidationError({"payment_method": "Ce mode de paiement est deja celui de la vente."})
+
+    order.pending_action = action
+    order.pending_payment_method = new_payment_method or ""
+    order.pending_reason = (reason or "")[:200]
+    order.pending_requested_by = user
+    order.pending_requested_at = timezone.now()
+    order.save(update_fields=["pending_action", "pending_payment_method", "pending_reason", "pending_requested_by", "pending_requested_at"])
+    return order
+
+
+def _clear_pending(order):
+    order.pending_action = ""
+    order.pending_payment_method = ""
+    order.pending_reason = ""
+    order.pending_requested_by = None
+    order.pending_requested_at = None
+    order.save(update_fields=["pending_action", "pending_payment_method", "pending_reason", "pending_requested_by", "pending_requested_at"])
+
+
+def confirm_correction(order, admin_user):
+    """Applique (code principal) la demande en attente d'un caissier : annulation ou correction de paiement."""
+    from rest_framework.exceptions import ValidationError
+
+    if not order.pending_action:
+        raise ValidationError({"detail": "Aucune demande en attente pour cette vente."})
+    who = order.pending_requested_by.username if order.pending_requested_by_id else "un caissier"
+    reason = f"{order.pending_reason} (demande par {who}, confirmee par {admin_user.username})"[:200]
+    if order.pending_action == Order.PendingAction.VOID:
+        order = void_order(order, admin_user, reason)
+    else:
+        order = change_order_payment_method(order, admin_user, order.pending_payment_method, reason)
+    _clear_pending(order)
+    return order
+
+
+def reject_correction(order, admin_user):
+    """Rejette (code principal), sans aucun effet sur la vente, la demande en attente d'un caissier."""
+    from rest_framework.exceptions import ValidationError
+
+    if not order.pending_action:
+        raise ValidationError({"detail": "Aucune demande en attente pour cette vente."})
+    _clear_pending(order)
+    return order
+
+
 def void_order(order, user, reason):
     """
     Annule (supprime des ventes) une commande : statut ANNULEE, motif et auteur conserves pour le controle, stock

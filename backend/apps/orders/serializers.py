@@ -18,6 +18,7 @@ class OrderSerializer(serializers.ModelSerializer):
     point_of_sale_name = serializers.CharField(source="point_of_sale.name", read_only=True, default=None)
     voided_by_username = serializers.CharField(source="voided_by.username", read_only=True, default=None)
     payment_method_changed_by_username = serializers.CharField(source="payment_method_changed_by.username", read_only=True, default=None)
+    pending_requested_by_username = serializers.CharField(source="pending_requested_by.username", read_only=True, default=None)
     order_number = serializers.CharField(read_only=True)
 
     class Meta:
@@ -53,6 +54,11 @@ class OrderSerializer(serializers.ModelSerializer):
             "payment_method_changed_at",
             "payment_method_changed_by_username",
             "payment_method_change_reason",
+            "pending_action",
+            "pending_payment_method",
+            "pending_reason",
+            "pending_requested_by_username",
+            "pending_requested_at",
             "order_number",
             "payment_reference",
             "payment_declared_at",
@@ -73,6 +79,10 @@ class OrderSerializer(serializers.ModelSerializer):
             "void_reason",
             "payment_method_changed_at",
             "payment_method_change_reason",
+            "pending_action",
+            "pending_payment_method",
+            "pending_reason",
+            "pending_requested_at",
             "payment_reference",
             "payment_declared_at",
         ]

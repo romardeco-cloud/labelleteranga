@@ -9,6 +9,9 @@ from apps.accounts.permissions import IsCashier
 
 from .models import Order
 from .services import change_order_payment_method, void_order
+from .services import confirm_correction as apply_confirmed_correction
+from .services import reject_correction as apply_rejected_correction
+from .services import request_correction
 from .serializers import OrderSerializer
 
 
@@ -20,22 +23,14 @@ class OrderViewSet(
     lookup_field = "reference"
 
     def get_permissions(self):
-        if self.action in ("list", "update", "partial_update", "bulk_delete"):
+        if self.action in ("list", "update", "partial_update", "bulk_delete", "confirm_correction", "reject_correction"):
             return [permissions.IsAdminUser()]
         if self.action in ("void", "change_payment"):
             return [(permissions.IsAdminUser | IsCashier)()]
         return [permissions.AllowAny()]
 
-    def _authorize_cashier_or_admin(self, request, order):
-        """
-        Admin : code secret principal, sans restriction. Caissier : code secret secondaire (supervise par
-        l'administrateur, cf. Parametres > Securite), et seulement pour SES PROPRES ventes du jour en caisse -
-        jamais une vente en ligne, une vente plus ancienne ou celle d'un autre caissier.
-        """
-        pin = str(request.data.get("pin") or "")
-        if request.user.is_staff:
-            AdminSecurityCode.current().verify(pin)
-            return
+    def _check_cashier_owns_today(self, request, order):
+        """Un caissier ne peut demander une correction que sur SA PROPRE vente du jour en caisse."""
         if (
             order.channel != Order.Channel.POS
             or order.cashier_id != request.user.id
@@ -43,7 +38,6 @@ class OrderViewSet(
             or order.paid_at.date() != timezone.localdate()
         ):
             raise PermissionDenied("Vous ne pouvez agir que sur vos propres ventes du jour.")
-        AdminSecurityCode.current().verify_secondary(pin)
 
     @action(detail=False, methods=["post"], permission_classes=[permissions.IsAdminUser], url_path="bulk-delete")
     def bulk_delete(self, request):
@@ -77,24 +71,32 @@ class OrderViewSet(
     def void(self, request, reference=None):
         """
         POST /api/orders/<reference>/void/ {pin, reason} : annulation d'une vente validee. Motif et code secret
-        a 4 chiffres obligatoires. L'administrateur peut annuler n'importe quelle vente avec le code principal ;
-        un caissier ne peut annuler que ses propres ventes du jour en caisse, avec le code secondaire.
+        a 4 chiffres obligatoires. Avec le code principal, l'administrateur annule directement n'importe quelle
+        vente. Avec le code secondaire, un caissier ne fait que DEMANDER l'annulation d'une de ses propres
+        ventes du jour : elle n'a aucun effet tant que l'administrateur ne l'a pas confirmee.
         """
         order = self.get_object()
         reason = str(request.data.get("reason") or "").strip()
         if not reason:
             raise ValidationError({"reason": "Indiquez le motif de l'annulation."})
-        self._authorize_cashier_or_admin(request, order)
-        order = void_order(order, request.user, reason)
+        pin = str(request.data.get("pin") or "")
+        if request.user.is_staff:
+            AdminSecurityCode.current().verify(pin)
+            order = void_order(order, request.user, reason)
+        else:
+            self._check_cashier_owns_today(request, order)
+            AdminSecurityCode.current().verify_secondary(pin)
+            order = request_correction(order, request.user, Order.PendingAction.VOID, reason)
         return Response(OrderSerializer(order).data)
 
     @action(detail=True, methods=["post"], url_path="change-payment")
     def change_payment(self, request, reference=None):
         """
         POST /api/orders/<reference>/change-payment/ {payment_method, pin, reason} : corrige le mode de paiement
-        d'une vente deja payee. Motif et code secret a 4 chiffres obligatoires, comme pour l'annulation.
-        L'administrateur peut corriger n'importe quelle vente avec le code principal ; un caissier ne peut
-        corriger que ses propres ventes du jour en caisse, avec le code secondaire. Refusee si la journee de
+        d'une vente deja payee. Motif et code secret a 4 chiffres obligatoires. Avec le code principal,
+        l'administrateur corrige directement n'importe quelle vente. Avec le code secondaire, un caissier ne
+        fait que DEMANDER la correction d'une de ses propres ventes du jour : elle n'a aucun effet tant que
+        l'administrateur ne l'a pas confirmee. Une correction directe (admin) est refusee si la journee de
         caisse concernee est deja cloturee.
         """
         order = self.get_object()
@@ -104,6 +106,27 @@ class OrderViewSet(
         reason = str(request.data.get("reason") or "").strip()
         if not reason:
             raise ValidationError({"reason": "Indiquez le motif de la correction."})
-        self._authorize_cashier_or_admin(request, order)
-        order = change_order_payment_method(order, request.user, new_method, reason)
+        pin = str(request.data.get("pin") or "")
+        if request.user.is_staff:
+            AdminSecurityCode.current().verify(pin)
+            order = change_order_payment_method(order, request.user, new_method, reason)
+        else:
+            self._check_cashier_owns_today(request, order)
+            AdminSecurityCode.current().verify_secondary(pin)
+            order = request_correction(order, request.user, Order.PendingAction.CHANGE_PAYMENT, reason, new_payment_method=new_method)
+        return Response(OrderSerializer(order).data)
+
+    @action(detail=True, methods=["post"], url_path="confirm-correction")
+    def confirm_correction(self, request, reference=None):
+        """POST /api/orders/<reference>/confirm-correction/ {pin} : applique (code principal) la demande en attente d'un caissier."""
+        order = self.get_object()
+        AdminSecurityCode.current().verify(str(request.data.get("pin") or ""))
+        order = apply_confirmed_correction(order, request.user)
+        return Response(OrderSerializer(order).data)
+
+    @action(detail=True, methods=["post"], url_path="reject-correction")
+    def reject_correction(self, request, reference=None):
+        """POST /api/orders/<reference>/reject-correction/ : ecarte, sans effet, la demande en attente d'un caissier."""
+        order = self.get_object()
+        order = apply_rejected_correction(order, request.user)
         return Response(OrderSerializer(order).data)

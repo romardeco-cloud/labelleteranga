@@ -104,6 +104,9 @@ def receipt_payload(order, profile, received=None):
         "table_label": order.table_label,
         "payment_method": order.payment_method,
         "payment_method_label": METHOD_LABELS.get(order.payment_method, order.payment_method),
+        "pending_action": order.pending_action,
+        "pending_payment_method": order.pending_payment_method,
+        "pending_reason": order.pending_reason,
         "items": [
             {
                 "name": i.product_name,
