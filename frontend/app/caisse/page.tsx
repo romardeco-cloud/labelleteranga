@@ -8,8 +8,10 @@ import ProductVisual from "@/components/ProductVisual";
 import { PAYMENT_QR, categoryEmoji, storeImage } from "@/lib/branding";
 import { useToday } from "@/lib/today";
 import { categoryRank, effectiveCategories, loadMenuCategories, saveMenuCategories } from "@/lib/meals";
+import { apiErrorMessage } from "@/lib/documents";
 import {
   API_URL,
+  api,
   CashierClosingState,
   CashierOpeningState,
   fetchCashierClosing,
@@ -94,6 +96,55 @@ export default function CaissePage() {
   const [showX, setShowX] = useState(false);
   const [history, setHistory] = useState<POSReceipt[]>([]);
   const [historyLoading, setHistoryLoading] = useState(false);
+  const [voidingSale, setVoidingSale] = useState<POSReceipt | null>(null);
+  const [voidPin, setVoidPin] = useState("");
+  const [voidReason, setVoidReason] = useState("");
+  const [voidMsg, setVoidMsg] = useState("");
+  const [voidBusy, setVoidBusy] = useState(false);
+  const [correctingSale, setCorrectingSale] = useState<POSReceipt | null>(null);
+  const [correctMethod, setCorrectMethod] = useState<PaymentMethod>("cash");
+  const [correctPin, setCorrectPin] = useState("");
+  const [correctReason, setCorrectReason] = useState("");
+  const [correctMsg, setCorrectMsg] = useState("");
+  const [correctBusy, setCorrectBusy] = useState(false);
+
+  async function confirmVoidSale(e: React.FormEvent) {
+    e.preventDefault();
+    if (!voidingSale) return;
+    setVoidBusy(true);
+    setVoidMsg("");
+    try {
+      await api.post(`/orders/${voidingSale.reference}/void/`, { pin: voidPin, reason: voidReason });
+      setVoidingSale(null);
+      setVoidPin("");
+      setVoidReason("");
+      setHistory(await fetchPOSSalesToday());
+    } catch (err) {
+      setVoidMsg(apiErrorMessage(err, "Annulation impossible."));
+      setVoidPin("");
+    } finally {
+      setVoidBusy(false);
+    }
+  }
+
+  async function confirmCorrectSale(e: React.FormEvent) {
+    e.preventDefault();
+    if (!correctingSale) return;
+    setCorrectBusy(true);
+    setCorrectMsg("");
+    try {
+      await api.post(`/orders/${correctingSale.reference}/change-payment/`, { payment_method: correctMethod, pin: correctPin, reason: correctReason });
+      setCorrectingSale(null);
+      setCorrectPin("");
+      setCorrectReason("");
+      setHistory(await fetchPOSSalesToday());
+    } catch (err) {
+      setCorrectMsg(apiErrorMessage(err, "Correction impossible."));
+      setCorrectPin("");
+    } finally {
+      setCorrectBusy(false);
+    }
+  }
   const [method, setMethod] = useState<PaymentMethod>("cash");
   const [received, setReceived] = useState("");
   const [custPhone, setCustPhone] = useState("");
@@ -1806,20 +1857,140 @@ export default function CaissePage() {
                           {new Date(r.created_at).toLocaleTimeString("fr-FR", { hour: "2-digit", minute: "2-digit" })}
                         </p>
                       </div>
-                      <button
-                        onClick={() => {
-                          setReprint(true);
-                          setReceipt(r);
-                          setPanel(null);
-                        }}
-                        className="border rounded-lg px-3 py-1.5 text-sm hover:bg-white/5"
-                      >
-                        Reimprimer
-                      </button>
+                      <div className="flex flex-col gap-1.5 shrink-0">
+                        <button
+                          onClick={() => {
+                            setReprint(true);
+                            setReceipt(r);
+                            setPanel(null);
+                          }}
+                          className="border rounded-lg px-3 py-1.5 text-sm hover:bg-white/5"
+                        >
+                          Reimprimer
+                        </button>
+                        <button
+                          onClick={() => {
+                            setCorrectingSale(r);
+                            setCorrectMethod(r.payment_method);
+                            setCorrectPin("");
+                            setCorrectReason("");
+                            setCorrectMsg("");
+                          }}
+                          className="border border-brand/40 text-brand rounded-lg px-3 py-1.5 text-sm hover:bg-white/5"
+                        >
+                          Corriger paiement
+                        </button>
+                        <button
+                          onClick={() => {
+                            setVoidingSale(r);
+                            setVoidPin("");
+                            setVoidReason("");
+                            setVoidMsg("");
+                          }}
+                          className="border border-red-500/40 text-red-400 rounded-lg px-3 py-1.5 text-sm hover:bg-white/5"
+                        >
+                          Annuler la vente
+                        </button>
+                      </div>
                     </li>
                   ))}
                 </ul>
               </>
+            )}
+
+            {voidingSale && (
+              <div className="fixed inset-0 z-50 bg-black/70 flex items-center justify-center p-4" onClick={() => setVoidingSale(null)}>
+                <form onSubmit={confirmVoidSale} onClick={(e) => e.stopPropagation()} className="bg-white text-black rounded-2xl p-5 w-full max-w-sm space-y-3">
+                  <h2 className="font-bold text-lg">Annuler la vente {voidingSale.receipt_number}</h2>
+                  <p className="text-sm text-gray-500">
+                    {xof(voidingSale.total)} · {voidingSale.payment_method_label}
+                  </p>
+                  <label className="block text-sm">
+                    Motif
+                    <input required value={voidReason} onChange={(e) => setVoidReason(e.target.value)} placeholder="Ex. erreur de saisie" className="w-full border rounded px-3 py-2 mt-1" />
+                  </label>
+                  <label className="block text-sm">
+                    Code secret caissier (4 chiffres)
+                    <input
+                      required
+                      autoFocus
+                      type="password"
+                      inputMode="numeric"
+                      pattern="[0-9]{4}"
+                      maxLength={4}
+                      value={voidPin}
+                      onChange={(e) => setVoidPin(e.target.value.replace(/\D/g, ""))}
+                      className="w-full border rounded px-3 py-2 mt-1 tracking-[0.6em] text-center text-lg"
+                    />
+                  </label>
+                  {voidMsg && <p className="text-sm text-red-600">{voidMsg}</p>}
+                  <div className="flex gap-2">
+                    <button disabled={voidBusy || voidPin.length !== 4 || !voidReason.trim()} className="flex-1 bg-red-600 text-white rounded-lg py-2.5 font-medium disabled:opacity-40">
+                      {voidBusy ? "Verification..." : "Annuler la vente"}
+                    </button>
+                    <button type="button" onClick={() => setVoidingSale(null)} className="border rounded-lg px-4">
+                      Fermer
+                    </button>
+                  </div>
+                </form>
+              </div>
+            )}
+
+            {correctingSale && (
+              <div className="fixed inset-0 z-50 bg-black/70 flex items-center justify-center p-4" onClick={() => setCorrectingSale(null)}>
+                <form onSubmit={confirmCorrectSale} onClick={(e) => e.stopPropagation()} className="bg-white text-black rounded-2xl p-5 w-full max-w-sm space-y-3">
+                  <h2 className="font-bold text-lg">Corriger le paiement {correctingSale.receipt_number}</h2>
+                  <p className="text-sm text-gray-500">
+                    {xof(correctingSale.total)} · actuellement {correctingSale.payment_method_label}
+                  </p>
+                  <label className="block text-sm">
+                    Nouveau mode de paiement
+                    <select value={correctMethod} onChange={(e) => setCorrectMethod(e.target.value as PaymentMethod)} className="w-full border rounded px-3 py-2 mt-1">
+                      {METHODS.map((m) => (
+                        <option key={m.value} value={m.value}>
+                          {m.label}
+                        </option>
+                      ))}
+                    </select>
+                  </label>
+                  <label className="block text-sm">
+                    Motif
+                    <input
+                      required
+                      value={correctReason}
+                      onChange={(e) => setCorrectReason(e.target.value)}
+                      placeholder="Ex. erreur de saisie"
+                      className="w-full border rounded px-3 py-2 mt-1"
+                    />
+                  </label>
+                  <label className="block text-sm">
+                    Code secret caissier (4 chiffres)
+                    <input
+                      required
+                      autoFocus
+                      type="password"
+                      inputMode="numeric"
+                      pattern="[0-9]{4}"
+                      maxLength={4}
+                      value={correctPin}
+                      onChange={(e) => setCorrectPin(e.target.value.replace(/\D/g, ""))}
+                      className="w-full border rounded px-3 py-2 mt-1 tracking-[0.6em] text-center text-lg"
+                    />
+                  </label>
+                  {correctMsg && <p className="text-sm text-red-600">{correctMsg}</p>}
+                  <div className="flex gap-2">
+                    <button
+                      disabled={correctBusy || correctPin.length !== 4 || !correctReason.trim() || correctMethod === correctingSale.payment_method}
+                      className="flex-1 bg-brand text-white rounded-lg py-2.5 font-medium disabled:opacity-40"
+                    >
+                      {correctBusy ? "Verification..." : "Corriger le paiement"}
+                    </button>
+                    <button type="button" onClick={() => setCorrectingSale(null)} className="border rounded-lg px-4">
+                      Fermer
+                    </button>
+                  </div>
+                </form>
+              </div>
             )}
           </div>
         </div>

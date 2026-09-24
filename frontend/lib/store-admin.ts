@@ -91,6 +91,13 @@ export async function saveSecurityCode(newPin: string, currentPin?: string) {
   return (await api.post<{ is_set: boolean }>("/accounts/security-code/", { new_pin: newPin, current_pin: currentPin })).data;
 }
 
+export async function fetchSecondarySecurityCode() {
+  return (await api.get<{ is_set: boolean }>("/accounts/security-code/secondary/")).data;
+}
+export async function saveSecondarySecurityCode(newPin: string, currentPin: string) {
+  return (await api.post<{ is_set: boolean }>("/accounts/security-code/secondary/", { new_pin: newPin, current_pin: currentPin })).data;
+}
+
 export type StaffUser = { id: number; username: string; email: string; role: string; last_login: string | null };
 export async function fetchStaff() {
   return (await api.get<StaffUser[]>("/accounts/staff/")).data;

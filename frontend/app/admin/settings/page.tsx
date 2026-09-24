@@ -11,9 +11,11 @@ import {
   PayMethodKey,
   StaffUser,
   StoreConfig,
+  fetchSecondarySecurityCode,
   fetchSecurityCode,
   fetchStaff,
   fetchStoreConfig,
+  saveSecondarySecurityCode,
   saveSecurityCode,
   saveStoreConfig,
 } from "@/lib/store-admin";
@@ -138,6 +140,24 @@ export default function AdminSettingsPage() {
     }
   }
 
+  const [secPinSet, setSecPinSet] = useState<boolean | null>(null);
+  const [secPinForm, setSecPinForm] = useState({ current: "", next: "", confirm: "" });
+  const [secPinMsg, setSecPinMsg] = useState<{ ok: boolean; text: string } | null>(null);
+
+  async function submitSecondaryPin(e: React.FormEvent) {
+    e.preventDefault();
+    setSecPinMsg(null);
+    if (secPinForm.next !== secPinForm.confirm) return setSecPinMsg({ ok: false, text: "Les deux codes ne correspondent pas." });
+    try {
+      await saveSecondarySecurityCode(secPinForm.next, secPinForm.current);
+      setSecPinSet(true);
+      setSecPinForm({ current: "", next: "", confirm: "" });
+      setSecPinMsg({ ok: true, text: "Code caissier enregistre." });
+    } catch (err) {
+      setSecPinMsg({ ok: false, text: apiErrorMessage(err, "Enregistrement impossible.") });
+    }
+  }
+
   useEffect(() => {
     fetchPointsOfSale().then((list) => {
       const active = list.filter((s) => s.is_active);
@@ -147,6 +167,7 @@ export default function AdminSettingsPage() {
     fetchCashiers().then(setCashiers).catch(() => setCashiers([]));
     fetchStaff().then(setStaff).catch(() => setStaff([]));
     fetchSecurityCode().then((r) => setPinSet(r.is_set)).catch(() => setPinSet(null));
+    fetchSecondarySecurityCode().then((r) => setSecPinSet(r.is_set)).catch(() => setSecPinSet(null));
   }, []);
 
   const load = useCallback(() => {
@@ -593,6 +614,61 @@ export default function AdminSettingsPage() {
             </div>
           </form>
           <p className="text-xs text-gray-500">Apres 5 essais errones, le code est bloque 15 minutes. Il est stocke chiffre et ne peut pas etre relu.</p>
+        </Card>
+      )}
+
+      {tab === "security" && (
+        <Card icon="lock" title="Code secret caissier (caisse)" tone="text-amber-400">
+          <p className="text-sm text-gray-500">
+            Un second code a 4 chiffres, utilisable directement depuis l&apos;ecran de caisse pour annuler ou corriger une vente du jour, sans
+            donner le code administrateur aux caissiers. Le code administrateur est toujours exige pour le definir ou le changer.{" "}
+            {secPinSet === false && <strong className="text-amber-400">Aucun code caissier n&apos;est defini : les caissiers ne peuvent rien corriger.</strong>}
+          </p>
+          <form onSubmit={submitSecondaryPin} className="grid sm:grid-cols-3 gap-4 max-w-2xl">
+            <Field label="Code administrateur">
+              <input
+                type="password"
+                inputMode="numeric"
+                maxLength={4}
+                value={secPinForm.current}
+                onChange={(e) => setSecPinForm({ ...secPinForm, current: e.target.value.replace(/\D/g, "") })}
+                className={`${inputCls} tracking-[0.5em] text-center`}
+              />
+            </Field>
+            <Field label={secPinSet ? "Nouveau code caissier" : "Code caissier (4 chiffres)"}>
+              <input
+                type="password"
+                inputMode="numeric"
+                maxLength={4}
+                value={secPinForm.next}
+                onChange={(e) => setSecPinForm({ ...secPinForm, next: e.target.value.replace(/\D/g, "") })}
+                className={`${inputCls} tracking-[0.5em] text-center`}
+              />
+            </Field>
+            <Field label="Confirmer le code">
+              <input
+                type="password"
+                inputMode="numeric"
+                maxLength={4}
+                value={secPinForm.confirm}
+                onChange={(e) => setSecPinForm({ ...secPinForm, confirm: e.target.value.replace(/\D/g, "") })}
+                className={`${inputCls} tracking-[0.5em] text-center`}
+              />
+            </Field>
+            <div className="sm:col-span-3 flex items-center gap-4">
+              <button
+                disabled={secPinForm.current.length !== 4 || secPinForm.next.length !== 4 || secPinForm.confirm.length !== 4}
+                className="bg-brand text-white rounded-xl px-6 py-2.5 font-medium disabled:opacity-40"
+              >
+                Enregistrer le code caissier
+              </button>
+              {secPinMsg && <p className={`text-sm ${secPinMsg.ok ? "text-emerald-400" : "text-red-400"}`}>{secPinMsg.text}</p>}
+            </div>
+          </form>
+          <p className="text-xs text-gray-500">
+            Un caissier ne peut agir qu&apos;avec ce code, et uniquement sur ses propres ventes du jour meme, en caisse. Toute annulation ou
+            correction reste enregistree avec son nom.
+          </p>
         </Card>
       )}
 
