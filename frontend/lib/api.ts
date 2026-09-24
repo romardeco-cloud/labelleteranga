@@ -7,7 +7,12 @@ export const api = axios.create({ baseURL: API_URL });
 
 api.interceptors.request.use((config) => {
   if (typeof window !== "undefined") {
-    const isPos = (config.url ?? "").startsWith("/pos/");
+    // Le contexte (caisse vs admin) depend de la PAGE affichee, pas de l'API appelee : certaines actions de la
+    // caisse (annuler/corriger une vente) appellent /orders/... , pas seulement /pos/... . Sur
+    // caisse.labelleteranga.com (et caisse-<magasin>.), le proxy reecrit "/" vers "/caisse" cote serveur : le
+    // chemin visible du navigateur reste "/", d'ou la verification par sous-domaine en plus du chemin.
+    const host = window.location.hostname;
+    const isPos = host === "caisse.labelleteranga.com" || host.startsWith("caisse-") || window.location.pathname.startsWith("/caisse");
     const token = localStorage.getItem(isPos ? "lbt_cashier_token" : "lbt_admin_token");
     if (token && config.headers) {
       config.headers.Authorization = `Bearer ${token}`;
