@@ -210,7 +210,8 @@ export default function DailyMenuShowcase({ menus }: { menus: SiteDailyMenus }) 
   return (
     <div className="w-full bg-gradient-to-br from-[#9c1c1c] via-[#7a1414] to-[#3a0707]">
       <div className="max-w-6xl mx-auto px-4 sm:px-6 py-6 sm:py-10 flex flex-col md:flex-row gap-6 md:gap-8">
-        <div className="md:w-[300px] shrink-0 flex flex-col">
+        <div className="md:w-[300px] shrink-0 flex flex-col relative">
+          <div className="hidden md:block absolute top-0 bottom-0 -right-4 w-1.5 rounded-full bg-white/90" aria-hidden />
           {/* eslint-disable-next-line @next/next/no-img-element */}
           <img
             src="/logo.jpg"
