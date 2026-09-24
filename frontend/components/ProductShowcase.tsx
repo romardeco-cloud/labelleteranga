@@ -37,16 +37,15 @@ function formatXof(value: string | number) {
 // Combos : la photo est un collage (plats + « Pour X personnes » + titre) sans prix ni pied de page - on peut
 // ajouter le prix (toujours a jour) et le contenu par-dessus sans rien dupliquer.
 const COLLAGE_ONLY = new Set(["Combos"]);
-// Pizzas : l'ancien visuel est une fiche DEJA complete (cachet, prix, titre, argument, pied de page tous
-// incrustes dans la photo). Tant qu'une photo brute de remplacement n'est pas fournie, on l'affiche telle
-// quelle sans rien ajouter par-dessus, pour eviter de dupliquer prix/titre/pied de page.
-const FULLY_BRANDED = new Set(["PIZZA", "Pizzas"]);
 
 export default function ProductShowcase({ product, site }: { product: Product; site: Site }) {
   const features = FEATURES[product.category?.name ?? ""] ?? DEFAULT_FEATURES;
   const contact = [site.address, site.phone, site.email].filter(Boolean).join("   •   ");
 
-  if (FULLY_BRANDED.has(product.category?.name ?? "") && product.image) {
+  // Plats classiques (hors combos) : la photo du produit est deja une fiche complete (cachet, prix, titre,
+  // arguments, pied de page tous incrustes dans l'image). On l'affiche telle quelle, sans rien ajouter par-dessus,
+  // pour eviter de dupliquer le prix/titre. Si le prix change, l'image doit etre regeneree.
+  if (!COLLAGE_ONLY.has(product.category?.name ?? "") && product.image) {
     return (
       <div className="rounded-2xl overflow-hidden shadow-lg bg-[#6e0d0d]">
         {/* eslint-disable-next-line @next/next/no-img-element */}
