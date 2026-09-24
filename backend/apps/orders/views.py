@@ -1,9 +1,11 @@
+from django.utils import timezone
 from rest_framework import mixins, permissions, viewsets
 from rest_framework.decorators import action
-from rest_framework.exceptions import ValidationError
+from rest_framework.exceptions import PermissionDenied, ValidationError
 from rest_framework.response import Response
 
 from apps.accounts.models import AdminSecurityCode
+from apps.accounts.permissions import IsCashier
 
 from .models import Order
 from .services import change_order_payment_method, void_order
@@ -18,9 +20,30 @@ class OrderViewSet(
     lookup_field = "reference"
 
     def get_permissions(self):
-        if self.action in ("list", "update", "partial_update", "void", "change_payment", "bulk_delete"):
+        if self.action in ("list", "update", "partial_update", "bulk_delete"):
             return [permissions.IsAdminUser()]
+        if self.action in ("void", "change_payment"):
+            return [(permissions.IsAdminUser | IsCashier)()]
         return [permissions.AllowAny()]
+
+    def _authorize_cashier_or_admin(self, request, order):
+        """
+        Admin : code secret principal, sans restriction. Caissier : code secret secondaire (supervise par
+        l'administrateur, cf. Parametres > Securite), et seulement pour SES PROPRES ventes du jour en caisse -
+        jamais une vente en ligne, une vente plus ancienne ou celle d'un autre caissier.
+        """
+        pin = str(request.data.get("pin") or "")
+        if request.user.is_staff:
+            AdminSecurityCode.current().verify(pin)
+            return
+        if (
+            order.channel != Order.Channel.POS
+            or order.cashier_id != request.user.id
+            or not order.paid_at
+            or order.paid_at.date() != timezone.localdate()
+        ):
+            raise PermissionDenied("Vous ne pouvez agir que sur vos propres ventes du jour.")
+        AdminSecurityCode.current().verify_secondary(pin)
 
     @action(detail=False, methods=["post"], permission_classes=[permissions.IsAdminUser], url_path="bulk-delete")
     def bulk_delete(self, request):
@@ -50,26 +73,29 @@ class OrderViewSet(
                 deleted += 1
         return Response({"deleted": deleted, "skipped": len(refs) - deleted})
 
-    @action(detail=True, methods=["post"], permission_classes=[permissions.IsAdminUser])
+    @action(detail=True, methods=["post"])
     def void(self, request, reference=None):
         """
-        POST /api/orders/<reference>/void/ {pin, reason} : annulation d'une vente validee. Reservee a l'administrateur
-        (les caissiers n'ont aucun acces) et soumise au code secret a 4 chiffres.
+        POST /api/orders/<reference>/void/ {pin, reason} : annulation d'une vente validee. Motif et code secret
+        a 4 chiffres obligatoires. L'administrateur peut annuler n'importe quelle vente avec le code principal ;
+        un caissier ne peut annuler que ses propres ventes du jour en caisse, avec le code secondaire.
         """
         order = self.get_object()
         reason = str(request.data.get("reason") or "").strip()
         if not reason:
             raise ValidationError({"reason": "Indiquez le motif de l'annulation."})
-        AdminSecurityCode.current().verify(str(request.data.get("pin") or ""))
+        self._authorize_cashier_or_admin(request, order)
         order = void_order(order, request.user, reason)
         return Response(OrderSerializer(order).data)
 
-    @action(detail=True, methods=["post"], permission_classes=[permissions.IsAdminUser], url_path="change-payment")
+    @action(detail=True, methods=["post"], url_path="change-payment")
     def change_payment(self, request, reference=None):
         """
         POST /api/orders/<reference>/change-payment/ {payment_method, pin, reason} : corrige le mode de paiement
-        d'une vente deja payee. Reservee a l'administrateur, motif et code secret a 4 chiffres obligatoires,
-        comme pour l'annulation. Refusee si la journee de caisse concernee est deja cloturee.
+        d'une vente deja payee. Motif et code secret a 4 chiffres obligatoires, comme pour l'annulation.
+        L'administrateur peut corriger n'importe quelle vente avec le code principal ; un caissier ne peut
+        corriger que ses propres ventes du jour en caisse, avec le code secondaire. Refusee si la journee de
+        caisse concernee est deja cloturee.
         """
         order = self.get_object()
         new_method = str(request.data.get("payment_method") or "")
@@ -78,6 +104,6 @@ class OrderViewSet(
         reason = str(request.data.get("reason") or "").strip()
         if not reason:
             raise ValidationError({"reason": "Indiquez le motif de la correction."})
-        AdminSecurityCode.current().verify(str(request.data.get("pin") or ""))
+        self._authorize_cashier_or_admin(request, order)
         order = change_order_payment_method(order, request.user, new_method, reason)
         return Response(OrderSerializer(order).data)

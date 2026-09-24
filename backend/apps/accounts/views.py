@@ -7,6 +7,7 @@ from rest_framework_simplejwt.serializers import TokenObtainPairSerializer
 from rest_framework_simplejwt.views import TokenObtainPairView
 
 from .models import AdminSecurityCode, CashierProfile
+from .permissions import IsCashier
 
 
 class AdminTokenObtainPairSerializer(TokenObtainPairSerializer):
@@ -151,4 +152,28 @@ class SecurityCodeView(APIView):
         if code.is_set:
             code.verify(str(request.data.get("current_pin") or ""))
         code.set_pin(new_pin)
+        return Response({"is_set": True})
+
+
+class SecondarySecurityCodeView(APIView):
+    """
+    GET  /api/accounts/security-code/secondary/ -> {is_set}
+    POST /api/accounts/security-code/secondary/ {new_pin, current_pin} : definit ou change le code caissier.
+    Le code PRINCIPAL est toujours exige pour definir/changer le code secondaire (supervision par l'administrateur).
+    """
+
+    def get_permissions(self):
+        if self.request.method == "GET":
+            return [permissions.IsAdminUser() | IsCashier()]
+        return [permissions.IsAdminUser()]
+
+    def get(self, request):
+        return Response({"is_set": AdminSecurityCode.current().is_secondary_set})
+
+    def post(self, request):
+        code = AdminSecurityCode.current()
+        new_pin = str(request.data.get("new_pin") or "")
+        AdminSecurityCode.validate_format(new_pin)
+        code.verify(str(request.data.get("current_pin") or ""))
+        code.set_secondary_pin(new_pin)
         return Response({"is_set": True})

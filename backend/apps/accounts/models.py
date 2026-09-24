@@ -30,6 +30,11 @@ class AdminSecurityCode(models.Model):
     pin_hash = models.CharField(max_length=128, blank=True)
     failed_attempts = models.PositiveSmallIntegerField(default=0)
     locked_until = models.DateTimeField(null=True, blank=True)
+    # Code secondaire : meme usage (annuler / corriger une vente), mais utilisable par les caissiers depuis la
+    # caisse elle-meme, sans leur donner le code principal. Seul le code principal permet de le definir/changer.
+    secondary_pin_hash = models.CharField(max_length=128, blank=True)
+    secondary_failed_attempts = models.PositiveSmallIntegerField(default=0)
+    secondary_locked_until = models.DateTimeField(null=True, blank=True)
     updated_at = models.DateTimeField(auto_now=True)
 
     MAX_ATTEMPTS = 5
@@ -42,6 +47,10 @@ class AdminSecurityCode(models.Model):
     @property
     def is_set(self):
         return bool(self.pin_hash)
+
+    @property
+    def is_secondary_set(self):
+        return bool(self.secondary_pin_hash)
 
     @staticmethod
     def validate_format(pin):
@@ -74,3 +83,30 @@ class AdminSecurityCode(models.Model):
         if self.failed_attempts:
             self.failed_attempts = 0
             self.save(update_fields=["failed_attempts"])
+
+    def set_secondary_pin(self, pin):
+        self.validate_format(pin)
+        self.secondary_pin_hash = make_password(pin)
+        self.secondary_failed_attempts = 0
+        self.secondary_locked_until = None
+        self.save()
+
+    def verify_secondary(self, pin):
+        """Meme logique que verify(), pour le code secondaire (caisse) ; compteur d'essais independant du code principal."""
+        if not self.is_secondary_set:
+            raise ValidationError({"pin": "Aucun code caissier defini : demandez a l'administrateur de le creer dans Parametres > Securite."})
+        if self.secondary_locked_until and self.secondary_locked_until > timezone.now():
+            raise Throttled(detail="Trop d'essais. Reessayez dans quelques minutes.")
+        if not isinstance(pin, str) or not check_password(pin, self.secondary_pin_hash):
+            self.secondary_failed_attempts += 1
+            if self.secondary_failed_attempts >= self.MAX_ATTEMPTS:
+                self.secondary_locked_until = timezone.now() + timezone.timedelta(minutes=self.LOCK_MINUTES)
+                self.secondary_failed_attempts = 0
+                self.save()
+                raise Throttled(detail="Trop d'essais. Code bloque 15 minutes.")
+            self.save()
+            left = self.MAX_ATTEMPTS - self.secondary_failed_attempts
+            raise ValidationError({"pin": f"Code secret incorrect ({left} essai(s) restant(s))."})
+        if self.secondary_failed_attempts:
+            self.secondary_failed_attempts = 0
+            self.save(update_fields=["secondary_failed_attempts"])
