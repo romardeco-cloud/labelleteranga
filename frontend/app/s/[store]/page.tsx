@@ -3,7 +3,7 @@
 import Image from "next/image";
 import { useEffect, useState } from "react";
 import ProductCard from "@/components/ProductCard";
-import DailyMenus from "@/components/site/DailyMenus";
+import DailyMenuShowcase, { useHasDailyMenus } from "@/components/site/DailyMenuShowcase";
 import PromoBands from "@/components/site/PromoBands";
 import LoyaltyBanner from "@/components/site/LoyaltyBanner";
 import { useSite } from "@/components/site/SiteContext";
@@ -20,6 +20,8 @@ export default function StoreHomePage() {
   const [page, setPage] = useState(1);
   const [hasMore, setHasMore] = useState(false);
   const isResto = site.slug === "resto";
+  const menus = useHasDailyMenus(site.slug);
+  const hasShowcase = Boolean(menus && (menus.lunch || menus.special));
   // categories et nombre de produits : rafraichis a chaque visite (et au retour sur l'onglet), donc a jour des qu'un produit est ajoute, modifie ou supprime
   const [categories, setCategories] = useState<SiteCategory[]>(site.categories ?? []);
   const [total, setTotal] = useState<number>(site.products_count ?? 0);
@@ -56,28 +58,31 @@ export default function StoreHomePage() {
 
   return (
     <div>
-      <div
-        className="w-full text-center py-5 sm:py-12 px-4 bg-cover bg-center"
-        style={{ backgroundImage: "linear-gradient(rgba(110,18,18,0.6), rgba(110,18,18,0.78)), linear-gradient(135deg, #9c1c1c, #6e1212)" }}
-      >
-        <Image
-          src={storeImage(site.name)}
-          alt={site.name}
-          width={480}
-          height={330}
-          priority
-          className="mx-auto mb-3 sm:mb-4 h-16 sm:h-36 w-auto object-contain rounded-2xl bg-white/95 p-1.5 sm:p-2 shadow-lg ring-2 ring-white/30"
-        />
-        <h1 className="text-2xl sm:text-4xl font-bold text-white mb-1 sm:mb-2 drop-shadow">{shortName(site.name)}</h1>
-        <p className="text-sm sm:text-base text-white/90 max-w-xl mx-auto">
-          {site.description || "Commandez en ligne."}
-        </p>
-        <p className="hidden sm:block text-brand-accent italic mt-1">L&apos;art du service</p>
-      </div>
+      {hasShowcase && menus ? (
+        <DailyMenuShowcase menus={menus} />
+      ) : (
+        <div
+          className="w-full text-center py-5 sm:py-12 px-4 bg-cover bg-center"
+          style={{ backgroundImage: "linear-gradient(rgba(110,18,18,0.6), rgba(110,18,18,0.78)), linear-gradient(135deg, #9c1c1c, #6e1212)" }}
+        >
+          <Image
+            src={storeImage(site.name)}
+            alt={site.name}
+            width={480}
+            height={330}
+            priority
+            className="mx-auto mb-3 sm:mb-4 h-16 sm:h-36 w-auto object-contain rounded-2xl bg-white/95 p-1.5 sm:p-2 shadow-lg ring-2 ring-white/30"
+          />
+          <h1 className="text-2xl sm:text-4xl font-bold text-white mb-1 sm:mb-2 drop-shadow">{shortName(site.name)}</h1>
+          <p className="text-sm sm:text-base text-white/90 max-w-xl mx-auto">
+            {site.description || "Commandez en ligne."}
+          </p>
+          <p className="hidden sm:block text-brand-accent italic mt-1">L&apos;art du service</p>
+        </div>
+      )}
 
       <div className="max-w-6xl mx-auto px-4 py-4 sm:py-8">
         <PromoBands />
-        <DailyMenus />
         <LoyaltyBanner />
         <div className="sticky top-[66px] z-10 -mx-4 px-4 pt-2 pb-2 bg-[#fdf8ee]/95 backdrop-blur border-b border-brand/10 mb-4">
         <input
