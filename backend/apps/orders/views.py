@@ -23,7 +23,7 @@ class OrderViewSet(
     lookup_field = "reference"
 
     def get_permissions(self):
-        if self.action in ("list", "update", "partial_update", "bulk_delete", "confirm_correction", "reject_correction"):
+        if self.action in ("list", "update", "partial_update", "bulk_delete", "confirm_correction", "reject_correction", "pending_corrections"):
             return [permissions.IsAdminUser()]
         if self.action in ("void", "change_payment"):
             return [(permissions.IsAdminUser | IsCashier)()]
@@ -66,6 +66,12 @@ class OrderViewSet(
                 order.delete()
                 deleted += 1
         return Response({"deleted": deleted, "skipped": len(refs) - deleted})
+
+    @action(detail=False, methods=["get"], url_path="pending-corrections")
+    def pending_corrections(self, request):
+        """GET /api/orders/pending-corrections/ : ventes avec une demande de caissier en attente de confirmation, plus recentes d'abord."""
+        qs = self.get_queryset().exclude(pending_action="").order_by("-pending_requested_at")
+        return Response(OrderSerializer(qs, many=True).data)
 
     @action(detail=True, methods=["post"])
     def void(self, request, reference=None):
