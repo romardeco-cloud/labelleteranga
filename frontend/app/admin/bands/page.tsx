@@ -5,7 +5,7 @@ import { Category, PointOfSale, api, fetchCategories, fetchPointsOfSale } from "
 import { apiErrorMessage } from "@/lib/documents";
 import { Band, BandItemIn, deleteBand, fetchBandsAdmin, saveBand } from "@/lib/engage";
 
-type ProductLite = { id: number; name: string; price: string; is_active: boolean };
+type ProductLite = { id: number; name: string; price: string; is_active: boolean; category: { id: number; name: string } | null };
 type Draft = {
   id: number | null;
   title: string;
@@ -27,6 +27,8 @@ export default function BandsAdminPage() {
   const [products, setProducts] = useState<ProductLite[]>([]);
   const [draft, setDraft] = useState<Draft | null>(null);
   const [q, setQ] = useState("");
+  const [browseOpen, setBrowseOpen] = useState(false);
+  const [browseCat, setBrowseCat] = useState<number | "all">("all");
   const [busy, setBusy] = useState(false);
   const [msg, setMsg] = useState("");
 
@@ -54,6 +56,16 @@ export default function BandsAdminPage() {
     return products.filter((p) => p.is_active && (!s || p.name.toLowerCase().includes(s))).slice(0, 30);
   }, [products, q]);
 
+  const browseCategories = useMemo(() => {
+    const ids = new Set(products.filter((p) => p.is_active && p.category).map((p) => p.category!.id));
+    return categories.filter((c) => ids.has(c.id));
+  }, [products, categories]);
+
+  const browseMatches = useMemo(() => {
+    if (browseCat === "all") return products.filter((p) => p.is_active);
+    return products.filter((p) => p.is_active && p.category?.id === browseCat);
+  }, [products, browseCat]);
+
   function edit(b: Band) {
     setDraft({
       id: b.id,
@@ -68,6 +80,8 @@ export default function BandsAdminPage() {
     });
     setMsg("");
     setQ("");
+    setBrowseOpen(false);
+    setBrowseCat("all");
   }
 
   async function save() {
@@ -125,7 +139,10 @@ export default function BandsAdminPage() {
         </select>
       </div>
 
-      <button onClick={() => (setDraft({ ...empty }), setMsg(""))} className="bg-[#b3261e] text-white rounded-lg px-4 py-2 font-medium">
+      <button
+        onClick={() => (setDraft({ ...empty }), setMsg(""), setQ(""), setBrowseOpen(false), setBrowseCat("all"))}
+        className="bg-[#b3261e] text-white rounded-lg px-4 py-2 font-medium"
+      >
         + Nouvelle bande
       </button>
 
@@ -189,7 +206,16 @@ export default function BandsAdminPage() {
                 <input type="checkbox" checked={draft.include_combos} onChange={(e) => setDraft({ ...draft, include_combos: e.target.checked })} /> Ajouter aussi les combos actifs (avec leur photo et leur prix)
               </label>
               <div className="text-sm">
-                <span className="block text-gray-400 mb-1">Ou choisir les plats a la main (prioritaire sur la categorie)</span>
+                <div className="flex items-center justify-between gap-2 mb-1">
+                  <span className="text-gray-400">Ou choisir les plats a la main (prioritaire sur la categorie)</span>
+                  <button
+                    type="button"
+                    onClick={() => setBrowseOpen((v) => !v)}
+                    className={`shrink-0 border rounded-lg px-2.5 py-1 text-xs ${browseOpen ? "bg-white/10" : ""}`}
+                  >
+                    📂 Parcourir
+                  </button>
+                </div>
                 <input value={q} onChange={(e) => setQ(e.target.value)} placeholder="Chercher un produit..." className="w-full border rounded-lg px-3 py-2" />
                 {q.trim() && (
                   <ul className="mt-1 max-h-44 overflow-y-auto border rounded-lg divide-y">
@@ -209,6 +235,48 @@ export default function BandsAdminPage() {
                     ))}
                     {matches.length === 0 && <li className="px-3 py-2 text-gray-500">Aucun produit actif.</li>}
                   </ul>
+                )}
+                {browseOpen && (
+                  <div className="mt-2 border rounded-lg p-2">
+                    <div className="flex gap-1.5 overflow-x-auto pb-1.5 mb-1.5 [scrollbar-width:none] [&::-webkit-scrollbar]:hidden">
+                      <button
+                        type="button"
+                        onClick={() => setBrowseCat("all")}
+                        className={`shrink-0 rounded-full px-3 py-1 text-xs border ${browseCat === "all" ? "bg-[#b3261e] border-[#b3261e]" : ""}`}
+                      >
+                        Toutes
+                      </button>
+                      {browseCategories.map((c) => (
+                        <button
+                          type="button"
+                          key={c.id}
+                          onClick={() => setBrowseCat(c.id)}
+                          className={`shrink-0 whitespace-nowrap rounded-full px-3 py-1 text-xs border ${browseCat === c.id ? "bg-[#b3261e] border-[#b3261e]" : ""}`}
+                        >
+                          {c.name}
+                        </button>
+                      ))}
+                    </div>
+                    <ul className="max-h-44 overflow-y-auto divide-y">
+                      {browseMatches.map((p) => {
+                        const picked = draft.items.some((i) => i.product === p.id);
+                        return (
+                          <li key={p.id}>
+                            <button
+                              type="button"
+                              disabled={picked}
+                              onClick={() => setDraft({ ...draft, items: [...draft.items, { product: p.id, name: p.name, subtitle: "" }] })}
+                              className={`w-full text-left px-3 py-1.5 hover:bg-white/5 ${picked ? "opacity-40" : ""}`}
+                            >
+                              {picked ? "✓ " : ""}
+                              {p.name} <span className="text-gray-500">· {Number(p.price).toLocaleString("fr-FR")} FCFA</span>
+                            </button>
+                          </li>
+                        );
+                      })}
+                      {browseMatches.length === 0 && <li className="px-3 py-2 text-gray-500">Aucun produit actif dans cette categorie.</li>}
+                    </ul>
+                  </div>
                 )}
                 {draft.items.length > 0 && (
                   <ul className="mt-2 space-y-2">
