@@ -312,7 +312,7 @@ class DailyClosingViewSet(viewsets.ModelViewSet):
 
         for pr in profiles.order_by("point_of_sale__name", "user__username"):
             totals, n = cashier_sales_totals(pr, for_date)
-            closing = DailyClosing.objects.filter(date=for_date, point_of_sale=pr.point_of_sale, cashier=pr.user).first()
+            closing = DailyClosing.covering(date=for_date, point_of_sale=pr.point_of_sale, cashier=pr.user)
             rows.append(
                 {
                     "id": pr.id,
@@ -402,7 +402,7 @@ class DailyClosingViewSet(viewsets.ModelViewSet):
         profiles = CashierProfile.objects.select_related("user").filter(is_active=True)
         open_tills = {}
         for pr in profiles:
-            if not DailyClosing.objects.filter(date=end, point_of_sale_id=pr.point_of_sale_id, cashier=pr.user).exists():
+            if not DailyClosing.covering(date=end, point_of_sale_id=pr.point_of_sale_id, cashier=pr.user):
                 open_tills.setdefault(pr.point_of_sale_id, []).append(pr.user.username)
         rows = []
         for sid, entry in out.items():
@@ -426,7 +426,7 @@ class DailyClosingViewSet(viewsets.ModelViewSet):
         from apps.pos.services import cashier_expected_with_carryover, cashier_tips_with_carryover, opening_cash_for
 
         combined, own, carried, prior_dates, n = cashier_expected_with_carryover(profile, for_date)
-        closing = DailyClosing.objects.filter(date=for_date, point_of_sale=profile.point_of_sale, cashier=profile.user).first()
+        closing = DailyClosing.covering(date=for_date, point_of_sale=profile.point_of_sale, cashier=profile.user)
         return Response(
             {
                 "date": for_date,

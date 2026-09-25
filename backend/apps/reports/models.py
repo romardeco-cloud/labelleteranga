@@ -56,13 +56,31 @@ class DailyClosing(models.Model):
     revision_count = models.PositiveIntegerField(default=0)
     # fermeture d'un caissier oubliee : le systeme la ferme lui-meme (equilibree, sans ecart) apres 2h30 du matin
     auto_closed = models.BooleanField("Fermeture automatique (caisse non fermee par le caissier)", default=False)
-    # si cette fermeture regroupe plusieurs jours non fermes (l'argent non retire s'accumule dans le tiroir),
-    # date du plus ancien jour couvert ; vide si elle ne porte que sur sa propre journee
-    covers_from = models.DateField("Solde reporte depuis", null=True, blank=True)
+    # ancien mecanisme (conserve pour l'historique) : sur la fermeture la plus RECENTE, date du plus ancien jour
+    # non ferme dont l'argent a ete regroupe avec elle. Remplace par covers_through (voir ci-dessous) : desormais
+    # une fermeture qui regroupe plusieurs jours reste datee du PREMIER jour non ferme, jamais du dernier.
+    covers_from = models.DateField("Solde reporte depuis (ancien)", null=True, blank=True)
+    # "date" reste le premier jour de vente non ferme meme si le caissier ferme plus tard (apres minuit, ou apres
+    # plusieurs jours oublies) : le calendrier peut avancer sans faire changer la date de la fermeture tant
+    # qu'elle n'a pas reellement eu lieu. Rempli uniquement quand la fermeture regroupe plusieurs jours : dernier
+    # jour couvert (vide si elle ne porte que sur sa propre journee).
+    covers_through = models.DateField("Regroupe jusqu'au", null=True, blank=True)
 
     class Meta:
         ordering = ["-date"]
         unique_together = ("date", "point_of_sale", "cashier")
+
+    @classmethod
+    def covering(cls, *, date, **filters):
+        """
+        La fermeture qui couvre cette date (ou None), qu'elle soit normale (date == date) ou regroupee
+        (date <= date <= covers_through). A utiliser partout ou l'on demande "cette journee est-elle fermee ?",
+        sinon une fermeture regroupee semble ouverte a sa propre date. `filters` : point_of_sale(_id)=...,
+        cashier(_id)=... comme pour un .filter() normal.
+        """
+        from django.db.models import Q
+
+        return cls.objects.filter(**filters).filter(Q(date=date) | Q(date__lte=date, covers_through__gte=date)).first()
 
     @property
     def expected_total(self):

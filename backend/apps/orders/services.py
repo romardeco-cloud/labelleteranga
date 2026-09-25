@@ -150,7 +150,7 @@ def change_order_payment_method(order, user, new_method, reason):
     if order.channel == Order.Channel.POS and order.cashier_id and order.point_of_sale_id and order.paid_at:
         from apps.reports.models import DailyClosing
 
-        if DailyClosing.objects.filter(date=order.paid_at.date(), point_of_sale_id=order.point_of_sale_id, cashier_id=order.cashier_id).exists():
+        if DailyClosing.covering(point_of_sale_id=order.point_of_sale_id, cashier_id=order.cashier_id, date=order.paid_at.date()):
             raise ValidationError(
                 {"detail": "La journee de cette vente est deja cloturee : impossible de corriger le mode de paiement sans fausser la comptabilite. Annulez la vente et resaisissez-la."}
             )

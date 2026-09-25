@@ -47,6 +47,7 @@ class DailyClosingSerializer(serializers.ModelSerializer):
             "revision_count",
             "auto_closed",
             "covers_from",
+            "covers_through",
         ]
         read_only_fields = [
             "id",
