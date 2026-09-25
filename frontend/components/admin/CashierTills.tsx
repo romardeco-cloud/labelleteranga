@@ -24,7 +24,6 @@ type Preview = {
   expected: { card: number; wave: number; orange_money: number; cash: number };
   tips: number;
   opening_cash: number | null;
-  carried_over: { card: number; wave: number; orange_money: number; cash: number } | null;
   carried_over_since: string | null;
   closing: DailyClosing | null;
 };
@@ -244,7 +243,7 @@ export default function CashierTills({ date, storeId, onChanged }: { date: strin
               <p className="text-sm text-gray-500">
                 {open.point_of_sale_name} · journee du {date} · {preview?.sales_count ?? 0} vente(s)
               </p>
-              {preview?.carried_over && (
+              {preview?.carried_over_since && (
                 <p className="text-sm text-amber-700 bg-amber-50 border border-amber-200 rounded-lg px-3 py-2 mt-2">
                   ⚠️ Caisse non fermee depuis le {preview.carried_over_since} : le solde de ces jours (non retire du tiroir) est ajoute a
                   l&apos;attendu ci-dessous.

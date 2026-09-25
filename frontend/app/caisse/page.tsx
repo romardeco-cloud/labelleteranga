@@ -1019,7 +1019,7 @@ export default function CaissePage() {
                     {closingState?.sales_count ?? 0} vente(s) aujourd&apos;hui. Comptez ce que vous avez encaisse pour chaque moyen de paiement :
                     l&apos;ecart avec le montant attendu s&apos;affiche tout de suite.
                   </p>
-                  {closingState?.carried_over && (
+                  {closingState?.carried_over_since && (
                     <p className="text-sm text-amber-400 bg-amber-500/10 border border-amber-500/30 rounded-lg px-3 py-2 mb-4">
                       ⚠️ La caisse n&apos;a pas ete fermee depuis le {closingState.carried_over_since}. L&apos;argent de ces jours est reste dans le
                       tiroir : le montant attendu ci-dessous l&apos;inclut deja, comptez tout ensemble en une seule fois.

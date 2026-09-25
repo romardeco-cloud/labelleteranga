@@ -614,7 +614,6 @@ export type CashierClosingState = {
   closed: boolean;
   sales_count: number;
   expected: { cash: number; wave: number; orange_money: number; card: number };
-  carried_over: { cash: number; wave: number; orange_money: number; card: number } | null;
   carried_over_since: string | null;
   opening_cash: number | null;
   closing: DailyClosing | null;
