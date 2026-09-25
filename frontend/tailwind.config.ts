@@ -4,6 +4,9 @@ const config: Config = {
   content: ["./app/**/*.{ts,tsx}", "./components/**/*.{ts,tsx}"],
   theme: {
     extend: {
+      fontFamily: {
+        serif: ["var(--font-serif)", "Georgia", "Cambria", "serif"],
+      },
       colors: {
         brand: {
           DEFAULT: "#9c1c1c",

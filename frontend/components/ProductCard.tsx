@@ -37,7 +37,7 @@ export default function ProductCard({ product }: { product: Product }) {
       </Link>
       <div className="p-3 flex flex-col gap-1 flex-1">
         <span className="text-xs text-gray-400">{product.category?.name}</span>
-        <Link href={`${base}/product/${product.id}`} className="font-medium leading-tight hover:text-brand">
+        <Link href={`${base}/product/${product.id}`} className="font-serif font-semibold text-base leading-tight hover:text-brand">
           {product.name}
         </Link>
         {product.combo_items && product.combo_items.length > 0 && (

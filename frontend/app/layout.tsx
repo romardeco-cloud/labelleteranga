@@ -1,6 +1,9 @@
 import type { Metadata, Viewport } from "next";
+import { Playfair_Display } from "next/font/google";
 import "./globals.css";
 import ServiceWorkerRegister from "@/components/ServiceWorkerRegister";
+
+const playfair = Playfair_Display({ subsets: ["latin"], weight: ["600", "700", "800"], variable: "--font-serif" });
 
 const DESCRIPTION = "Restaurant & fast-food, supermarché, quincaillerie, dépôt d'aliments, ferme et service de forage : tous les services La Belle Teranga au Sénégal.";
 
@@ -34,7 +37,7 @@ export const viewport: Viewport = {
 
 export default function RootLayout({ children }: { children: React.ReactNode }) {
   return (
-    <html lang="fr">
+    <html lang="fr" className={playfair.variable}>
       <body>
         <ServiceWorkerRegister />
         {children}
