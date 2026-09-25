@@ -362,6 +362,7 @@ export type DailyClosing = {
   notes: string;
   auto_closed: boolean;
   covers_from: string | null;
+  covers_through: string | null;
 };
 
 export type ClosingPreview = {
