@@ -509,7 +509,7 @@ class DailyClosingViewSet(viewsets.ModelViewSet):
 class AutoCloseCronView(APIView):
     """
     GET/POST /api/reports/auto-close-cron/?key=... : point d'entree sans authentification, protege par une cle secrete
-    (variable d'environnement AUTO_CLOSE_SECRET), a appeler une fois par jour vers 2h05 par un service de rappel gratuit
+    (variable d'environnement AUTO_CLOSE_SECRET), a appeler une fois par jour vers 2h35 par un service de rappel gratuit
     (cron-job.org, UptimeRobot...) pour que la fermeture automatique des caisses ait lieu meme si personne n'utilise
     l'application a ce moment-la. Sans AUTO_CLOSE_SECRET configuree, l'appel est refuse.
     """

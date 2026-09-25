@@ -328,7 +328,7 @@ def close_cashier_day(cashier_profile, declared, notes="", for_date=None, closed
 def auto_close_overdue_cashiers(only_profile=None, store=None):
     """
     Ferme automatiquement, a l'equilibre (sans ecart, personne n'a compte), la caisse de chaque caissier
-    qui ne l'a pas fermee la veille avant 2h du matin (ou un jour plus ancien, toujours en retard). Appelee
+    qui ne l'a pas fermee la veille avant 2h30 du matin (ou un jour plus ancien, toujours en retard). Appelee
     a chaque usage de la caisse/de l'admin (voir apps.pos.views et apps.reports.views) et, si configuree,
     par un appel programme externe (voir AUTO_CLOSE_SECRET). Retourne le nombre de journees fermees.
     """
@@ -339,7 +339,7 @@ def auto_close_overdue_cashiers(only_profile=None, store=None):
     now = timezone.localtime()
     today = now.date()
     yesterday = today - timedelta(days=1)
-    yesterday_ready = now.time() >= dt_time(2, 0)  # avant 2h, on laisse encore la chance au caissier de fermer hier lui-meme
+    yesterday_ready = now.time() >= dt_time(2, 30)  # avant 2h30, on laisse encore la chance au caissier de fermer hier lui-meme
 
     profiles = CashierProfile.objects.filter(is_active=True).select_related("user", "point_of_sale")
     if only_profile is not None:
@@ -361,7 +361,7 @@ def auto_close_overdue_cashiers(only_profile=None, store=None):
                 point_of_sale=profile.point_of_sale,
                 cashier=profile.user,
                 closed_by=None,
-                notes="Fermeture automatique : caisse non fermee par le caissier avant 2h du matin.",
+                notes="Fermeture automatique : caisse non fermee par le caissier avant 2h30 du matin.",
                 expected_card=totals["card"], expected_wave=totals["wave"], expected_orange_money=totals["orange_money"], expected_cash=totals["cash"],
                 declared_card=totals["card"], declared_wave=totals["wave"], declared_orange_money=totals["orange_money"], declared_cash=totals["cash"],
                 tips_total=_tips_for_day(profile, d),
