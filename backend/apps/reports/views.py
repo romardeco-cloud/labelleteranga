@@ -299,7 +299,7 @@ class DailyClosingViewSet(viewsets.ModelViewSet):
     def cashiers(self, request):
         """GET ?date=&point_of_sale= : etat de la caisse de chaque caissier actif pour ce jour."""
         from apps.accounts.models import CashierProfile
-        from apps.pos.services import cashier_sales_totals
+        from apps.pos.services import closing_date_for, _sales_totals_range, opening_cash_for
 
         store = request.query_params.get("point_of_sale")
         auto_close_overdue_cashiers(store=int(store) if store else None)  # ferme d'abord les journees oubliees avant d'afficher l'etat
@@ -308,10 +308,12 @@ class DailyClosingViewSet(viewsets.ModelViewSet):
         if store:
             profiles = profiles.filter(point_of_sale_id=store)
         rows = []
-        from apps.pos.services import opening_cash_for
 
         for pr in profiles.order_by("point_of_sale__name", "user__username"):
-            totals, n = cashier_sales_totals(pr, for_date)
+            # meme calcul que l'apercu/la fermeture : si for_date est deja couvert par une fermeture (regroupee
+            # ou non), l'attendu affiche doit refleter TOUT ce qu'elle couvre, sinon un ecart apparait a tort.
+            closing_date = closing_date_for(pr, for_date)
+            totals, _tips, n = _sales_totals_range(pr, closing_date, for_date)
             closing = DailyClosing.covering(date=for_date, point_of_sale=pr.point_of_sale, cashier=pr.user)
             rows.append(
                 {
@@ -321,7 +323,7 @@ class DailyClosingViewSet(viewsets.ModelViewSet):
                     "point_of_sale_name": pr.point_of_sale.name,
                     "sales_count": n,
                     "expected_total": sum(totals.values()),
-                    "opening_cash": opening_cash_for(pr, for_date),
+                    "opening_cash": opening_cash_for(pr, closing_date),
                     "closed": closing is not None,
                     "discrepancy_total": closing.discrepancy_total if closing else None,
                     "closing": DailyClosingSerializer(closing).data if closing else None,
@@ -419,13 +421,16 @@ class DailyClosingViewSet(viewsets.ModelViewSet):
     @action(detail=False, methods=["get"], url_path="cashier-preview")
     def cashier_preview(self, request):
         """GET ?date=&cashier=<id> : montants attendus pour la caisse de ce caissier (l'administrateur les voit)."""
-        from apps.pos.services import cashier_sales_totals
+        from apps.pos.services import closing_date_for, _sales_totals_range, opening_cash_for
 
         for_date = self._date_param(request.query_params.get("date"))
         profile = self._profile(request.query_params.get("cashier"))
-        from apps.pos.services import cashier_expected_with_carryover, cashier_tips_with_carryover, opening_cash_for
 
-        combined, own, carried, prior_dates, n = cashier_expected_with_carryover(profile, for_date)
+        # meme calcul que close_cashier_day : la date de depart peut etre celle d'une fermeture DEJA existante
+        # qui couvre for_date (l'apercu doit alors refleter TOUT ce qu'elle couvre, pas juste for_date), sinon
+        # le premier jour non ferme. Garantit que l'apercu montre exactement ce qu'une fermeture appliquerait.
+        closing_date = closing_date_for(profile, for_date)
+        totals, tips, n = _sales_totals_range(profile, closing_date, for_date)
         closing = DailyClosing.covering(date=for_date, point_of_sale=profile.point_of_sale, cashier=profile.user)
         return Response(
             {
@@ -436,16 +441,15 @@ class DailyClosingViewSet(viewsets.ModelViewSet):
                 "sales_count": n,
                 # "expected" inclut le solde des jours precedents jamais fermes (compte une seule fois avec celui-ci)
                 "expected": {
-                    "card": combined["card"],
-                    "wave": combined["wave"],
-                    "orange_money": combined["orange_money"],
-                    "cash": combined["cash"],
+                    "card": totals["card"],
+                    "wave": totals["wave"],
+                    "orange_money": totals["orange_money"],
+                    "cash": totals["cash"],
                 },
                 # purement informatif : deja compris dans "expected" ci-dessus, jamais compare/attendu separement
-                "tips": cashier_tips_with_carryover(profile, for_date),
-                "opening_cash": opening_cash_for(profile, for_date),
-                "carried_over": carried if prior_dates else None,
-                "carried_over_since": prior_dates[0] if prior_dates else None,
+                "tips": tips,
+                "opening_cash": opening_cash_for(profile, closing_date),
+                "carried_over_since": closing_date if closing_date != for_date else None,
                 "closing": DailyClosingSerializer(closing).data if closing else None,
             }
         )

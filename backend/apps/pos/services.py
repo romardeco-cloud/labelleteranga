@@ -175,6 +175,20 @@ def _sales_totals_range(cashier_profile, start_date, end_date):
     return totals, tips, qs.aggregate(n=Count("id"))["n"]
 
 
+def closing_date_for(cashier_profile, for_date):
+    """
+    Date a utiliser pour la fermeture de (caissier, for_date) : celle d'une fermeture EXISTANTE qui couvre
+    deja for_date (a mettre a jour, meme si for_date a ete cloture plus tot le meme jour), sinon le premier
+    jour non ferme, sinon for_date lui-meme. Utilisee a la fois par l'apercu (cashier-preview) et par la
+    fermeture reelle (close_cashier_day) pour qu'ils restent toujours coherents entre eux.
+    """
+    existing = DailyClosing.covering(date=for_date, point_of_sale=cashier_profile.point_of_sale, cashier=cashier_profile.user)
+    if existing:
+        return existing.date
+    prior_dates = _unclosed_prior_dates(cashier_profile, for_date)
+    return prior_dates[0] if prior_dates else for_date
+
+
 def _tips_for_day(cashier_profile, for_date):
     """Pourboires (deja compris dans les ventes) de ce caissier ce jour-la. Purement informatif : jamais
     retire des totaux especes/wave/orange money/carte, jamais compare a un attendu, jamais dans un ecart."""
@@ -189,29 +203,6 @@ def _tips_for_day(cashier_profile, for_date):
     ).aggregate(t=Sum("tip_amount"))["t"] or Decimal("0")
 
 
-def cashier_tips_with_carryover(cashier_profile, for_date):
-    """Total des pourboires du jour + des jours anterieurs jamais fermes, regroupes comme pour l'attendu
-    (cf. cashier_expected_with_carryover). Purement informatif, ne participe a aucun calcul d'ecart."""
-    total = _tips_for_day(cashier_profile, for_date)
-    for d in _unclosed_prior_dates(cashier_profile, for_date):
-        total += _tips_for_day(cashier_profile, d)
-    return total
-
-
-def cashier_expected_with_carryover(cashier_profile, for_date):
-    """
-    Attendu du jour + solde des jours precedents jamais fermes (le caissier ne compte qu'une seule fois l'argent
-    accumule dans le tiroir). Retourne (attendu_total, attendu_du_jour, solde_reporte, jours_reportes, ventes_du_jour).
-    """
-    own, sales_count = cashier_sales_totals(cashier_profile, for_date)
-    prior_dates = _unclosed_prior_dates(cashier_profile, for_date)
-    carried = {k: Decimal("0") for k in own}
-    for d in prior_dates:
-        t, _ = cashier_sales_totals(cashier_profile, d)
-        for k in carried:
-            carried[k] += t[k]
-    combined = {k: own[k] + carried[k] for k in own}
-    return combined, own, carried, prior_dates, sales_count
 
 
 def opening_cash_for(cashier_profile, for_date):
@@ -281,24 +272,13 @@ def close_cashier_day(cashier_profile, declared, notes="", for_date=None, closed
     fermeture, datee du PREMIER jour non ferme (covers_through indique jusqu'ou elle va) - jamais une fermeture
     "a l'equilibre" separee pour chaque jour oublie. Retourne (fermeture, creee).
     """
-    from django.db.models import Q
-
     today = for_date or timezone.localdate()
     store = cashier_profile.point_of_sale
 
-    # fermeture deja en cours qui couvre aujourd'hui (correction d'une fermeture existante, eventuellement
-    # regroupee) : on la retrouve AVANT de recalculer les jours non fermes, sinon son propre jour de depart
-    # semblerait deja ferme et le regroupement serait perdu a chaque nouvel appel.
-    existing = DailyClosing.objects.select_for_update().filter(point_of_sale=store, cashier=cashier_profile.user).filter(
-        Q(date=today) | Q(covers_through=today)
-    ).first()
-
-    if existing:
-        closing_date = existing.date
-    else:
-        prior_dates = _unclosed_prior_dates(cashier_profile, today)
-        closing_date = prior_dates[0] if prior_dates else today
-
+    # meme calcul que l'apercu (cashier-preview), pour que la fermeture reelle corresponde toujours a ce que
+    # l'apercu vient de montrer : la date de depart peut etre celle d'une fermeture DEJA existante qui couvre
+    # aujourd'hui (correction), sinon le premier jour non ferme.
+    closing_date = closing_date_for(cashier_profile, today)
     covers_through = today if closing_date != today else None
     totals, tips_total, _n = _sales_totals_range(cashier_profile, closing_date, today)
 
@@ -324,10 +304,11 @@ def close_cashier_day(cashier_profile, declared, notes="", for_date=None, closed
         "expected_cash": totals["cash"],
     }
     notes = (notes or "")[:1000]
-    if covers_through and not notes and not (existing.notes if existing else ""):
-        notes = f"Fermeture regroupee : couvre du {closing_date.strftime('%d/%m/%Y')} au {covers_through.strftime('%d/%m/%Y')} (caisse non fermee avant)."
 
-    closing = existing
+    closing = DailyClosing.objects.select_for_update().filter(date=closing_date, point_of_sale=store, cashier=cashier_profile.user).first()
+
+    if covers_through and not notes and not (closing.notes if closing else ""):
+        notes = f"Fermeture regroupee : couvre du {closing_date.strftime('%d/%m/%Y')} au {covers_through.strftime('%d/%m/%Y')} (caisse non fermee avant)."
 
     # un ecart de caisse (compte different de l'attendu) doit toujours etre explique
     declared_total = sum(values.values())

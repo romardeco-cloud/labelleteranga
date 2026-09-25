@@ -16,8 +16,6 @@ from apps.reports.serializers import DailyClosingSerializer
 
 from .services import (
     auto_close_overdue_cashiers,
-    cashier_expected_with_carryover,
-    cashier_sales_totals,
     close_cashier_day,
     create_pos_sale,
     open_cashier_day,
@@ -177,32 +175,36 @@ class POSClosingView(APIView):
     permission_classes = [IsCashier]
 
     def _closing_today(self, profile):
-        return DailyClosing.objects.filter(
-            date=timezone.localdate(), point_of_sale=profile.point_of_sale, cashier=profile.user
-        ).first()
+        return DailyClosing.covering(date=timezone.localdate(), point_of_sale=profile.point_of_sale, cashier=profile.user)
 
     def get(self, request):
+        from apps.pos.services import closing_date_for, _sales_totals_range
+
         profile = request.user.cashier_profile
         auto_close_overdue_cashiers(only_profile=profile)
+        today = timezone.localdate()
         closing = self._closing_today(profile)
-        combined, own, carried, prior_dates, sales_count = cashier_expected_with_carryover(profile, timezone.localdate())
+        # meme calcul que close_cashier_day : si aujourd'hui est deja couvert par une fermeture (regroupee ou
+        # non), l'attendu doit refleter TOUT ce qu'elle couvre, pas juste aujourd'hui, sinon un ecart apparait
+        # a tort pour de l'argent deja comptabilise.
+        closing_date = closing_date_for(profile, today)
+        totals, _tips, sales_count = _sales_totals_range(profile, closing_date, today)
         return Response(
             {
-                "date": timezone.localdate(),
+                "date": today,
                 "point_of_sale": profile.point_of_sale.name,
                 "closed": closing is not None,
                 "sales_count": sales_count,
                 # le caissier voit l'attendu et son ecart des la fermeture (comptage en direct) ; "expected" inclut
                 # le solde des jours non fermes precedents (argent jamais retire du tiroir, compte une seule fois)
                 "expected": {
-                    "cash": combined["cash"],
-                    "wave": combined["wave"],
-                    "orange_money": combined["orange_money"],
-                    "card": combined["card"],
+                    "cash": totals["cash"],
+                    "wave": totals["wave"],
+                    "orange_money": totals["orange_money"],
+                    "card": totals["card"],
                 },
-                "carried_over": carried if prior_dates else None,
-                "carried_over_since": prior_dates[0] if prior_dates else None,
-                "opening_cash": opening_cash_for(profile, timezone.localdate()),
+                "carried_over_since": closing_date if closing_date != today else None,
+                "opening_cash": opening_cash_for(profile, closing_date),
                 "closing": DailyClosingSerializer(closing).data if closing else None,
             }
         )
