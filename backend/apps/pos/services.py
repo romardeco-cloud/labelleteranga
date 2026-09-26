@@ -187,20 +187,6 @@ def closing_date_for(cashier_profile, for_date):
     return prior_dates[0] if prior_dates else for_date
 
 
-def _tips_for_day(cashier_profile, for_date):
-    """Pourboires (deja compris dans les ventes) de ce caissier ce jour-la. Purement informatif : jamais
-    retire des totaux especes/wave/orange money/carte, jamais compare a un attendu, jamais dans un ecart."""
-    from django.db.models import Sum
-
-    return Order.objects.filter(
-        status=Order.Status.PAID,
-        channel=Order.Channel.POS,
-        cashier=cashier_profile.user,
-        point_of_sale=cashier_profile.point_of_sale,
-        paid_at__date=for_date,
-    ).aggregate(t=Sum("tip_amount"))["t"] or Decimal("0")
-
-
 
 
 def opening_cash_for(cashier_profile, for_date):
@@ -236,26 +222,6 @@ def open_cashier_day(cashier_profile, opening_cash, notes="", for_date=None, ope
         opening.opened_by = opened_by or opening.opened_by
         opening.save(update_fields=["opening_cash", "notes", "opened_by", "updated_at"])
     return opening, created
-
-
-def cashier_sales_totals(cashier_profile, for_date):
-    """Totaux attendus par moyen de paiement pour CE caissier, ce jour-la : ventes, + le fond de caisse en especes."""
-    from django.db.models import Count, Sum
-
-    totals = {key: Decimal("0") for key, _ in Order.PaymentMethod.choices}
-    qs = Order.objects.filter(
-        status=Order.Status.PAID,
-        channel=Order.Channel.POS,
-        cashier=cashier_profile.user,
-        point_of_sale=cashier_profile.point_of_sale,
-        paid_at__date=for_date,
-    )
-    for row in qs.values("payment_method").annotate(total=Sum("total_amount")):
-        totals[row["payment_method"]] = row["total"] or Decimal("0")
-    opening_cash = opening_cash_for(cashier_profile, for_date)
-    if opening_cash:
-        totals["cash"] += opening_cash  # le tiroir doit contenir le fond de caisse du matin + les ventes en especes
-    return totals, qs.aggregate(n=Count("id"))["n"]
 
 
 @transaction.atomic
@@ -343,12 +309,44 @@ def close_cashier_day(cashier_profile, declared, notes="", for_date=None, closed
     return closing, False
 
 
+def _grace_period_totals(cashier_profile, start_date, today, grace_cutoff=None):
+    """
+    Comme _sales_totals_range(start_date, today), mais pour aujourd'hui (`today`) ne compte QUE les ventes
+    faites avant `grace_cutoff` (2h30 par defaut) : les quelques ventes faites juste apres minuit, avant que
+    le caissier ait pu fermer, restent rattachees a la journee non fermee (start_date) sans pour autant
+    fermer le reste d'aujourd'hui (une fermeture normale, elle, doit pouvoir avoir lieu plus tard le meme jour).
+    Utilisee uniquement par la fermeture automatique.
+    """
+    from django.db.models import Count, Q, Sum
+
+    grace_cutoff = grace_cutoff or dt_time(2, 30)
+    totals = {key: Decimal("0") for key, _ in Order.PaymentMethod.choices}
+    qs = Order.objects.filter(
+        status=Order.Status.PAID,
+        channel=Order.Channel.POS,
+        cashier=cashier_profile.user,
+        point_of_sale=cashier_profile.point_of_sale,
+    ).filter(Q(paid_at__date__gte=start_date, paid_at__date__lt=today) | Q(paid_at__date=today, paid_at__time__lt=grace_cutoff))
+    for row in qs.values("payment_method").annotate(total=Sum("total_amount")):
+        totals[row["payment_method"]] = row["total"] or Decimal("0")
+    opening_cash = opening_cash_for(cashier_profile, start_date)
+    if opening_cash:
+        totals["cash"] += opening_cash  # le tiroir doit contenir le fond de caisse du matin + les ventes en especes
+    tips = qs.aggregate(t=Sum("tip_amount"))["t"] or Decimal("0")
+    return totals, tips, qs.aggregate(n=Count("id"))["n"]
+
+
 def auto_close_overdue_cashiers(only_profile=None, store=None):
     """
     Ferme automatiquement, a l'equilibre (sans ecart, personne n'a compte), la caisse de chaque caissier
     qui ne l'a pas fermee la veille avant 2h30 du matin (ou un jour plus ancien, toujours en retard). Appelee
     a chaque usage de la caisse/de l'admin (voir apps.pos.views et apps.reports.views) et, si configuree,
     par un appel programme externe (voir AUTO_CLOSE_SECRET). Retourne le nombre de journees fermees.
+
+    Une seule fermeture regroupee par caissier (comme close_cashier_day), jamais une par jour oublie : les
+    ventes faites juste apres minuit (avant 2h30, avant que le caissier ait pu fermer) sont incluses dans le
+    total via _grace_period_totals, mais covers_through ne va jamais jusqu'a aujourd'hui, pour ne pas bloquer
+    les ventes normales du reste de la journee.
     """
     from datetime import timedelta
 
@@ -370,20 +368,24 @@ def auto_close_overdue_cashiers(only_profile=None, store=None):
         if not profile.point_of_sale_id:
             continue
         overdue = _unclosed_prior_dates(profile, today)
-        for d in overdue:
-            if d == yesterday and not yesterday_ready:
-                continue
-            totals, _ = cashier_sales_totals(profile, d)
-            DailyClosing.objects.create(
-                date=d,
-                point_of_sale=profile.point_of_sale,
-                cashier=profile.user,
-                closed_by=None,
-                notes="Fermeture automatique : caisse non fermee par le caissier avant 2h30 du matin.",
-                expected_card=totals["card"], expected_wave=totals["wave"], expected_orange_money=totals["orange_money"], expected_cash=totals["cash"],
-                declared_card=totals["card"], declared_wave=totals["wave"], declared_orange_money=totals["orange_money"], declared_cash=totals["cash"],
-                tips_total=_tips_for_day(profile, d),
-                auto_closed=True,
-            )
-            closed += 1
+        if not overdue:
+            continue
+        most_recent = max(overdue)
+        if most_recent == yesterday and not yesterday_ready:
+            continue
+        closing_date = min(overdue)
+        totals, tips_total, _n = _grace_period_totals(profile, closing_date, today)
+        DailyClosing.objects.create(
+            date=closing_date,
+            point_of_sale=profile.point_of_sale,
+            cashier=profile.user,
+            closed_by=None,
+            notes="Fermeture automatique : caisse non fermee par le caissier avant 2h30 du matin.",
+            covers_through=most_recent if most_recent != closing_date else None,
+            expected_card=totals["card"], expected_wave=totals["wave"], expected_orange_money=totals["orange_money"], expected_cash=totals["cash"],
+            declared_card=totals["card"], declared_wave=totals["wave"], declared_orange_money=totals["orange_money"], declared_cash=totals["cash"],
+            tips_total=tips_total,
+            auto_closed=True,
+        )
+        closed += 1
     return closed
