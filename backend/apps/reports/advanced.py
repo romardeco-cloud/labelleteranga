@@ -1,11 +1,12 @@
 import io
 from collections import defaultdict
 from datetime import date as date_cls
+from datetime import time as time_cls
 from datetime import timedelta
 from decimal import Decimal
 
 import openpyxl
-from django.db.models import Count, Sum
+from django.db.models import Count, Q, Sum
 from django.db.models.functions import TruncDate
 from django.http import HttpResponse
 from django.utils import timezone
@@ -50,6 +51,60 @@ def _invoices(start, end, store):
     return qs.filter(point_of_sale_id=store) if store else qs
 
 
+GRACE_CUTOFF = time_cls(2, 30)
+
+
+def _closing_order_ids(closing):
+    """
+    Commandes POS que represente cette fermeture : son intervalle [date, covers_through] complet, PLUS les
+    ventes faites le jour suivant avant 2h30 (periode de grace avant qu'une fermeture automatique ait lieu -
+    voir _grace_period_totals dans apps.pos.services, qui calcule le meme total pour la fermeture elle-meme).
+    """
+    c_end = closing.covers_through or closing.date
+    grace_day = c_end + timedelta(days=1)
+    qs = Order.objects.filter(
+        status=Order.Status.PAID,
+        channel=Order.Channel.POS,
+        point_of_sale_id=closing.point_of_sale_id,
+        cashier_id=closing.cashier_id,
+    )
+    return qs.filter(Q(paid_at__date__gte=closing.date, paid_at__date__lte=c_end) | Q(paid_at__date=grace_day, paid_at__time__lt=GRACE_CUTOFF))
+
+
+def _by_day_synced_with_closings(orders, start, end, store):
+    """
+    Chiffre d'affaires par jour aligne sur les fermetures de caisse (Admin > Comptabilite), pas sur la date
+    brute de chaque commande : une fermeture regroupee (plusieurs jours non fermes avant de fermer, ou des
+    ventes faites juste apres minuit avant 2h30) compte tout son montant sur son PREMIER jour, exactement
+    comme l'historique des clotures. Les commandes non-POS (en ligne) n'ont pas de fermeture : elles restent
+    groupees par leur date de paiement. Les ventes POS pas encore fermees (aujourd'hui, ou une fermeture en
+    retard) restent aussi groupees par leur date reelle, en attendant leur fermeture.
+    """
+    totals = defaultdict(lambda: {"revenue": Decimal("0"), "n": 0})
+
+    other_orders = orders.exclude(channel=Order.Channel.POS)
+    for r in other_orders.annotate(day=TruncDate("paid_at")).values("day").annotate(revenue=Sum("total_amount"), n=Count("id")):
+        totals[r["day"]]["revenue"] += r["revenue"] or Decimal("0")
+        totals[r["day"]]["n"] += r["n"]
+
+    closings_qs = DailyClosing.objects.filter(date__lte=end).filter(Q(covers_through__gte=start) | Q(date__gte=start))
+    if store:
+        closings_qs = closings_qs.filter(point_of_sale_id=store)
+    covered_ids = set()
+    for c in closings_qs:
+        ids = list(_closing_order_ids(c).values_list("id", flat=True))
+        covered_ids.update(ids)
+        totals[c.date]["revenue"] += c.expected_total
+        totals[c.date]["n"] += len(ids)
+
+    remaining = orders.filter(channel=Order.Channel.POS).exclude(pk__in=covered_ids)
+    for r in remaining.annotate(day=TruncDate("paid_at")).values("day").annotate(revenue=Sum("total_amount"), n=Count("id")):
+        totals[r["day"]]["revenue"] += r["revenue"] or Decimal("0")
+        totals[r["day"]]["n"] += r["n"]
+
+    return totals
+
+
 def _group(qs, key, label=None):
     rows = qs.values(key).annotate(revenue=Sum("total_amount"), orders_count=Count("id")).order_by("-revenue")
     return [
@@ -70,15 +125,12 @@ class OverviewReportView(APIView):
         revenue, n = _f(agg["revenue"]), agg["n"] or 0
         tips = _f(agg["tips"])  # deja compris dans revenue, purement informatif
 
-        by_day_rows = (
-            orders.annotate(day=TruncDate("paid_at")).values("day").annotate(revenue=Sum("total_amount"), n=Count("id")).order_by("day")
-        )
-        by_day_map = {r["day"]: r for r in by_day_rows}
+        by_day_map = _by_day_synced_with_closings(orders, start, end, store)
         by_day = []  # tous les jours de la periode, meme sans vente (0 FCFA), pour un graphique sans trous
         d = start
         while d <= end:
             r = by_day_map.get(d)
-            by_day.append({"day": d, "revenue": r["revenue"] if r else 0, "n": r["n"] if r else 0})
+            by_day.append({"day": d, "revenue": _f(r["revenue"]) if r else 0, "n": r["n"] if r else 0})
             d += timedelta(days=1)
         by_store = [
             {**r, "label": r["label"] or ONLINE_LABEL}
