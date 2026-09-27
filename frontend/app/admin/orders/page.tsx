@@ -3,6 +3,7 @@
 import { useEffect, useState } from "react";
 import { Order, PointOfSale, api, fetchPointsOfSale, markOrderPaid, setOrderPointOfSale } from "@/lib/api";
 import { apiErrorMessage } from "@/lib/documents";
+import { formatDakarDateTime } from "@/lib/today";
 
 function formatXof(value: string | number) {
   return new Intl.NumberFormat("fr-SN", { maximumFractionDigits: 0 }).format(Number(value)) + " FCFA";
@@ -501,7 +502,7 @@ export default function AdminOrdersPage() {
                 )}
               </td>
               <td className="p-2">{formatXof(o.total_amount)}</td>
-              <td className="p-2">{new Date(o.created_at).toLocaleString("fr-SN")}</td>
+              <td className="p-2">{formatDakarDateTime(o.created_at, "fr-SN")}</td>
               <td className="p-2 space-y-1">
                 {o.pending_action && (
                   <>

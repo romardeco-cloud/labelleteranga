@@ -3,6 +3,7 @@
 import { useEffect, useState } from "react";
 import { api } from "@/lib/api";
 import { useSealOpts } from "@/lib/sealOpts";
+import { formatDakarDate } from "@/lib/today";
 
 export type Seal = {
   enabled: boolean;
@@ -45,7 +46,7 @@ export function useCompanyContact(): Seal | null {
 }
 
 export function todayFr() {
-  return new Date().toLocaleDateString("fr-FR", { day: "numeric", month: "long", year: "numeric" });
+  return formatDakarDate(new Date(), { day: "numeric", month: "long", year: "numeric" });
 }
 
 /** « Certifie conforme », date du jour, cachet et signature de l'entreprise : affiches en bas des documents et rapports (ecran et impression). */

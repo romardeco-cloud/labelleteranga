@@ -13,15 +13,16 @@ import {
   fetchReceivables,
   formatXof,
 } from "@/lib/documents";
+import { formatToday } from "@/lib/today";
 
 const pad = (n: number) => String(n).padStart(2, "0");
 
 function monthRange() {
-  const now = new Date();
-  const y = now.getFullYear();
-  const m = now.getMonth() + 1;
+  // Y/M du mois en cours au Senegal (pas celui de l'appareil qui consulte la page).
+  const [y, m] = formatToday().key.split("-").map(Number);
   const last = new Date(y, m, 0).getDate();
-  return { start: `${y}-${pad(m)}-01`, end: `${y}-${pad(m)}-${pad(last)}`, label: now.toLocaleDateString("fr-FR", { month: "long", year: "numeric" }).replace(/^./, (c) => c.toUpperCase()) };
+  const label = new Date(y, m - 1, 1).toLocaleDateString("fr-FR", { month: "long", year: "numeric" }).replace(/^./, (c) => c.toUpperCase());
+  return { start: `${y}-${pad(m)}-01`, end: `${y}-${pad(m)}-${pad(last)}`, label };
 }
 
 const SHORTCUTS = [

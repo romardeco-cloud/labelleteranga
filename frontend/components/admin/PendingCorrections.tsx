@@ -3,6 +3,7 @@
 import { useEffect, useState } from "react";
 import { Order, api } from "@/lib/api";
 import { apiErrorMessage } from "@/lib/documents";
+import { formatDakarTime } from "@/lib/today";
 
 function formatXof(value: string | number) {
   return new Intl.NumberFormat("fr-SN", { maximumFractionDigits: 0 }).format(Number(value)) + " FCFA";
@@ -84,7 +85,7 @@ export default function PendingCorrections() {
               <p className="text-xs text-gray-500">
                 demande par <strong>{o.pending_requested_by_username}</strong>
                 {o.pending_reason ? ` : ${o.pending_reason}` : ""}
-                {o.pending_requested_at && ` · ${new Date(o.pending_requested_at).toLocaleTimeString("fr-FR", { hour: "2-digit", minute: "2-digit" })}`}
+                {o.pending_requested_at && ` · ${formatDakarTime(o.pending_requested_at)}`}
               </p>
             </div>
             <div className="flex gap-2 shrink-0">

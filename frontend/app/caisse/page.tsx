@@ -6,7 +6,7 @@ import Icon from "@/components/admin/Icon";
 import { LoyaltyStatus, PosMember, PosMenus, fetchPosLoyalty, fetchPosMenus, redeemPosReward, savePosMenu, searchPosMembers } from "@/lib/engage";
 import ProductVisual from "@/components/ProductVisual";
 import { PAYMENT_QR, categoryEmoji, storeImage } from "@/lib/branding";
-import { useToday } from "@/lib/today";
+import { useToday, formatDakarTime, formatDakarDateTime } from "@/lib/today";
 import { categoryRank, effectiveCategories, loadMenuCategories, saveMenuCategories } from "@/lib/meals";
 import { apiErrorMessage } from "@/lib/documents";
 import {
@@ -1201,7 +1201,7 @@ export default function CaissePage() {
                         </span>
                       </div>
                       <p className="text-sm text-gray-500 mt-1">
-                        {new Date(o.created_at).toLocaleString("fr-FR")} · {o.payment_method_label}
+                        {formatDakarDateTime(o.created_at)} · {o.payment_method_label}
                         {o.customer_phone ? ` · ${o.customer_phone}` : ""}
                       </p>
                       <ul className="mt-2 text-sm text-gray-300 list-disc list-inside">
@@ -1798,7 +1798,7 @@ export default function CaissePage() {
                     <li key={r.id} className="py-2.5 text-sm">
                       <p>{r.reason}</p>
                       <p className="text-xs text-gray-500">
-                        {new Date(r.created_at).toLocaleTimeString("fr-FR", { hour: "2-digit", minute: "2-digit" })} · {r.cashier}
+                        {formatDakarTime(r.created_at)} · {r.cashier}
                       </p>
                     </li>
                   ))}
@@ -1817,7 +1817,7 @@ export default function CaissePage() {
                         {h.lines.reduce((n, l) => n + l.quantity, 0)} article(s) — {xof(linesTotal(h.lines))}
                       </p>
                       <p className="text-xs text-gray-500 truncate">
-                        {new Date(h.at).toLocaleTimeString("fr-FR", { hour: "2-digit", minute: "2-digit" })} ·{" "}
+                        {formatDakarTime(h.at)} ·{" "}
                         {h.lines.map((l) => l.product.name).join(", ")}
                       </p>
                     </div>
@@ -1854,7 +1854,7 @@ export default function CaissePage() {
                         </p>
                         <p className="text-xs text-gray-500">
                           Ticket {r.receipt_number} ·{" "}
-                          {new Date(r.created_at).toLocaleTimeString("fr-FR", { hour: "2-digit", minute: "2-digit" })}
+                          {formatDakarTime(r.created_at)}
                         </p>
                         {r.pending_action && (
                           <p className="text-xs text-amber-500 font-medium mt-1">
@@ -2017,7 +2017,7 @@ export default function CaissePage() {
               <p className="text-center">{session.store}</p>
               <p className="text-center font-bold mt-1">RAPPORT X</p>
               <p className="text-center text-xs mb-2">
-                {new Date().toLocaleString("fr-SN")} — Caissier : {session.username}
+                {formatDakarDateTime(new Date(), "fr-SN")} — Caissier : {session.username}
               </p>
               <hr className="my-2 border-dashed" />
               <p className="mb-1">Ventes du jour : {closingState.sales_count}</p>
@@ -2086,7 +2086,7 @@ export default function CaissePage() {
               <p className="text-center">{receipt.point_of_sale}</p>
               {receipt.table_label && <p className="text-center font-bold">Table {receipt.table_label}</p>}
               <p className="text-center text-xs mb-2">
-                {new Date(receipt.created_at).toLocaleString("fr-SN")} — Ticket n° {receipt.receipt_number}
+                {formatDakarDateTime(receipt.created_at, "fr-SN")} — Ticket n° {receipt.receipt_number}
               </p>
               <hr className="my-2 border-dashed" />
               {receipt.items.map((i, idx) => (

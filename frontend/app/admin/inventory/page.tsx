@@ -4,6 +4,7 @@ import Link from "next/link";
 import { useRouter } from "next/navigation";
 import { useEffect, useState } from "react";
 import { PointOfSale, fetchPointsOfSale } from "@/lib/api";
+import { formatDakarTime } from "@/lib/today";
 import {
   InventoryCount,
   MOVEMENT_REASONS,
@@ -253,7 +254,7 @@ function MovementsTab({ stores }: { stores: PointOfSale[] }) {
             {rows.map((m) => (
               <tr key={m.id} className="border-t">
                 <td className="p-3 whitespace-nowrap">
-                  {formatDate(m.created_at)} {new Date(m.created_at).toLocaleTimeString("fr-FR", { hour: "2-digit", minute: "2-digit" })}
+                  {formatDate(m.created_at)} {formatDakarTime(m.created_at)}
                 </td>
                 <td className="p-3">
                   {m.product_name} <span className="text-gray-400">({m.product_sku})</span>

@@ -5,6 +5,7 @@ import { PointOfSale, fetchPointsOfSale } from "@/lib/api";
 import { apiErrorMessage, formatXof } from "@/lib/documents";
 import { Combo, ComboRequestRow, deleteCombo, fetchComboRequests, fetchCombosAdmin, saveCombo, setComboRequestStatus, syncComboPrices, SyncPricesResult } from "@/lib/engage";
 import { socialHref } from "@/components/SocialLinks";
+import { formatDakarDateTime } from "@/lib/today";
 
 const OCCASIONS = ["Anniversaire", "Soiree entre amis", "Special week-end", "Special evenement", "Mariage / bapteme", "Repas d'entreprise"];
 
@@ -240,7 +241,7 @@ export default function CombosAdminPage() {
                     {r.customer_name} · {r.customer_phone}
                   </p>
                   {r.message && <p className="text-sm text-gray-300 italic">&laquo; {r.message} &raquo;</p>}
-                  <p className="text-xs text-gray-600">Recue le {new Date(r.created_at).toLocaleString("fr-FR")}</p>
+                  <p className="text-xs text-gray-600">Recue le {formatDakarDateTime(r.created_at)}</p>
                 </div>
                 <div className="flex flex-col items-end gap-2">
                   <span className={`text-xs px-2 py-1 rounded-md ${STATUS[r.status].cls}`}>{STATUS[r.status].label}</span>

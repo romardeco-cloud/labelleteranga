@@ -5,6 +5,7 @@ import { StarsDisplay } from "@/components/Stars";
 import { PointOfSale, fetchPointsOfSale } from "@/lib/api";
 import { apiErrorMessage } from "@/lib/documents";
 import { AdminReview, RATING_LABELS, ReviewSummary, deleteReview, fetchAdminReviews, updateReview } from "@/lib/engage";
+import { formatDakarDateTime } from "@/lib/today";
 
 const REC: Record<string, string> = { yes: "Recommande", maybe: "Peut-etre", no: "Ne recommande pas" };
 
@@ -120,7 +121,7 @@ export default function ReviewsAdminPage() {
                     {r.customer_name || "Client anonyme"} <span className="text-xs text-gray-500">· {r.point_of_sale_name}</span>
                   </p>
                   <p className="text-xs text-gray-500">
-                    {new Date(r.created_at).toLocaleString("fr-FR")}
+                    {formatDakarDateTime(r.created_at)}
                     {r.order_reference && ` · commande ${r.order_reference.slice(0, 8).toUpperCase()}`}
                     {r.customer_phone && ` · ${r.customer_phone}`}
                   </p>
