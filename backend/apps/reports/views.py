@@ -315,6 +315,7 @@ class DailyClosingViewSet(viewsets.ModelViewSet):
             closing_date = closing_date_for(pr, for_date)
             totals, _tips, n = _sales_totals_range(pr, closing_date, for_date)
             closing = DailyClosing.covering(date=for_date, point_of_sale=pr.point_of_sale, cashier=pr.user)
+            blocked = closing is not None and closing.blocks(for_date)
             rows.append(
                 {
                     "id": pr.id,
@@ -324,9 +325,9 @@ class DailyClosingViewSet(viewsets.ModelViewSet):
                     "sales_count": n,
                     "expected_total": sum(totals.values()),
                     "opening_cash": opening_cash_for(pr, closing_date),
-                    "closed": closing is not None,
+                    "closed": blocked,
                     "discrepancy_total": closing.discrepancy_total if closing else None,
-                    "closing": DailyClosingSerializer(closing).data if closing else None,
+                    "closing": DailyClosingSerializer(closing).data if blocked else None,
                 }
             )
         return Response(rows)

@@ -205,8 +205,10 @@ def open_cashier_day(cashier_profile, opening_cash, notes="", for_date=None, ope
     peut la corriger via cette meme fonction (create_or_update). Retourne (ouverture, creee).
     """
     today = for_date or timezone.localdate()
+    if opening_cash in (None, ""):
+        raise ValidationError({"opening_cash": "Le fond de caisse est obligatoire avant d'ouvrir la caisse."})
     try:
-        amount = Decimal(str(opening_cash or 0))
+        amount = Decimal(str(opening_cash))
     except Exception:
         raise ValidationError({"opening_cash": "Montant invalide."})
     if amount < 0:
