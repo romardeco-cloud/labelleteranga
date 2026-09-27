@@ -92,10 +92,16 @@ def _by_day_synced_with_closings(orders, start, end, store):
         closings_qs = closings_qs.filter(point_of_sale_id=store)
     covered_ids = set()
     for c in closings_qs:
-        ids = list(_closing_order_ids(c).values_list("id", flat=True))
+        # NB : on ne peut pas utiliser c.expected_total ici - il sert a verifier le tiroir-caisse (comptage
+        # especes) et inclut donc le fond de caisse du matin (voir _sales_totals_range), qui n'est pas une
+        # vente (meme probleme deja corrige pour l'historique des clotures, via DailyClosingSerializer.sales_total).
+        # Le chiffre d'affaires reel de la fermeture est la somme des commandes qu'elle couvre.
+        closing_orders = _closing_order_ids(c)
+        agg = closing_orders.aggregate(revenue=Sum("total_amount"), n=Count("id"))
+        ids = list(closing_orders.values_list("id", flat=True))
         covered_ids.update(ids)
-        totals[c.date]["revenue"] += c.expected_total
-        totals[c.date]["n"] += len(ids)
+        totals[c.date]["revenue"] += agg["revenue"] or Decimal("0")
+        totals[c.date]["n"] += agg["n"] or 0
 
     # ventes POS pas encore couvertes par une fermeture (journee en cours) : meme regle de periode de grace
     # (avant 2h30, rattachees a la veille) pour que le rapport n'attende pas la fermeture officielle pour
