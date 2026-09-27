@@ -63,6 +63,11 @@ class Order(models.Model):
     stripe_payment_intent_id = models.CharField(max_length=255, blank=True)
     wave_checkout_id = models.CharField(max_length=255, blank=True)
     orange_money_order_id = models.CharField(max_length=255, blank=True)
+    # Jeton aleatoire propre a cette commande, integre a l'URL de notification Orange Money (notif_url) et
+    # exige a nouveau dans le webhook : Orange Money Web Payment n'offre pas de signature de webhook, donc
+    # sans ce jeton n'importe qui connaissant la reference de sa propre commande (visible dans l'URL de
+    # retour) pourrait appeler ce webhook lui-meme et se faire confirmer un paiement jamais effectue.
+    orange_money_webhook_token = models.CharField(max_length=64, blank=True)
     whatsapp_confirmation_sent_at = models.DateTimeField(null=True, blank=True)
     # sent | failed | not_configured | "" (pas encore tente)
     whatsapp_status = models.CharField(max_length=20, blank=True)

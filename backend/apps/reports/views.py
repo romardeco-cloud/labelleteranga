@@ -522,9 +522,12 @@ class AutoCloseCronView(APIView):
     permission_classes = [permissions.AllowAny]
 
     def _run(self, request):
+        import hmac
+
         from django.conf import settings
 
-        if not settings.AUTO_CLOSE_SECRET or request.query_params.get("key") != settings.AUTO_CLOSE_SECRET:
+        provided = request.query_params.get("key") or ""
+        if not settings.AUTO_CLOSE_SECRET or not hmac.compare_digest(provided, settings.AUTO_CLOSE_SECRET):
             return Response({"detail": "Cle invalide."}, status=status.HTTP_403_FORBIDDEN)
         n = auto_close_overdue_cashiers()
         return Response({"closed": n})
