@@ -349,6 +349,8 @@ export type DailyClosing = {
   expected_orange_money: string;
   expected_cash: string;
   expected_total: string;
+  opening_cash: string;
+  sales_total: string;
   declared_card: string;
   declared_wave: string;
   declared_orange_money: string;

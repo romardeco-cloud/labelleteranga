@@ -222,6 +222,9 @@ export default function AdminClosingPage() {
             <tr>
               <th className="p-2">Date</th>
               <th className="p-2">Attendu</th>
+              <th className="p-2" title="Attendu moins le fond de caisse du matin : comparable a un rapport de chiffre d'affaires.">
+                Ventes seules
+              </th>
               <th className="p-2">Declare</th>
               <th className="p-2">Ecart</th>
               <th className="p-2">Caissier</th>
@@ -235,6 +238,7 @@ export default function AdminClosingPage() {
               <tr key={c.id} className="border-t">
                 <td className="p-2">{c.date}</td>
                 <td className="p-2">{formatXof(c.expected_total)}</td>
+                <td className="p-2 text-gray-500">{formatXof(c.sales_total)}</td>
                 <td className="p-2">{formatXof(c.declared_total)}</td>
                 <td className={`p-2 font-medium ${Number(c.discrepancy_total) === 0 ? "text-gray-400" : Number(c.discrepancy_total) > 0 ? "text-blue-600" : "text-red-600"}`}>
                   {Number(c.discrepancy_total) > 0 ? "+" : ""}
