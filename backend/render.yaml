@@ -43,6 +43,8 @@ services:
         sync: false
       - key: WAVE_API_KEY
         sync: false
+      - key: WAVE_WEBHOOK_SECRET
+        sync: false
       - key: ORANGE_MONEY_CLIENT_ID
         sync: false
       - key: ORANGE_MONEY_CLIENT_SECRET
