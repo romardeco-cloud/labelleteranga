@@ -14,6 +14,17 @@ class DailyClosingSerializer(serializers.ModelSerializer):
     discrepancy_wave = serializers.DecimalField(max_digits=12, decimal_places=2, read_only=True)
     discrepancy_orange_money = serializers.DecimalField(max_digits=12, decimal_places=2, read_only=True)
     discrepancy_cash = serializers.DecimalField(max_digits=12, decimal_places=2, read_only=True)
+    opening_cash = serializers.SerializerMethodField()
+    sales_total = serializers.SerializerMethodField()
+
+    def get_opening_cash(self, obj):
+        """Fond de caisse du premier jour couvert (deja compris dans expected_cash/expected_total)."""
+        opening = CashierOpening.objects.filter(date=obj.date, point_of_sale=obj.point_of_sale, cashier=obj.cashier).first()
+        return opening.opening_cash if opening else 0
+
+    def get_sales_total(self, obj):
+        """Ventes seules (expected_total moins le fond de caisse) : comparable a un rapport de chiffre d'affaires."""
+        return obj.expected_total - self.get_opening_cash(obj)
 
     class Meta:
         model = DailyClosing
@@ -31,6 +42,8 @@ class DailyClosingSerializer(serializers.ModelSerializer):
             "expected_orange_money",
             "expected_cash",
             "expected_total",
+            "opening_cash",
+            "sales_total",
             "declared_card",
             "declared_wave",
             "declared_orange_money",
