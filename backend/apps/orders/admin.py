@@ -98,6 +98,7 @@ class OrderAdmin(admin.ModelAdmin):
         "stripe_payment_intent_id",
         "wave_checkout_id",
         "orange_money_order_id",
+        "orange_money_webhook_token",
         "whatsapp_confirmation_sent_at",
         "created_at",
         "paid_at",

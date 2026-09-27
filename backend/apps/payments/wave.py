@@ -39,9 +39,35 @@ def create_checkout_session(order):
 
 def verify_webhook_signature(request):
     """
-    Wave signe ses webhooks (voir doc officielle pour l'algorithme exact et
-    l'en-tete utilise). A implementer avec le secret fourni par Wave avant
-    la mise en production ; par defaut on fait confiance a l'IP source +
-    HTTPS, ce qui est insuffisant en production.
+    Verifie l'en-tete Wave-Signature ("t=<epoch>,v1=<hmac>[,v1=<hmac2>...]") : HMAC-SHA256 de
+    "<timestamp><corps brut de la requete>" avec WAVE_WEBHOOK_SECRET (visible UNE SEULE FOIS a la creation
+    du webhook dans le Wave Business Portal). Sans cette verification, n'importe qui connaissant la reference
+    d'une commande (visible du client dans l'URL de retour) peut appeler ce webhook lui-meme et se faire
+    confirmer un paiement jamais effectue.
+
+    Refuse si WAVE_WEBHOOK_SECRET n'est pas configure : mieux vaut un webhook qui ne confirme aucun paiement
+    qu'un webhook qui les confirme tous sans verification.
     """
-    return True
+    import hashlib
+    import hmac
+    import time
+
+    secret = settings.WAVE_WEBHOOK_SECRET
+    if not secret:
+        return False
+
+    header = request.META.get("HTTP_WAVE_SIGNATURE", "")
+    fields = [p.split("=", 1) for p in header.split(",") if "=" in p]
+    timestamp = next((v for k, v in fields if k == "t"), None)
+    signatures = [v for k, v in fields if k == "v1"]
+    if not timestamp or not signatures:
+        return False
+
+    try:
+        if abs(time.time() - int(timestamp)) > 5 * 60:  # rejette un webhook rejoue plus de 5 min apres coup
+            return False
+    except ValueError:
+        return False
+
+    expected = hmac.new(secret.encode(), (timestamp + request.body.decode("utf-8", "replace")).encode(), hashlib.sha256).hexdigest()
+    return any(hmac.compare_digest(expected, sig) for sig in signatures)
