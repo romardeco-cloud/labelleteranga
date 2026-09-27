@@ -175,7 +175,10 @@ class POSClosingView(APIView):
     permission_classes = [IsCashier]
 
     def _closing_today(self, profile):
-        return DailyClosing.covering(date=timezone.localdate(), point_of_sale=profile.point_of_sale, cashier=profile.user)
+        """Fermeture qui bloque reellement aujourd'hui (voir DailyClosing.blocks) - pas seulement une qui le couvre."""
+        today = timezone.localdate()
+        closing = DailyClosing.covering(date=today, point_of_sale=profile.point_of_sale, cashier=profile.user)
+        return closing if closing and closing.blocks(today) else None
 
     def get(self, request):
         from apps.pos.services import closing_date_for, _sales_totals_range

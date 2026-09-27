@@ -82,6 +82,18 @@ class DailyClosing(models.Model):
 
         return cls.objects.filter(**filters).filter(Q(date=date) | Q(date__lte=date, covers_through__gte=date)).first()
 
+    def blocks(self, date):
+        """
+        Est-ce que CETTE fermeture doit empecher une nouvelle vente/ouverture a `date` ? Une fermeture
+        manuelle qui couvre `date` bloque bien (le caissier a explicitement ferme sa journee) ; une
+        fermeture AUTOMATIQUE qui deborde sur `date` (jours oublies regroupes, ou ventes de grace juste
+        apres minuit) ne doit jamais bloquer LE JOUR MEME ou elle a ete generee - seul un vrai jour ferme
+        (date == self.date) bloque dans ce cas.
+        """
+        if self.date == date:
+            return True
+        return not self.auto_closed
+
     @property
     def expected_total(self):
         return self.expected_card + self.expected_wave + self.expected_orange_money + self.expected_cash

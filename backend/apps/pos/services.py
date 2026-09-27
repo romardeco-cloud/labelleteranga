@@ -33,7 +33,9 @@ def create_pos_sale(cashier_profile, items, payment_method, customer_name="", am
         raise ValidationError({"items": "Le panier est vide."})
 
     store = cashier_profile.point_of_sale
-    if DailyClosing.covering(date=timezone.localdate(), point_of_sale=store, cashier=cashier_profile.user):
+    today = timezone.localdate()
+    closing_today = DailyClosing.covering(date=today, point_of_sale=store, cashier=cashier_profile.user)
+    if closing_today and closing_today.blocks(today):
         raise ValidationError({"detail": "Votre caisse est fermee pour aujourd'hui."})
     if not CashierOpening.objects.filter(date=timezone.localdate(), point_of_sale=store, cashier=cashier_profile.user).exists():
         raise ValidationError({"detail": "Ouvrez votre caisse (fond de caisse) avant de commencer a vendre."})
