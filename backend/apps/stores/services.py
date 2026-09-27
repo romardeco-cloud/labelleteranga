@@ -91,6 +91,39 @@ def change_stock(product, store, *, reason, delta=None, set_to=None, reference="
     )
 
 
+@transaction.atomic
+def transfer_stock(product, from_store, to_store, quantity, user=None):
+    """
+    Deplace `quantity` unites de `product` de `from_store` vers `to_store`, en une seule operation atomique
+    et tracee : jusqu'ici, un transfert entre points de vente se faisait "a la main" (une sortie manuelle d'un
+    cote, une entree manuelle de l'autre, via deux mouvements independants), ce qui pouvait facilement finir
+    en oubli d'un des deux cotes. Ici, les deux mouvements StockMovement (Correction manuelle) sont crees
+    ensemble ou pas du tout, et portent une reference courte partagee pour se retrouver l'un l'autre dans le
+    journal. Refuse si `from_store` n'a pas assez de stock disponible pour ce produit.
+    """
+    import uuid
+
+    if from_store.pk == to_store.pk:
+        raise ValidationError({"to_store": "Le point de vente de destination doit etre different de l'origine."})
+    try:
+        quantity = int(quantity)
+    except (TypeError, ValueError):
+        raise ValidationError({"quantity": "Quantite invalide."})
+    if quantity <= 0:
+        raise ValidationError({"quantity": "La quantite a transferer doit etre positive."})
+
+    short_id = uuid.uuid4().hex[:6]
+    out_movement = change_stock(
+        product, from_store, delta=-quantity, reason=StockMovement.Reason.MANUAL,
+        reference=f"transfert #{short_id} -> {to_store.slug or to_store.name}", user=user,
+    )
+    in_movement = change_stock(
+        product, to_store, delta=quantity, reason=StockMovement.Reason.MANUAL,
+        reference=f"transfert #{short_id} <- {from_store.slug or from_store.name}", user=user,
+    )
+    return out_movement, in_movement
+
+
 COPIED_SETTINGS = [
     "timezone", "email", "legal_form", "share_capital", "ninea", "rccm", "vat_rate", "prices_include_vat", "payment_methods",
     "receipt_slogan", "receipt_footer", "module_hold", "module_history", "module_qr", "module_dine_in", "module_customer_orders",
