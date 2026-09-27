@@ -97,10 +97,17 @@ def _by_day_synced_with_closings(orders, start, end, store):
         totals[c.date]["revenue"] += c.expected_total
         totals[c.date]["n"] += len(ids)
 
+    # ventes POS pas encore couvertes par une fermeture (journee en cours) : meme regle de periode de grace
+    # (avant 2h30, rattachees a la veille) pour que le rapport n'attende pas la fermeture officielle pour
+    # regrouper une soiree qui deborde sur le lendemain.
     remaining = orders.filter(channel=Order.Channel.POS).exclude(pk__in=covered_ids)
-    for r in remaining.annotate(day=TruncDate("paid_at")).values("day").annotate(revenue=Sum("total_amount"), n=Count("id")):
-        totals[r["day"]]["revenue"] += r["revenue"] or Decimal("0")
-        totals[r["day"]]["n"] += r["n"]
+    for o in remaining.only("paid_at", "total_amount"):
+        local_paid_at = timezone.localtime(o.paid_at)
+        business_day = local_paid_at.date()
+        if local_paid_at.time() < GRACE_CUTOFF:
+            business_day -= timedelta(days=1)
+        totals[business_day]["revenue"] += o.total_amount
+        totals[business_day]["n"] += 1
 
     return totals
 
