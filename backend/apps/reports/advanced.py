@@ -80,7 +80,11 @@ def _by_day_synced_with_closings(orders, start, end, store):
     groupees par leur date de paiement. Les ventes POS pas encore fermees (aujourd'hui, ou une fermeture en
     retard) restent aussi groupees par leur date reelle, en attendant leur fermeture.
     """
-    totals = defaultdict(lambda: {"revenue": Decimal("0"), "n": 0})
+    # NB : chaque jour porte aussi "ids", les identifiants des commandes POS qui lui sont attribuees - pas
+    # utilise pour le graphique lui-meme, mais indispensable pour recomposer un queryset de commandes coherent
+    # avec les fermetures/la periode de grace au-dela du seul graphique (voir OverviewReportView, dont les
+    # chiffres d'en-tete - chiffre d'affaires, ventes, panier moyen... - doivent s'accorder avec ce graphique).
+    totals = defaultdict(lambda: {"revenue": Decimal("0"), "n": 0, "ids": []})
 
     other_orders = orders.exclude(channel=Order.Channel.POS)
     for r in other_orders.annotate(day=TruncDate("paid_at")).values("day").annotate(revenue=Sum("total_amount"), n=Count("id")):
@@ -102,18 +106,33 @@ def _by_day_synced_with_closings(orders, start, end, store):
         covered_ids.update(ids)
         totals[c.date]["revenue"] += agg["revenue"] or Decimal("0")
         totals[c.date]["n"] += agg["n"] or 0
+        totals[c.date]["ids"].extend(ids)
 
     # ventes POS pas encore couvertes par une fermeture (journee en cours) : meme regle de periode de grace
     # (avant 2h30, rattachees a la veille) pour que le rapport n'attende pas la fermeture officielle pour
-    # regrouper une soiree qui deborde sur le lendemain.
-    remaining = orders.filter(channel=Order.Channel.POS).exclude(pk__in=covered_ids)
-    for o in remaining.only("paid_at", "total_amount"):
+    # regrouper une soiree qui deborde sur le lendemain. On interroge INDEPENDAMMENT de `orders` (qui peut
+    # avoir ete filtre sur un seul jour, ex. le Tableau de bord) et on elargit jusqu'a `end + 1 jour`, sinon
+    # une vente faite juste apres minuit le lendemain de `end` - qui doit compter pour `end` - ne serait meme
+    # pas recuperee : c'est exactement ce qui faisait afficher une vente de 00h19 dans le CA du jour suivant
+    # au lieu de la veille.
+    remaining_qs = Order.objects.filter(
+        status=Order.Status.PAID,
+        channel=Order.Channel.POS,
+        paid_at__date__gte=start,
+        paid_at__date__lte=end + timedelta(days=1),
+    ).exclude(pk__in=covered_ids)
+    if store:
+        remaining_qs = remaining_qs.filter(point_of_sale_id=store)
+    for o in remaining_qs.only("id", "paid_at", "total_amount"):
         local_paid_at = timezone.localtime(o.paid_at)
         business_day = local_paid_at.date()
         if local_paid_at.time() < GRACE_CUTOFF:
             business_day -= timedelta(days=1)
+        if business_day < start or business_day > end:
+            continue
         totals[business_day]["revenue"] += o.total_amount
         totals[business_day]["n"] += 1
+        totals[business_day]["ids"].append(o.id)
 
     return totals
 
@@ -134,17 +153,28 @@ class OverviewReportView(APIView):
     def get(self, request):
         start, end, store = _period(request)
         orders = _paid_orders(start, end, store)
-        agg = orders.aggregate(revenue=Sum("total_amount"), n=Count("id"), tips=Sum("tip_amount"))
-        revenue, n = _f(agg["revenue"]), agg["n"] or 0
-        tips = _f(agg["tips"])  # deja compris dans revenue, purement informatif
-
         by_day_map = _by_day_synced_with_closings(orders, start, end, store)
+
+        # Les commandes POS attribuees a un jour peuvent differer de leur date calendaire brute (voir
+        # _by_day_synced_with_closings : fermetures groupees, periode de grace de 2h30) - on recompose donc le
+        # queryset de la periode a partir de ces attributions plutot que du filtre brut par date, sinon les
+        # chiffres d'en-tete (chiffre d'affaires, ventes, panier moyen...) se contrediraient avec le graphique
+        # "par jour" juste en dessous (ex. une vente faite a 00h19 comptee dans le CA du jour au lieu de la veille).
+        pos_ids = set()
         by_day = []  # tous les jours de la periode, meme sans vente (0 FCFA), pour un graphique sans trous
         d = start
         while d <= end:
             r = by_day_map.get(d)
+            if r:
+                pos_ids.update(r["ids"])
             by_day.append({"day": d, "revenue": _f(r["revenue"]) if r else 0, "n": r["n"] if r else 0})
             d += timedelta(days=1)
+        other_ids = set(orders.exclude(channel=Order.Channel.POS).values_list("id", flat=True))
+        orders = Order.objects.filter(pk__in=pos_ids | other_ids)
+
+        agg = orders.aggregate(revenue=Sum("total_amount"), n=Count("id"), tips=Sum("tip_amount"))
+        revenue, n = _f(agg["revenue"]), agg["n"] or 0
+        tips = _f(agg["tips"])  # deja compris dans revenue, purement informatif
         by_store = [
             {**r, "label": r["label"] or ONLINE_LABEL}
             for r in [
