@@ -1,7 +1,7 @@
 from datetime import date as date_cls
 from datetime import timedelta
 
-from django.db.models import Count, F, Sum
+from django.db.models import Count, F, Q, Sum
 from django.db.models.functions import TruncDate, TruncMonth, TruncYear
 from django.utils import timezone
 from rest_framework import permissions, status, viewsets
@@ -13,7 +13,7 @@ from rest_framework.views import APIView
 
 from apps.orders.models import Order, OrderItem
 
-from apps.pos.services import auto_close_overdue_cashiers
+from apps.pos.services import GRACE_CUTOFF, auto_close_overdue_cashiers
 
 from .models import DailyClosing
 from .serializers import DailyClosingSerializer
@@ -31,9 +31,18 @@ def _paid_orders_qs(start=None, end=None, point_of_sale=None):
 
 
 def _compute_expected_totals(for_date, point_of_sale=None):
-    """Totaux payes ce jour-la, par moyen de paiement (utilise pour la cloture)."""
+    """
+    Totaux payes ce jour-la, par moyen de paiement (utilise pour la cloture globale "Clotures de caisse",
+    sans caissier). Alignee sur la meme periode de grace que les clotures par caissier (voir
+    apps.pos.services.GRACE_CUTOFF) : une vente faite juste apres minuit, avant 2h30, compte pour la veille -
+    sinon cette cloture globale afficherait un chiffre different de celui de Comptabilite (Caisses des
+    caissiers) pour le meme jour et la meme vente.
+    """
     totals = {key: 0 for key, _ in Order.PaymentMethod.choices}
-    qs = Order.objects.filter(status=Order.Status.PAID, paid_at__date=for_date, point_of_sale_id=point_of_sale)
+    next_day = for_date + timedelta(days=1)
+    qs = Order.objects.filter(status=Order.Status.PAID, point_of_sale_id=point_of_sale).filter(
+        Q(paid_at__date=for_date, paid_at__time__gte=GRACE_CUTOFF) | Q(paid_at__date=next_day, paid_at__time__lt=GRACE_CUTOFF)
+    )
     qs = qs.values("payment_method").annotate(total=Sum("total_amount"))
     for row in qs:
         totals[row["payment_method"]] = row["total"] or 0
