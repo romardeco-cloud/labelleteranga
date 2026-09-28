@@ -78,7 +78,8 @@ export default function CaissePage() {
   const [lines, setLines] = useState<Line[]>([]);
   const [held, setHeld] = useState<Held[]>([]);
   const heldLoaded = useRef(false);
-  const [panel, setPanel] = useState<"held" | "history" | "drawer" | "menu" | null>(null);
+  const [panel, setPanel] = useState<"held" | "history" | "drawer" | "menu" | "opening" | null>(null);
+  const [openingEditMsg, setOpeningEditMsg] = useState("");
   const [mode, setMode] = useState<Mode>("direct");
   const [table, setTable] = useState("");
   const [settings, setSettings] = useState<POSSettings>(DEFAULT_SETTINGS);
@@ -237,15 +238,27 @@ export default function CaissePage() {
     e.preventDefault();
     setOpeningBusy(true);
     setOpeningError("");
+    setOpeningEditMsg("");
     try {
       await submitCashierOpening({ opening_cash: Number(openingAmount || 0), notes: openingNotes });
       await loadOpening();
+      // si on corrige le fond de caisse depuis le panneau (caisse deja ouverte), on reste sur place avec une
+      // confirmation - l'ecran plein page ci-dessous n'est affiche que la toute premiere fois (avant ouverture).
+      if (panel === "opening") setOpeningEditMsg("Fond de caisse enregistre.");
     } catch (err: any) {
       const d = err?.response?.data;
       setOpeningError(d?.opening_cash ?? d?.detail ?? "Impossible d'enregistrer l'ouverture.");
     } finally {
       setOpeningBusy(false);
     }
+  }
+
+  function openOpeningEdit() {
+    setOpeningAmount(openingState?.opening_cash != null ? String(openingState.opening_cash) : "");
+    setOpeningNotes("");
+    setOpeningError("");
+    setOpeningEditMsg("");
+    setPanel("opening");
   }
 
   // Alerte commandes en ligne : verifiee toutes les 10 s ; clignote en rouge (avec un bip) tant qu'une commande n'est pas finalisee
@@ -977,6 +990,11 @@ export default function CaissePage() {
                 <Icon name="fileText" className="w-4 h-4" /> Reimpr. X
               </button>
             )}
+            {!closingMode && !closed && (
+              <button onClick={openOpeningEdit} className="flex items-center gap-2 border rounded-xl px-3 py-2 text-sm text-gray-300 hover:bg-white/5">
+                <Icon name="archive" className="w-4 h-4" /> Fond de caisse
+              </button>
+            )}
             {!closingMode && (
               <button onClick={startClosing} className="flex items-center gap-2 border rounded-xl px-3 py-2 text-sm text-gray-300 hover:bg-white/5">
                 <Icon name="lock" className="w-4 h-4" /> {closed ? "Ma fermeture" : "Fermeture"}
@@ -1633,7 +1651,15 @@ export default function CaissePage() {
           <div className="w-full max-w-md h-full bg-[#170f0e] border-l overflow-y-auto" onClick={(e) => e.stopPropagation()}>
             <div className="flex items-center justify-between px-4 py-3 border-b sticky top-0 bg-[#170f0e]">
               <h2 className="font-semibold">
-                {panel === "held" ? "Ventes en attente" : panel === "drawer" ? "Tiroir-caisse" : panel === "menu" ? `Menu du jour · ${today.long}` : "Historique du jour"}
+                {panel === "held"
+                  ? "Ventes en attente"
+                  : panel === "drawer"
+                  ? "Tiroir-caisse"
+                  : panel === "menu"
+                  ? `Menu du jour · ${today.long}`
+                  : panel === "opening"
+                  ? "Fond de caisse"
+                  : "Historique du jour"}
               </h2>
               <button onClick={() => setPanel(null)} className="text-gray-500 text-sm">
                 Fermer
@@ -1771,6 +1797,44 @@ export default function CaissePage() {
                 <button onClick={saveMenu} className="w-full bg-[#b3261e] text-white rounded-xl py-3 font-semibold">
                   Enregistrer le menu
                 </button>
+              </div>
+            )}
+
+            {panel === "opening" && (
+              <div className="p-4 space-y-4">
+                <p className="text-sm text-gray-500">
+                  Comptez et corrigez le fond de caisse (les especes laissees dans le tiroir pour rendre la monnaie) avant de commencer vos
+                  ventes du jour. Cela ne change rien aux ventes deja enregistrees.
+                </p>
+                <form onSubmit={submitOpening} className="space-y-2">
+                  <label className="text-sm block">
+                    Fond de caisse (especes)
+                    <input
+                      required
+                      autoFocus
+                      type="number"
+                      min={0}
+                      placeholder="0"
+                      value={openingAmount}
+                      onChange={(e) => setOpeningAmount(e.target.value)}
+                      className="w-full border rounded-xl px-3 py-2.5 mt-1"
+                    />
+                  </label>
+                  <label className="text-sm block">
+                    Remarque (facultatif)
+                    <input
+                      type="text"
+                      value={openingNotes}
+                      onChange={(e) => setOpeningNotes(e.target.value)}
+                      className="w-full border rounded-xl px-3 py-2.5 mt-1"
+                    />
+                  </label>
+                  {openingError && <p className="text-red-500 text-sm">{openingError}</p>}
+                  {openingEditMsg && <p className="text-emerald-400 text-sm">{openingEditMsg}</p>}
+                  <button disabled={openingBusy} className="w-full bg-brand text-white rounded-xl py-2.5 text-sm font-medium disabled:opacity-40">
+                    {openingBusy ? "Enregistrement..." : "Enregistrer le fond de caisse"}
+                  </button>
+                </form>
               </div>
             )}
 
