@@ -97,9 +97,10 @@ def _table(rows, widths, header=True, align_right_cols=(), zebra=True, bold_last
 
 def letterhead(store=None):
     """En-tete : logo + coordonnees + informations legales du point de vente."""
-    from apps.stores.models import get_settings
+    from apps.stores.models import CompanyBranding, get_settings
 
-    name = store.name if store else "La Belle Teranga (LATERANGA)"
+    branding = CompanyBranding.current()
+    name = store.name if store else (branding.name or "La Belle Teranga (LATERANGA)")
     lines = []
     st = get_settings(store) if store else None
     from apps.stores.models import CompanySeal
@@ -133,8 +134,12 @@ def letterhead(store=None):
         lines += [escape(x.strip()) for x in company.contact_extra.splitlines() if x.strip()]
     name_style = ParagraphStyle("LetterheadName", parent=BODY, fontName="Helvetica-Bold", fontSize=16, leading=19, textColor=BRAND_DARK, spaceAfter=2)
     text = [Paragraph(escape(name), name_style), Paragraph("<br/>".join(lines), BODY)]
-    logo_path = Path(settings.BASE_DIR) / "assets" / "logo.jpg"
-    cells = [[Image(str(logo_path), 30 * mm, 30 * mm) if logo_path.exists() else "", text]]
+    if branding.logo_png:
+        logo_img = Image(io.BytesIO(bytes(branding.logo_png)), 30 * mm, 30 * mm)
+    else:
+        logo_path = Path(settings.BASE_DIR) / "assets" / "logo.jpg"
+        logo_img = Image(str(logo_path), 30 * mm, 30 * mm) if logo_path.exists() else ""
+    cells = [[logo_img, text]]
     t = Table(cells, colWidths=[35 * mm, 137 * mm])
     t.setStyle(TableStyle([("VALIGN", (0, 0), (-1, -1), "MIDDLE"), ("LINEBELOW", (0, 0), (-1, 0), 1.2, BRAND), ("BOTTOMPADDING", (0, 0), (-1, -1), 6)]))
     return t
@@ -159,7 +164,9 @@ def _footer_lines():
     parts.append((seal.contact_email if seal and seal.contact_email else "") or CONTACT_EMAIL)
     if seal and seal.contact_website:
         parts.append(seal.contact_website)
-    contact = "La Belle Teranga - " + "  |  ".join(parts) if len(parts) == 1 else "  |  ".join(parts)
+    from apps.stores.models import CompanyBranding
+
+    contact = f"{CompanyBranding.current().name} - " + "  |  ".join(parts) if len(parts) == 1 else "  |  ".join(parts)
     extra = [x.strip() for x in seal.contact_extra.splitlines() if x.strip()] if seal else []
     # Attention : `seal.legal_line` ne doit jamais etre evalue quand `seal` est None (aucun Cachet configure
     # dans Admin > Cachet et signature) - l'ancienne forme `[seal.legal_line] * bool(seal and ...)` evaluait

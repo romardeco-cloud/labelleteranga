@@ -541,6 +541,56 @@ class CompanySealView(APIView):
         return Response(seal_payload(seal))
 
 
+# ------------------------------------------------------------------ identite de l'entreprise (nom + logo)
+
+
+def branding_payload(b):
+    return {"name": b.name, "logo": _data_url(b.logo_png)}
+
+
+class CompanyBrandingView(APIView):
+    """
+    GET  /api/stores/company-branding/ -> {name, logo} (public : utilise sur le site, en caisse et dans l'administration)
+    POST /api/stores/company-branding/ (multipart, admin) : name, logo (photo), remove_logo
+    """
+
+    parser_classes = [MultiPartParser, FormParser, JSONParser]
+
+    def get_permissions(self):
+        if self.request.method == "POST":
+            return [permissions.IsAdminUser()]
+        return [permissions.AllowAny()]
+
+    def get(self, request):
+        from .models import CompanyBranding
+
+        return Response(branding_payload(CompanyBranding.current()))
+
+    def post(self, request):
+        from .models import CompanyBranding
+        from .seal import process_logo_image
+
+        branding = CompanyBranding.current()
+        d = request.data
+        if "name" in d:
+            name = str(d.get("name") or "").strip()[:150]
+            if not name:
+                raise ValidationError({"name": "Le nom de l'entreprise est obligatoire."})
+            branding.name = name
+        upload = request.FILES.get("logo")
+        if upload:
+            if upload.size > 12 * 1024 * 1024:
+                raise ValidationError({"logo": "Image trop lourde (12 Mo maximum)."})
+            try:
+                branding.logo_png = process_logo_image(upload)
+            except Exception:
+                raise ValidationError({"logo": "Image illisible : envoyez une photo JPG ou PNG."})
+        elif str(d.get("remove_logo", "")).lower() in ("1", "true"):
+            branding.logo_png = None
+        branding.save()
+        return Response(branding_payload(branding))
+
+
 # ------------------------------------------------------------------ bandes de pub du site
 def band_items(band, request, limit=12):
     """Cartes d'une bande : plats choisis a la main, sinon produits actifs de la categorie (regroupes par plat), puis combos actifs."""

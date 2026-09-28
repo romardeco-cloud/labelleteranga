@@ -1,11 +1,11 @@
 "use client";
 
-import Image from "next/image";
 import Link from "next/link";
 import { usePathname, useRouter } from "next/navigation";
 import { useEffect, useState } from "react";
 import Icon, { IconName } from "@/components/admin/Icon";
 import { clearAdminToken, getAdminToken, setAdminToken } from "@/lib/auth";
+import { CompanyBranding, fetchCompanyBranding } from "@/lib/branding";
 
 type NavItem = { href: string; label: string; icon: IconName; exact?: boolean; match?: string[] };
 
@@ -39,6 +39,7 @@ const MAIN_NAV: NavItem[] = [
   { href: "/admin/cashiers", label: "Caissiers", icon: "users" },
   { href: "/admin/stores", label: "Points de vente", icon: "store" },
   { href: "/admin/seal", label: "Cachet et signature", icon: "receipt" },
+  { href: "/admin/branding", label: "Identite de l'entreprise", icon: "settings" },
   { href: "/admin/settings", label: "Parametres", icon: "settings" },
 ];
 
@@ -55,8 +56,10 @@ export default function AdminLayout({ children }: { children: React.ReactNode })
   const [menuOpen, setMenuOpen] = useState(false);
   // sur admin.labelleteranga.com, « / » ouvre l'administration : le site public est l'adresse principale
   const [siteHome, setSiteHome] = useState("/");
+  const [branding, setBranding] = useState<CompanyBranding>({ name: "La Belle Teranga", logo: null });
   useEffect(() => {
     if (/(^|\.)labelleteranga\.com$/i.test(window.location.hostname)) setSiteHome("https://labelleteranga.com");
+    fetchCompanyBranding().then(setBranding);
   }, []);
   const isLoginPage = pathname === "/admin/login";
 
@@ -85,9 +88,10 @@ export default function AdminLayout({ children }: { children: React.ReactNode })
   const sidebar = (
     <div className="flex flex-col h-full">
       <div className="flex items-center gap-3 px-4 py-5 border-b">
-        <Image src="/logo.jpg" alt="La Belle Teranga" width={44} height={44} className="rounded-full ring-2 ring-brand-accent" />
+        {/* eslint-disable-next-line @next/next/no-img-element */}
+        <img src={branding.logo || "/logo.jpg"} alt={branding.name} width={44} height={44} className="rounded-full ring-2 ring-brand-accent object-cover w-11 h-11" />
         <div className="leading-tight">
-          <p className="font-bold text-white">La Belle Teranga</p>
+          <p className="font-bold text-white">{branding.name}</p>
           <p className="text-xs text-brand-accent">Administration</p>
         </div>
       </div>
@@ -135,7 +139,8 @@ export default function AdminLayout({ children }: { children: React.ReactNode })
       {/* Barre mobile */}
       <div className="lg:hidden print:hidden flex items-center justify-between px-4 py-3 border-b bg-[#170f0e] sticky top-0 z-30">
         <div className="flex items-center gap-2">
-          <Image src="/logo.jpg" alt="" width={32} height={32} className="rounded-full" />
+          {/* eslint-disable-next-line @next/next/no-img-element */}
+          <img src={branding.logo || "/logo.jpg"} alt="" width={32} height={32} className="rounded-full object-cover w-8 h-8" />
           <span className="font-semibold text-white">Administration</span>
         </div>
         <button onClick={() => setMenuOpen(!menuOpen)} aria-label="Menu" className="p-2 text-white">

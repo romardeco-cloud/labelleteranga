@@ -18,6 +18,7 @@ from .views_engagement import (
     PromoBandAdminViewSet,
     SiteBandsView,
     ComboRequestAdminViewSet,
+    CompanyBrandingView,
     CompanySealView,
     LoyaltyAdminView,
     ReviewAdminViewSet,
@@ -48,6 +49,7 @@ urlpatterns = [
     path("sites/<slug:slug>/combo-requests/", SiteComboRequestView.as_view()),
     path("loyalty/", LoyaltyAdminView.as_view()),
     path("company-seal/", CompanySealView.as_view()),
+    path("company-branding/", CompanyBrandingView.as_view()),
     path("sites/<slug:slug>/", SiteDetailView.as_view()),
     path("daily-menus/", DailyMenuAdminView.as_view()),
 ] + router.urls

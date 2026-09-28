@@ -1,5 +1,19 @@
 // Visuels "vitrine" par point de vente et illustrations de repli pour les produits sans photo.
 
+import { API_URL } from "./api";
+
+export type CompanyBranding = { name: string; logo: string | null };
+
+/** Nom et logo de l'entreprise (Admin > Identite de l'entreprise), affiches sur le site, en caisse et dans l'administration. */
+export async function fetchCompanyBranding(): Promise<CompanyBranding> {
+  try {
+    const res = await fetch(`${API_URL}/stores/company-branding/`, { next: { revalidate: 60 } });
+    return res.ok ? res.json() : { name: "La Belle Teranga", logo: null };
+  } catch {
+    return { name: "La Belle Teranga", logo: null };
+  }
+}
+
 const norm = (s: string) =>
   s
     .normalize("NFD")

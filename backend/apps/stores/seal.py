@@ -85,6 +85,16 @@ def process_seal_image(uploaded, remove_background=True, color="original"):
     return out.getvalue()
 
 
+def process_logo_image(uploaded, max_size=700):
+    """Photo du logo -> PNG optimise (transparence conservee si presente), redimensionne (700 px max)."""
+    im = ImageOps.exif_transpose(Image.open(uploaded))
+    im = im.convert("RGBA") if im.mode in ("RGBA", "LA") or "transparency" in im.info else im.convert("RGB")
+    im.thumbnail((max_size, max_size), Image.LANCZOS)
+    out = io.BytesIO()
+    im.save(out, "PNG", optimize=True)
+    return out.getvalue()
+
+
 def tint_stamp(source_png, color):
     """
     Cachet (PNG detoure, couleurs d'origine) -> cachet monochrome dans une couleur d'encre professionnelle.

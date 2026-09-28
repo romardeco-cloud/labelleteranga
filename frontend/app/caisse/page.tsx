@@ -5,7 +5,7 @@ import Image from "next/image";
 import Icon from "@/components/admin/Icon";
 import { LoyaltyStatus, PosMember, PosMenus, fetchPosLoyalty, fetchPosMenus, redeemPosReward, savePosMenu, searchPosMembers } from "@/lib/engage";
 import ProductVisual from "@/components/ProductVisual";
-import { PAYMENT_QR, categoryEmoji, storeImage } from "@/lib/branding";
+import { CompanyBranding, PAYMENT_QR, categoryEmoji, fetchCompanyBranding, storeImage } from "@/lib/branding";
 import { useToday, formatDakarTime, formatDakarDateTime } from "@/lib/today";
 import { categoryRank, effectiveCategories, loadMenuCategories, saveMenuCategories } from "@/lib/meals";
 import { apiErrorMessage } from "@/lib/documents";
@@ -71,6 +71,10 @@ export default function CaissePage() {
   const [checked, setChecked] = useState(false);
   const [loginForm, setLoginForm] = useState({ username: "", password: "" });
   const [loginError, setLoginError] = useState("");
+  const [branding, setBranding] = useState<CompanyBranding>({ name: "La Belle Teranga", logo: null });
+  useEffect(() => {
+    fetchCompanyBranding().then(setBranding);
+  }, []);
 
   const [search, setSearch] = useState("");
   const [category, setCategory] = useState("all");
@@ -749,7 +753,8 @@ export default function CaissePage() {
     return (
       <div className="admin-shell min-h-screen flex items-center justify-center px-4">
         <div className="w-full max-w-sm bg-[#1c1514] border rounded-2xl p-6">
-          <Image src="/logo.jpg" alt="La Belle Teranga" width={80} height={80} className="rounded-full mx-auto mb-4 ring-2 ring-brand-accent" />
+          {/* eslint-disable-next-line @next/next/no-img-element */}
+          <img src={branding.logo || "/logo.jpg"} alt={branding.name} width={80} height={80} className="rounded-full mx-auto mb-4 ring-2 ring-brand-accent object-cover w-20 h-20" />
           <h1 className="text-2xl font-bold mb-1 text-center">Caisse</h1>
           <p className="text-sm text-gray-500 text-center mb-6">Connexion caissier</p>
           <form onSubmit={handleLogin} className="space-y-3">
@@ -782,7 +787,8 @@ export default function CaissePage() {
     return (
       <div className="admin-shell min-h-screen flex items-center justify-center px-4">
         <div className="w-full max-w-sm bg-[#1c1514] border rounded-2xl p-6">
-          <Image src="/logo.jpg" alt="La Belle Teranga" width={80} height={80} className="rounded-full mx-auto mb-4 ring-2 ring-brand-accent" />
+          {/* eslint-disable-next-line @next/next/no-img-element */}
+          <img src={branding.logo || "/logo.jpg"} alt={branding.name} width={80} height={80} className="rounded-full mx-auto mb-4 ring-2 ring-brand-accent object-cover w-20 h-20" />
           <h1 className="text-2xl font-bold mb-1 text-center">Ouverture de caisse</h1>
           <p className="text-sm text-gray-500 text-center mb-6">
             Avant de commencer la journee, comptez et saisissez le fond de caisse (les especes laissees dans le tiroir pour rendre la monnaie).

@@ -375,6 +375,21 @@ class ComboRequest(models.Model):
         ordering = ["-created_at"]
 
 
+class CompanyBranding(models.Model):
+    """Identite globale de l'entreprise (nom et logo) : affichee sur le site, en caisse, dans l'administration et sur les documents (une seule fiche)."""
+
+    name = models.CharField("Nom de l'entreprise", max_length=150, default="La Belle Teranga (LATERANGA)")
+    logo_png = models.BinaryField("Logo", null=True, blank=True, editable=False)
+    updated_at = models.DateTimeField(auto_now=True)
+
+    @classmethod
+    def current(cls):
+        return cls.objects.first() or cls.objects.create()
+
+    def __str__(self):
+        return self.name
+
+
 class CompanySeal(models.Model):
     """Cachet et signature de l'entreprise, ajoutes automatiquement sur les documents et rapports (une seule fiche)."""
 
