@@ -648,6 +648,11 @@ export async function openCashierAdmin(input: { date: string; cashier: number; o
   return data;
 }
 
+export async function resetCashierOpening(input: { date: string; cashier: number }) {
+  const { data } = await api.post("/reports/closings/reset-opening/", input);
+  return data;
+}
+
 export async function submitCashierClosing(input: {
   declared_cash: number;
   declared_wave: number;

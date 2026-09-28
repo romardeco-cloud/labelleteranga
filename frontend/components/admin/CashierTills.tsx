@@ -1,7 +1,7 @@
 "use client";
 
 import { useCallback, useEffect, useState } from "react";
-import { DailyClosing, api, openCashierAdmin } from "@/lib/api";
+import { DailyClosing, api, openCashierAdmin, resetCashierOpening } from "@/lib/api";
 import { apiErrorMessage, formatXof } from "@/lib/documents";
 
 type Till = {
@@ -146,6 +146,22 @@ export default function CashierTills({ date, storeId, onChanged }: { date: strin
     }
   }
 
+  async function resetOpening(t: Till) {
+    if (
+      !confirm(
+        `Reinitialiser le fond de caisse de ${t.username} pour ${date} ? Le caissier devra le ressaisir lui-meme avant de pouvoir vendre.`
+      )
+    )
+      return;
+    try {
+      await resetCashierOpening({ date, cashier: t.id });
+      load();
+      onChanged();
+    } catch (err) {
+      alert(apiErrorMessage(err, "Reinitialisation impossible."));
+    }
+  }
+
   async function checkNow() {
     setChecking(true);
     setCheckMsg("");
@@ -220,6 +236,15 @@ export default function CashierTills({ date, storeId, onChanged }: { date: strin
                   <button onClick={() => openOpeningForm(t)} className="text-xs border rounded px-3 py-1.5">
                     {t.opening_cash != null ? "Corriger fond" : "Ouvrir la caisse"}
                   </button>
+                  {t.opening_cash != null && !t.closed && (
+                    <button
+                      onClick={() => resetOpening(t)}
+                      title="Efface le fond de caisse saisi : le caissier devra le ressaisir avant de pouvoir vendre"
+                      className="text-xs border rounded px-3 py-1.5 text-amber-600"
+                    >
+                      Reinitialiser
+                    </button>
+                  )}
                   <button onClick={() => openForm(t)} className="text-xs bg-brand text-white rounded px-3 py-1.5">
                     {t.closed ? "Corriger" : "Fermer la caisse"}
                   </button>
