@@ -354,6 +354,25 @@ class DailyClosingViewSet(viewsets.ModelViewSet):
 
         return Response(CashierOpeningSerializer(opening).data, status=status.HTTP_201_CREATED if created else status.HTTP_200_OK)
 
+    @action(detail=False, methods=["post"], url_path="reset-opening")
+    def reset_opening(self, request):
+        """
+        POST {date, cashier} : supprime le fond de caisse deja saisi pour ce jour, pour que le caissier soit de
+        nouveau OBLIGE de le ressaisir avant de pouvoir vendre. Sans CashierOpening pour la journee, l'ecran
+        "Ouverture de caisse" redevient obligatoire (voir POSOpeningView) et la vente est bloquee tant qu'il
+        n'est pas rempli (voir apps.pos.services.create_pos_sale). Refuse si la journee est deja fermee : le
+        fond de caisse ne sert plus qu'a l'historique une fois la fermeture faite.
+        """
+        d = request.data
+        for_date = self._date_param(d.get("date"))
+        profile = self._profile(d.get("cashier"))
+        if DailyClosing.covering(date=for_date, point_of_sale=profile.point_of_sale, cashier=profile.user):
+            raise ValidationError({"detail": "Cette journee est deja fermee : le fond de caisse ne peut plus etre reinitialise."})
+        from apps.reports.models import CashierOpening
+
+        deleted, _ = CashierOpening.objects.filter(date=for_date, point_of_sale=profile.point_of_sale, cashier=profile.user).delete()
+        return Response({"deleted": bool(deleted)})
+
     @action(detail=False, methods=["post"], url_path="auto-close")
     def force_auto_close(self, request):
         """POST : force tout de suite la fermeture automatique des caisses oubliees (bouton « Verifier maintenant » de l'admin)."""
