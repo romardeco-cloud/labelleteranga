@@ -161,7 +161,12 @@ def _footer_lines():
         parts.append(seal.contact_website)
     contact = "La Belle Teranga - " + "  |  ".join(parts) if len(parts) == 1 else "  |  ".join(parts)
     extra = [x.strip() for x in seal.contact_extra.splitlines() if x.strip()] if seal else []
-    return contact, [seal.legal_line] * bool(seal and seal.legal_line) + extra
+    # Attention : `seal.legal_line` ne doit jamais etre evalue quand `seal` est None (aucun Cachet configure
+    # dans Admin > Cachet et signature) - l'ancienne forme `[seal.legal_line] * bool(seal and ...)` evaluait
+    # `seal.legal_line` AVANT la multiplication par 0/1 et faisait planter TOUT rapport PDF des que le Cachet
+    # n'existait pas encore (base fraichement installee, ou tests).
+    legal = [seal.legal_line] if seal and seal.legal_line else []
+    return contact, legal + extra
 
 
 def _footer(canvas, doc):
