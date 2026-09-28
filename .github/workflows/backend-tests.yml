@@ -51,4 +51,38 @@ jobs:
         run: pip install -r requirements.txt
 
       - name: Lancer les tests
-        run: python manage.py test
+        shell: bash
+        run: |
+          set -o pipefail
+          python manage.py test -v 2 2>&1 | tee /tmp/test-output.log
+
+      # Poste le detail directement en commentaire sur la pull request en cas d'echec, pour que ce soit
+      # visible sans avoir a ouvrir les logs de l'action - utile car ce depot n'a pas de CI habituelle.
+      - name: Publier le detail en commentaire si echec
+        if: failure() && github.event_name == 'pull_request'
+        env:
+          GH_TOKEN: ${{ secrets.GITHUB_TOKEN }}
+          GH_REPO: ${{ github.repository }}
+          PR_NUMBER: ${{ github.event.pull_request.number }}
+        run: |
+          python3 - <<'PYEOF'
+          import json
+          import os
+          import urllib.request
+
+          with open("/tmp/test-output.log") as f:
+              log = f.read()[-55000:]
+          body = "### Echec des tests backend (voir `backend/apps/reports/tests.py`)\n\n```\n" + log + "\n```"
+          data = json.dumps({"body": body}).encode()
+          req = urllib.request.Request(
+              f"https://api.github.com/repos/{os.environ['GH_REPO']}/issues/{os.environ['PR_NUMBER']}/comments",
+              data=data,
+              headers={
+                  "Authorization": f"token {os.environ['GH_TOKEN']}",
+                  "Content-Type": "application/json",
+                  "Accept": "application/vnd.github+json",
+              },
+              method="POST",
+          )
+          urllib.request.urlopen(req)
+          PYEOF
