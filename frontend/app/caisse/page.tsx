@@ -374,7 +374,7 @@ export default function CaissePage() {
     setCounted(
       c
         ? {
-            cash: String(Number(c.declared_cash) - openingCash),
+            cash: String(Number(c.declared_cash)),
             wave: String(Number(c.declared_wave)),
             orange_money: String(Number(c.declared_orange_money)),
             card: String(Number(c.declared_card)),
@@ -394,8 +394,9 @@ export default function CaissePage() {
     setClosingError("");
     try {
       await submitCashierClosing({
-        // le tiroir reunit les deux : ventes du jour comptees separement + fond de caisse recompte a la fermeture
-        declared_cash: Number(counted.cash || 0) + Number(countedFloat || 0),
+        // le fond de caisse (countedFloat) est recompte a part, purement pour verification : il n'entre plus
+        // dans le montant de la fermeture (voir apps.pos.services._sales_totals_range cote backend).
+        declared_cash: Number(counted.cash || 0),
         declared_wave: Number(counted.wave || 0),
         declared_orange_money: Number(counted.orange_money || 0),
         declared_card: Number(counted.card || 0),
@@ -811,10 +812,11 @@ export default function CaissePage() {
 
   const closed = !!closingState?.closed;
   const showCatalog = !closingMode && !closed && mode !== "orders";
-  // un ecart de caisse (compte total different de l'attendu) doit etre explique dans la remarque
+  // un ecart de caisse (compte total different de l'attendu) doit etre explique dans la remarque - le fond de
+  // caisse (countedFloat) est recompte a part et n'entre plus dans ce calcul (voir submitClosing)
   const closingHasGap =
     !!closingState &&
-    Number(counted.cash || 0) + Number(countedFloat || 0) + Number(counted.wave || 0) + Number(counted.orange_money || 0) + Number(counted.card || 0) !==
+    Number(counted.cash || 0) + Number(counted.wave || 0) + Number(counted.orange_money || 0) + Number(counted.card || 0) !==
       Number(closingState.expected?.cash ?? 0) + Number(closingState.expected?.wave ?? 0) + Number(closingState.expected?.orange_money ?? 0) + Number(closingState.expected?.card ?? 0);
 
   return (
@@ -1038,9 +1040,8 @@ export default function CaissePage() {
                       </thead>
                       <tbody>
                         {(() => {
-                          const openingCash = Number(closingState?.opening_cash ?? 0);
                           const rows = [
-                            ["cash", "Especes (ventes du jour)", Number(closingState?.expected?.cash ?? 0) - openingCash],
+                            ["cash", "Especes (ventes du jour)", Number(closingState?.expected?.cash ?? 0)],
                             ["wave", "Wave", Number(closingState?.expected?.wave ?? 0)],
                             ["orange_money", "Orange Money", Number(closingState?.expected?.orange_money ?? 0)],
                             ["card", "Carte (terminal)", Number(closingState?.expected?.card ?? 0)],
@@ -1074,8 +1075,7 @@ export default function CaissePage() {
                           });
                         })()}
                         {(() => {
-                          const openingCash = Number(closingState?.opening_cash ?? 0);
-                          const exp = Number(closingState?.expected?.cash ?? 0) - openingCash + ["wave", "orange_money", "card"].reduce((n, k) => n + Number(closingState?.expected?.[k as "wave" | "orange_money" | "card"] ?? 0), 0);
+                          const exp = Number(closingState?.expected?.cash ?? 0) + ["wave", "orange_money", "card"].reduce((n, k) => n + Number(closingState?.expected?.[k as "wave" | "orange_money" | "card"] ?? 0), 0);
                           const cnt = Object.values(counted).reduce((n, v) => n + Number(v || 0), 0);
                           const gap = cnt - exp;
                           return (
