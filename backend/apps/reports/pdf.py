@@ -99,7 +99,7 @@ def letterhead(store=None):
     """En-tete : logo + coordonnees + informations legales du point de vente."""
     from apps.stores.models import get_settings
 
-    name = store.name if store else "La Belle Teranga"
+    name = store.name if store else "La Belle Teranga (LATERANGA)"
     lines = []
     st = get_settings(store) if store else None
     from apps.stores.models import CompanySeal
