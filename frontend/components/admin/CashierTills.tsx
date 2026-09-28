@@ -74,7 +74,8 @@ export default function CashierTills({ date, storeId, onChanged }: { date: strin
       // premiere fermeture manuelle faite par l'administrateur
       c
         ? {
-            cash: String(Number(c.declared_cash) - openingCash),
+            // declared_cash ne contient plus le fond de caisse (voir submit() plus bas et apps.pos.services._sales_totals_range)
+            cash: String(Number(c.declared_cash)),
             wave: String(Number(c.declared_wave)),
             orange_money: String(Number(c.declared_orange_money)),
             card: String(Number(c.declared_card)),
@@ -94,8 +95,9 @@ export default function CashierTills({ date, storeId, onChanged }: { date: strin
       await api.post("/reports/closings/close-cashier/", {
         date,
         cashier: open.id,
-        // le tiroir reunit les deux : ventes du jour comptees separement + fond de caisse recompte a la fermeture
-        declared_cash: Number(declared.cash || 0) + Number(declaredFloat || 0),
+        // le fond de caisse (declaredFloat) est recompte a part, purement pour verification : il n'entre plus
+        // dans le montant de la fermeture (voir apps.pos.services._sales_totals_range cote backend).
+        declared_cash: Number(declared.cash || 0),
         declared_wave: Number(declared.wave || 0),
         declared_orange_money: Number(declared.orange_money || 0),
         declared_card: Number(declared.card || 0),
@@ -112,7 +114,9 @@ export default function CashierTills({ date, storeId, onChanged }: { date: strin
   }
 
   const openingCash = Number(preview?.opening_cash ?? 0);
-  const expectedFor = (m: string) => (m === "cash" ? Number(preview?.expected.cash ?? 0) - openingCash : Number(preview?.expected[m as keyof Preview["expected"]] ?? 0));
+  // preview.expected.cash ne contient deja que les ventes en especes (voir apps.pos.services._sales_totals_range) :
+  // ne pas soustraire openingCash une deuxieme fois ici.
+  const expectedFor = (m: string) => Number(preview?.expected[m as keyof Preview["expected"]] ?? 0);
   const gap = (m: string) => Number(declared[m] || 0) - expectedFor(m);
   const floatGap = Number(declaredFloat || 0) - openingCash;
   // un ecart de caisse (n'importe quel moyen, ou le fond de caisse) doit etre explique dans la remarque
