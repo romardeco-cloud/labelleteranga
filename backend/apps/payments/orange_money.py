@@ -33,11 +33,20 @@ def _get_access_token():
 
 
 def create_web_payment(order):
+    import secrets
+
     access_token = _get_access_token()
     headers = {
         "Authorization": f"Bearer {access_token}",
         "Content-Type": "application/json",
     }
+    # Orange Money Web Payment ne signe pas ses notifications (contrairement a Stripe/Wave) : ce jeton, propre
+    # a cette commande et connu seulement d'Orange et de nous, est ce qui empeche n'importe qui d'appeler le
+    # webhook lui-meme avec la reference de sa commande pour se faire confirmer un paiement jamais effectue.
+    token = secrets.token_urlsafe(24)
+    order.orange_money_webhook_token = token
+    order.save(update_fields=["orange_money_webhook_token"])
+
     payload = {
         "merchant_key": settings.ORANGE_MONEY_MERCHANT_KEY,
         "currency": settings.ORANGE_MONEY_CURRENCY,
@@ -45,7 +54,7 @@ def create_web_payment(order):
         "amount": int(order.total_amount),
         "return_url": f"{settings.FRONTEND_URL}{order.site_base}/checkout/success?order={order.reference}",
         "cancel_url": f"{settings.FRONTEND_URL}{order.site_base}/checkout/cancel?order={order.reference}",
-        "notif_url": f"{settings.BACKEND_URL}/api/payments/orange-money/webhook/",
+        "notif_url": f"{settings.BACKEND_URL}/api/payments/orange-money/webhook/?token={token}",
         "lang": "fr",
         "reference": "La Belle Teranga",
     }

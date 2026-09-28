@@ -192,6 +192,15 @@ class CreateOrangeMoneyCheckoutView(APIView):
 
 @csrf_exempt
 def orange_money_webhook(request):
+    """
+    Orange Money Web Payment ne signe pas ses notifications (contrairement a Stripe/Wave), donc on ne peut pas
+    verifier que cette requete vient bien d'Orange par une signature. A la place, on exige le jeton propre a
+    la commande que NOUS avons genere et transmis dans notif_url au moment de creer le paiement
+    (order.orange_money_webhook_token) : sans lui, n'importe qui connaissant la reference de sa propre
+    commande (visible dans l'URL de retour du paiement) pourrait appeler ce webhook lui-meme et se faire
+    confirmer un paiement jamais effectue.
+    """
+    import hmac
     import json
 
     try:
@@ -199,10 +208,11 @@ def orange_money_webhook(request):
     except ValueError:
         return JsonResponse({"detail": "invalid payload"}, status=400)
 
+    token = request.GET.get("token", "")
     if payload.get("status") == "SUCCESS":
         order_reference = payload.get("order_id")
         order = Order.objects.filter(reference=order_reference).first()
-        if order:
+        if order and token and order.orange_money_webhook_token and hmac.compare_digest(token, order.orange_money_webhook_token):
             mark_order_paid(order)
 
     return JsonResponse({"received": True}, status=200)

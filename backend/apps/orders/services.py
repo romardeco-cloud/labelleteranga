@@ -135,6 +135,20 @@ def _decrement_store_stock(order):
             change_stock(item.product, order.point_of_sale, set_to=0, **kwargs)
 
 
+def closed_pos_day_for(order):
+    """
+    La fermeture de caisse (DailyClosing) qui couvre deja la journee de cette vente POS, ou None si la vente
+    n'est pas une vente de caisse rattachee a une journee cloturee. Utilise par change_order_payment_method
+    ET void_order pour qu'aucune des deux actions ne puisse fausser silencieusement une comptabilite deja
+    enregistree (la fermeture est un instantane fige : DailyClosing.expected_*).
+    """
+    if order.channel != Order.Channel.POS or not order.cashier_id or not order.point_of_sale_id or not order.paid_at:
+        return None
+    from apps.reports.models import DailyClosing
+
+    return DailyClosing.covering(point_of_sale_id=order.point_of_sale_id, cashier_id=order.cashier_id, date=order.paid_at.date())
+
+
 def change_order_payment_method(order, user, new_method, reason):
     """
     Corrige le mode de paiement d'une vente deja payee (erreur de saisie a la caisse ou en ligne).
@@ -147,13 +161,10 @@ def change_order_payment_method(order, user, new_method, reason):
 
     if order.status != Order.Status.PAID:
         raise ValidationError({"detail": "Seule une vente payee peut avoir son mode de paiement corrige."})
-    if order.channel == Order.Channel.POS and order.cashier_id and order.point_of_sale_id and order.paid_at:
-        from apps.reports.models import DailyClosing
-
-        if DailyClosing.covering(point_of_sale_id=order.point_of_sale_id, cashier_id=order.cashier_id, date=order.paid_at.date()):
-            raise ValidationError(
-                {"detail": "La journee de cette vente est deja cloturee : impossible de corriger le mode de paiement sans fausser la comptabilite. Annulez la vente et resaisissez-la."}
-            )
+    if closed_pos_day_for(order):
+        raise ValidationError(
+            {"detail": "La journee de cette vente est deja cloturee : impossible de corriger le mode de paiement sans fausser la comptabilite. Annulez la vente et resaisissez-la."}
+        )
 
     with transaction.atomic():
         order = Order.objects.select_for_update().get(pk=order.pk)
@@ -234,9 +245,21 @@ def void_order(order, user, reason):
     """
     Annule (supprime des ventes) une commande : statut ANNULEE, motif et auteur conserves pour le controle, stock
     remis en rayon si la vente l'avait deja decremente. Les rapports ne comptent que les commandes payees.
+
+    Si la vente est une vente de caisse deja payee dont la journee est cloturee, l'annulation reste possible
+    (c'est le chemin de correction documente pour une vente payee sur une journee close, voir
+    change_order_payment_method ci-dessus), mais un motif devient obligatoire et la fermeture concernee est
+    annotee automatiquement : l'ecart entre son total fige et le total des ventes payees ne reste ainsi jamais
+    invisible dans l'admin.
     """
     from django.db import transaction
     from rest_framework.exceptions import ValidationError
+
+    closed_day = closed_pos_day_for(order) if order.status == Order.Status.PAID else None
+    if closed_day and not (reason or "").strip():
+        raise ValidationError(
+            {"detail": "Cette vente appartient a une journee de caisse deja cloturee : indiquez un motif pour l'annuler (l'ecart sera note sur la fermeture correspondante)."}
+        )
 
     with transaction.atomic():
         order = Order.objects.select_for_update().get(pk=order.pk)
@@ -264,4 +287,16 @@ def void_order(order, user, reason):
         order.voided_by = user
         order.void_reason = (reason or "")[:200]
         order.save(update_fields=["status", "voided_at", "voided_by", "void_reason"])
+
+        if was_paid and closed_day:
+            from apps.reports.models import DailyClosing
+
+            closed_day = DailyClosing.objects.select_for_update().get(pk=closed_day.pk)
+            who = getattr(user, "username", "") or "admin"
+            note_line = (
+                f"[{timezone.now():%d/%m/%Y %H:%M}] Vente {order.reference} ({order.total_amount} FCFA) annulee "
+                f"apres cloture par {who} : {(reason or '').strip()[:150]}"
+            )
+            closed_day.notes = f"{closed_day.notes}\n{note_line}" if closed_day.notes else note_line
+            closed_day.save(update_fields=["notes"])
     return order

@@ -165,6 +165,10 @@ BACKEND_URL = os.environ.get("BACKEND_URL", "http://localhost:8000")
 # Wave (Wave for Business Checkout)
 WAVE_API_KEY = os.environ.get("WAVE_API_KEY", "")
 WAVE_CURRENCY = os.environ.get("WAVE_CURRENCY", "XOF")
+# Secret affiche UNE SEULE FOIS lors de la creation du webhook dans le Wave Business Portal : a copier
+# immediatement dans WAVE_WEBHOOK_SECRET (Render > Environment), sinon aucun paiement Wave en ligne ne pourra
+# etre confirme en toute securite (voir apps/payments/wave.py:verify_webhook_signature).
+WAVE_WEBHOOK_SECRET = os.environ.get("WAVE_WEBHOOK_SECRET", "")
 
 # Orange Money (Orange Money Web Payment)
 ORANGE_MONEY_CLIENT_ID = os.environ.get("ORANGE_MONEY_CLIENT_ID", "")

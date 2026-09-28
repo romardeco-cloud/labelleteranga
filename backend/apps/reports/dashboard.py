@@ -4,7 +4,7 @@ from datetime import date as date_cls
 from datetime import timedelta
 from decimal import Decimal
 
-from django.db.models import Count, DecimalField, ExpressionWrapper, F, Sum
+from django.db.models import Count, DecimalField, ExpressionWrapper, F, Q, Sum
 from django.db.models.functions import TruncDate
 from django.utils import timezone
 from rest_framework.permissions import IsAdminUser
@@ -39,10 +39,27 @@ def _range(period, day):
 
 
 class Totals:
-    """Chiffres d'une periode : ventes (caisse + en ligne) + encaissements de factures, moins achats payes."""
+    """
+    Chiffres d'une periode : ventes (caisse + en ligne) + encaissements de factures, moins achats payes.
+
+    Les ventes en caisse (POS) sont attribuees a leur jour commercial, pas a leur date calendaire brute : une
+    vente faite juste apres minuit, avant 2h30, compte pour la veille (meme regle de periode de grace que les
+    clotures de caisse - voir apps.pos.services.GRACE_CUTOFF) - sinon le Tableau de bord afficherait une vente
+    dans le CA du jour au lieu de celui de la veille, en decalage avec Comptabilite et Clotures de caisse. Les
+    commandes en ligne n'ont pas de fermeture ni de periode de grace : elles restent groupees par leur date de
+    paiement.
+    """
 
     def __init__(self, start, end, store):
-        orders = Order.objects.filter(status=Order.Status.PAID, paid_at__date__gte=start, paid_at__date__lte=end)
+        from apps.pos.services import GRACE_CUTOFF
+
+        next_day = end + timedelta(days=1)
+        pos_q = Q(channel=Order.Channel.POS) & (
+            Q(paid_at__date__gte=start, paid_at__date__lte=end, paid_at__time__gte=GRACE_CUTOFF)
+            | Q(paid_at__date__gt=start, paid_at__date__lte=next_day, paid_at__time__lt=GRACE_CUTOFF)
+        )
+        other_q = ~Q(channel=Order.Channel.POS) & Q(paid_at__date__gte=start, paid_at__date__lte=end)
+        orders = Order.objects.filter(Q(status=Order.Status.PAID) & (pos_q | other_q))
         inv_pay = InvoicePayment.objects.filter(
             date__gte=start, date__lte=end, invoice__status=Invoice.Status.ISSUED
         )
@@ -91,8 +108,17 @@ def _series(period, day, start, end, store):
 
     t = Totals(s, e, store)
     by_day = defaultdict(float)
-    for r in t.orders.annotate(d=TruncDate("paid_at")).values("d").annotate(v=Sum("total_amount")):
-        by_day[r["d"]] += _f(r["v"])
+    # Ventes en caisse (POS) groupees par jour commercial, pas par date calendaire brute (meme periode de
+    # grace de 2h30 que Totals ci-dessus) : sinon une vente faite juste apres minuit apparaitrait sur le
+    # mauvais point du graphique, en contradiction avec les chiffres d'en-tete.
+    from apps.pos.services import GRACE_CUTOFF
+
+    for o in t.orders.only("id", "channel", "paid_at", "total_amount"):
+        local_paid_at = timezone.localtime(o.paid_at)
+        business_day = local_paid_at.date()
+        if o.channel == Order.Channel.POS and local_paid_at.time() < GRACE_CUTOFF:
+            business_day -= timedelta(days=1)
+        by_day[business_day] += _f(o.total_amount)
     for r in t.inv_pay.values("date").annotate(v=Sum("amount")):
         by_day[r["date"]] += _f(r["v"])
 

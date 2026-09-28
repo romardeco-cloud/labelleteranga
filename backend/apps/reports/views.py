@@ -1,7 +1,8 @@
+from collections import defaultdict
 from datetime import date as date_cls
 from datetime import timedelta
 
-from django.db.models import Count, F, Sum
+from django.db.models import Count, F, Q, Sum
 from django.db.models.functions import TruncDate, TruncMonth, TruncYear
 from django.utils import timezone
 from rest_framework import permissions, status, viewsets
@@ -13,7 +14,7 @@ from rest_framework.views import APIView
 
 from apps.orders.models import Order, OrderItem
 
-from apps.pos.services import auto_close_overdue_cashiers
+from apps.pos.services import GRACE_CUTOFF, auto_close_overdue_cashiers
 
 from .models import DailyClosing
 from .serializers import DailyClosingSerializer
@@ -31,9 +32,18 @@ def _paid_orders_qs(start=None, end=None, point_of_sale=None):
 
 
 def _compute_expected_totals(for_date, point_of_sale=None):
-    """Totaux payes ce jour-la, par moyen de paiement (utilise pour la cloture)."""
+    """
+    Totaux payes ce jour-la, par moyen de paiement (utilise pour la cloture globale "Clotures de caisse",
+    sans caissier). Alignee sur la meme periode de grace que les clotures par caissier (voir
+    apps.pos.services.GRACE_CUTOFF) : une vente faite juste apres minuit, avant 2h30, compte pour la veille -
+    sinon cette cloture globale afficherait un chiffre different de celui de Comptabilite (Caisses des
+    caissiers) pour le meme jour et la meme vente.
+    """
     totals = {key: 0 for key, _ in Order.PaymentMethod.choices}
-    qs = Order.objects.filter(status=Order.Status.PAID, paid_at__date=for_date, point_of_sale_id=point_of_sale)
+    next_day = for_date + timedelta(days=1)
+    qs = Order.objects.filter(status=Order.Status.PAID, point_of_sale_id=point_of_sale).filter(
+        Q(paid_at__date=for_date, paid_at__time__gte=GRACE_CUTOFF) | Q(paid_at__date=next_day, paid_at__time__lt=GRACE_CUTOFF)
+    )
     qs = qs.values("payment_method").annotate(total=Sum("total_amount"))
     for row in qs:
         totals[row["payment_method"]] = row["total"] or 0
@@ -48,14 +58,23 @@ class DailySalesView(APIView):
     def get(self, request):
         days = int(request.query_params.get("days", 30))
         start = timezone.now() - timedelta(days=days)
-        qs = (
-            _paid_orders_qs(start=start)
-            .annotate(day=TruncDate("paid_at"))
-            .values("day")
-            .annotate(revenue=Sum("total_amount"), orders_count=Count("id"))
-            .order_by("day")
-        )
-        return Response(list(qs))
+        # Groupe par jour commercial, pas par date calendaire brute (meme periode de grace de 2h30 que les
+        # autres rapports - voir apps.pos.services.GRACE_CUTOFF) : sinon une vente en caisse faite juste apres
+        # minuit apparaitrait sous le mauvais jour ici, en contradiction avec les autres ecrans.
+        by_day = defaultdict(lambda: [0.0, 0])
+        for o in _paid_orders_qs(start=start).only("id", "channel", "paid_at", "total_amount"):
+            local_paid_at = timezone.localtime(o.paid_at)
+            business_day = local_paid_at.date()
+            if o.channel == Order.Channel.POS and local_paid_at.time() < GRACE_CUTOFF:
+                business_day -= timedelta(days=1)
+            row = by_day[business_day]
+            row[0] += float(o.total_amount or 0)
+            row[1] += 1
+        qs = [
+            {"day": d, "revenue": v, "orders_count": n}
+            for d, (v, n) in sorted(by_day.items())
+        ]
+        return Response(qs)
 
 
 class MonthlySalesView(APIView):
@@ -345,6 +364,25 @@ class DailyClosingViewSet(viewsets.ModelViewSet):
 
         return Response(CashierOpeningSerializer(opening).data, status=status.HTTP_201_CREATED if created else status.HTTP_200_OK)
 
+    @action(detail=False, methods=["post"], url_path="reset-opening")
+    def reset_opening(self, request):
+        """
+        POST {date, cashier} : supprime le fond de caisse deja saisi pour ce jour, pour que le caissier soit de
+        nouveau OBLIGE de le ressaisir avant de pouvoir vendre. Sans CashierOpening pour la journee, l'ecran
+        "Ouverture de caisse" redevient obligatoire (voir POSOpeningView) et la vente est bloquee tant qu'il
+        n'est pas rempli (voir apps.pos.services.create_pos_sale). Refuse si la journee est deja fermee : le
+        fond de caisse ne sert plus qu'a l'historique une fois la fermeture faite.
+        """
+        d = request.data
+        for_date = self._date_param(d.get("date"))
+        profile = self._profile(d.get("cashier"))
+        if DailyClosing.covering(date=for_date, point_of_sale=profile.point_of_sale, cashier=profile.user):
+            raise ValidationError({"detail": "Cette journee est deja fermee : le fond de caisse ne peut plus etre reinitialise."})
+        from apps.reports.models import CashierOpening
+
+        deleted, _ = CashierOpening.objects.filter(date=for_date, point_of_sale=profile.point_of_sale, cashier=profile.user).delete()
+        return Response({"deleted": bool(deleted)})
+
     @action(detail=False, methods=["post"], url_path="auto-close")
     def force_auto_close(self, request):
         """POST : force tout de suite la fermeture automatique des caisses oubliees (bouton « Verifier maintenant » de l'admin)."""
@@ -522,9 +560,12 @@ class AutoCloseCronView(APIView):
     permission_classes = [permissions.AllowAny]
 
     def _run(self, request):
+        import hmac
+
         from django.conf import settings
 
-        if not settings.AUTO_CLOSE_SECRET or request.query_params.get("key") != settings.AUTO_CLOSE_SECRET:
+        provided = request.query_params.get("key") or ""
+        if not settings.AUTO_CLOSE_SECRET or not hmac.compare_digest(provided, settings.AUTO_CLOSE_SECRET):
             return Response({"detail": "Cle invalide."}, status=status.HTTP_403_FORBIDDEN)
         n = auto_close_overdue_cashiers()
         return Response({"closed": n})

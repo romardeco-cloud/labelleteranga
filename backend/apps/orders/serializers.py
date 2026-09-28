@@ -72,6 +72,8 @@ class OrderSerializer(serializers.ModelSerializer):
             "reference",
             "channel",
             "status",
+            "payment_method",  # se corrige uniquement via l'action change-payment (change_order_payment_method),
+            # qui bloque une vente de caisse deja cloturee ; ecrivable ici, ce PATCH la contournerait silencieusement.
             "total_amount",
             "created_at",
             "paid_at",

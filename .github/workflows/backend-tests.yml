@@ -1,0 +1,93 @@
+name: Backend tests
+
+# Fait tourner automatiquement les tests Django (backend/apps/reports/tests.py) sur chaque push et chaque
+# pull request : c'est ce qui garantit dans la duree que la regle du "jour commercial" (periode de grace de
+# 2h30 - voir apps.pos.services.GRACE_CUTOFF) reste correcte dans tous les rapports, sans avoir a la
+# reverifier manuellement a chaque changement de code.
+
+on:
+  push:
+    branches: [master]
+  pull_request:
+
+permissions:
+  contents: read
+  pull-requests: write
+  issues: write
+
+jobs:
+  test:
+    runs-on: ubuntu-latest
+
+    services:
+      postgres:
+        image: postgres:16
+        env:
+          POSTGRES_USER: postgres
+          POSTGRES_PASSWORD: postgres
+          POSTGRES_DB: labelleteranga
+        ports:
+          - 5432:5432
+        options: >-
+          --health-cmd pg_isready
+          --health-interval 10s
+          --health-timeout 5s
+          --health-retries 5
+
+    env:
+      DATABASE_URL: postgres://postgres:postgres@localhost:5432/labelleteranga
+      DJANGO_SECRET_KEY: ci-test-secret-key
+      DJANGO_DEBUG: "False"
+
+    defaults:
+      run:
+        working-directory: backend
+
+    steps:
+      - uses: actions/checkout@v4
+
+      - uses: actions/setup-python@v5
+        with:
+          python-version: "3.12"
+          cache: "pip"
+          cache-dependency-path: backend/requirements.txt
+
+      - name: Installer les dependances
+        run: pip install -r requirements.txt
+
+      - name: Lancer les tests
+        shell: bash
+        run: |
+          set -o pipefail
+          python manage.py test -v 2 2>&1 | tee /tmp/test-output.log
+
+      # Poste le detail directement en commentaire sur la pull request en cas d'echec, pour que ce soit
+      # visible sans avoir a ouvrir les logs de l'action - utile car ce depot n'a pas de CI habituelle.
+      - name: Publier le detail en commentaire si echec
+        if: failure() && github.event_name == 'pull_request'
+        env:
+          GH_TOKEN: ${{ secrets.GITHUB_TOKEN }}
+          GH_REPO: ${{ github.repository }}
+          PR_NUMBER: ${{ github.event.pull_request.number }}
+        run: |
+          python3 - <<'PYEOF'
+          import json
+          import os
+          import urllib.request
+
+          with open("/tmp/test-output.log") as f:
+              log = f.read()[-55000:]
+          body = "### Echec des tests backend (voir `backend/apps/reports/tests.py`)\n\n```\n" + log + "\n```"
+          data = json.dumps({"body": body}).encode()
+          req = urllib.request.Request(
+              f"https://api.github.com/repos/{os.environ['GH_REPO']}/issues/{os.environ['PR_NUMBER']}/comments",
+              data=data,
+              headers={
+                  "Authorization": f"token {os.environ['GH_TOKEN']}",
+                  "Content-Type": "application/json",
+                  "Accept": "application/vnd.github+json",
+              },
+              method="POST",
+          )
+          urllib.request.urlopen(req)
+          PYEOF

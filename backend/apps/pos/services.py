@@ -1,4 +1,5 @@
 from datetime import time as dt_time
+from datetime import timedelta
 from decimal import Decimal
 
 from django.db import transaction
@@ -14,6 +15,23 @@ from apps.stores.services import change_stock
 from django.db.models.functions import TruncDate
 
 POS_PAYMENT_METHODS = {m for m, _ in Order.PaymentMethod.choices}
+
+# Avant cette heure, les ventes de la nuit sont encore rattachees a la journee commerciale de la veille (voir
+# _grace_period_totals et _business_today) : le caissier peut fermer juste apres minuit sans que la fermeture
+# ne deborde sur le jour calendaire qui vient de commencer.
+GRACE_CUTOFF = dt_time(2, 30)
+
+
+def _business_today():
+    """
+    'Aujourd'hui' pour une fermeture initiee par le caissier lui-meme, sans date explicite (voir
+    POSClosingView.post). Avant GRACE_CUTOFF, on considere qu'on est encore dans la journee commerciale de
+    la veille : sinon, fermer juste apres minuit (pour cloturer hier) fixerait `today` sur le nouveau jour
+    calendaire et etendrait `covers_through` dessus, bloquant a tort toutes les ventes du reste de cette
+    journee qui vient a peine de commencer.
+    """
+    now = timezone.localtime()
+    return now.date() - timedelta(days=1) if now.time() < GRACE_CUTOFF else now.date()
 
 
 @transaction.atomic
@@ -115,12 +133,46 @@ def create_pos_sale(cashier_profile, items, payment_method, customer_name="", am
     return order, received
 
 
+def _closing_covered_order_ids(cashier_profile, ignore_closing_date=None):
+    """
+    Toutes les commandes de ce caissier deja couvertes par une fermeture existante (normale ou automatique) :
+    son intervalle [date, covers_through] complet, PLUS les ventes du lendemain avant GRACE_CUTOFF (meme regle
+    que la fermeture automatique - voir auto_close_overdue_cashiers/_grace_period_totals). Sans cette exclusion,
+    une vente faite juste apres minuit (deja incluse dans la fermeture de la veille grace a cette periode de
+    grace) reapparaitrait EN PLUS comme une vente "nouvelle" et non fermee du jour meme, et serait comptee deux
+    fois (voir _unclosed_prior_dates et _sales_totals_range, qui excluent toutes deux ce jeu d'identifiants).
+
+    `ignore_closing_date` : a passer par _sales_totals_range quand la fermeture EN COURS DE CALCUL (creation ou
+    correction) est elle-meme datee de `start_date` - sinon une fermeture existante s'excluerait ses propres
+    commandes en se recalculant (voir close_cashier_day, qui recalcule une fermeture deja creee pour la
+    corriger apres que le caissier a vu son ecart).
+    """
+    from django.db.models import Q
+
+    store = cashier_profile.point_of_sale
+    ids = set()
+    for c in DailyClosing.objects.filter(point_of_sale=store, cashier=cashier_profile.user):
+        if ignore_closing_date is not None and c.date == ignore_closing_date:
+            continue
+        c_end = c.covers_through or c.date
+        grace_day = c_end + timedelta(days=1)
+        qs = Order.objects.filter(
+            status=Order.Status.PAID,
+            channel=Order.Channel.POS,
+            cashier=cashier_profile.user,
+            point_of_sale=store,
+        ).filter(Q(paid_at__date__gte=c.date, paid_at__date__lte=c_end) | Q(paid_at__date=grace_day, paid_at__time__lt=GRACE_CUTOFF))
+        ids.update(qs.values_list("id", flat=True))
+    return ids
+
+
 def _unclosed_prior_dates(cashier_profile, before_date):
     """Jours strictement avant `before_date` ou ce caissier a vendu, sans fermeture enregistree (argent jamais retire du tiroir).
     Un jour est considere ferme s'il a sa propre fermeture, OU s'il tombe dans l'intervalle [date, covers_through]
     d'une fermeture qui regroupe plusieurs jours (le caissier a ferme plus tard, apres minuit ou apres un oubli,
     mais la fermeture reste datee du premier jour concerne)."""
     store = cashier_profile.point_of_sale
+    covered_ids = _closing_covered_order_ids(cashier_profile)
     dates = (
         Order.objects.filter(
             status=Order.Status.PAID,
@@ -129,6 +181,7 @@ def _unclosed_prior_dates(cashier_profile, before_date):
             point_of_sale=store,
             paid_at__date__lt=before_date,
         )
+        .exclude(pk__in=covered_ids)
         .annotate(d=TruncDate("paid_at"))
         .order_by()  # sans ceci, le tri par defaut du modele (-created_at) empeche le DISTINCT de dedoublonner les dates
         .values_list("d", flat=True)
@@ -150,14 +203,19 @@ def _unclosed_prior_dates(cashier_profile, before_date):
 
 def _sales_totals_range(cashier_profile, start_date, end_date):
     """
-    Ventes (+ pourboires) de ce caissier additionnees sur TOUT l'intervalle [start_date, end_date] inclus, plus
-    le fond de caisse en especes du premier jour. Utilise pour une fermeture qui regroupe plusieurs jours non
-    fermes (le caissier a ferme plus tard, apres minuit ou apres un oubli) : le calendrier peut avancer sans
-    faire changer la date de la fermeture tant qu'elle n'a pas reellement eu lieu.
+    Ventes (+ pourboires) de ce caissier additionnees sur TOUT l'intervalle [start_date, end_date] inclus.
+    Utilise pour une fermeture qui regroupe plusieurs jours non fermes (le caissier a ferme plus tard, apres
+    minuit ou apres un oubli) : le calendrier peut avancer sans faire changer la date de la fermeture tant
+    qu'elle n'a pas reellement eu lieu.
+
+    NB : le fond de caisse (CashierOpening) n'est PAS ajoute ici - "cash" ne represente que les ventes en
+    especes. Le fond de caisse reste un montant a part, jamais mele au chiffre d'affaires ni au montant de
+    la fermeture (voir opening_cash_for) ; c'est au frontend de le faire recompter separement s'il le souhaite.
     """
     from django.db.models import Count, Sum
 
     totals = {key: Decimal("0") for key, _ in Order.PaymentMethod.choices}
+    covered_ids = _closing_covered_order_ids(cashier_profile, ignore_closing_date=start_date)
     qs = Order.objects.filter(
         status=Order.Status.PAID,
         channel=Order.Channel.POS,
@@ -165,12 +223,9 @@ def _sales_totals_range(cashier_profile, start_date, end_date):
         point_of_sale=cashier_profile.point_of_sale,
         paid_at__date__gte=start_date,
         paid_at__date__lte=end_date,
-    )
+    ).exclude(pk__in=covered_ids)
     for row in qs.values("payment_method").annotate(total=Sum("total_amount")):
         totals[row["payment_method"]] = row["total"] or Decimal("0")
-    opening_cash = opening_cash_for(cashier_profile, start_date)
-    if opening_cash:
-        totals["cash"] += opening_cash  # le tiroir doit contenir le fond de caisse du matin + les ventes en especes
     tips = qs.aggregate(t=Sum("tip_amount"))["t"] or Decimal("0")
     return totals, tips, qs.aggregate(n=Count("id"))["n"]
 
@@ -240,7 +295,10 @@ def close_cashier_day(cashier_profile, declared, notes="", for_date=None, closed
     fermeture, datee du PREMIER jour non ferme (covers_through indique jusqu'ou elle va) - jamais une fermeture
     "a l'equilibre" separee pour chaque jour oublie. Retourne (fermeture, creee).
     """
-    today = for_date or timezone.localdate()
+    # sans date explicite (fermeture depuis la caisse elle-meme), on utilise la journee commerciale en cours
+    # (voir _business_today) plutot que la date calendaire brute, pour ne jamais faire deborder covers_through
+    # sur un jour qui vient a peine de commencer si le caissier ferme juste apres minuit.
+    today = for_date or _business_today()
     store = cashier_profile.point_of_sale
 
     # meme calcul que l'apercu (cashier-preview), pour que la fermeture reelle corresponde toujours a ce que
@@ -323,7 +381,7 @@ def _grace_period_totals(cashier_profile, start_date, today, grace_cutoff=None):
     """
     from django.db.models import Count, Q, Sum
 
-    grace_cutoff = grace_cutoff or dt_time(2, 30)
+    grace_cutoff = grace_cutoff or GRACE_CUTOFF
     totals = {key: Decimal("0") for key, _ in Order.PaymentMethod.choices}
     qs = Order.objects.filter(
         status=Order.Status.PAID,
@@ -333,9 +391,8 @@ def _grace_period_totals(cashier_profile, start_date, today, grace_cutoff=None):
     ).filter(Q(paid_at__date__gte=start_date, paid_at__date__lt=today) | Q(paid_at__date=today, paid_at__time__lt=grace_cutoff))
     for row in qs.values("payment_method").annotate(total=Sum("total_amount")):
         totals[row["payment_method"]] = row["total"] or Decimal("0")
-    opening_cash = opening_cash_for(cashier_profile, start_date)
-    if opening_cash:
-        totals["cash"] += opening_cash  # le tiroir doit contenir le fond de caisse du matin + les ventes en especes
+    # NB : pas de fond de caisse ajoute ici non plus (voir _sales_totals_range) - "cash" reste uniquement les
+    # ventes en especes.
     tips = qs.aggregate(t=Sum("tip_amount"))["t"] or Decimal("0")
     return totals, tips, qs.aggregate(n=Count("id"))["n"]
 

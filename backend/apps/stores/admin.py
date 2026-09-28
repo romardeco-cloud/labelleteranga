@@ -12,9 +12,39 @@ class PointOfSaleAdmin(admin.ModelAdmin):
 
 @admin.register(Stock)
 class StockAdmin(admin.ModelAdmin):
+    """
+    La quantite ne doit jamais etre ecrite directement : change_stock() (stores/services.py) est le point
+    d'entree unique qui tient le journal StockMovement, sinon une correction ici change le chiffre sans
+    laisser de trace (ca ressemble a de la marchandise qui apparait ou disparait sans explication). save_model
+    route donc toute modification de quantite via change_stock (motif "Correction manuelle"), qui cree la
+    ligne d'historique correspondante ; les autres champs sont enregistres normalement.
+    """
+
     list_display = ["product", "point_of_sale", "quantity", "updated_at"]
     list_filter = ["point_of_sale"]
     search_fields = ["product__name", "product__sku"]
+
+    def save_model(self, request, obj, form, change):
+        new_quantity = obj.quantity
+        original_quantity = form.initial.get("quantity", 0) if change else 0
+
+        if new_quantity == original_quantity:
+            super().save_model(request, obj, form, change)
+            return
+
+        from .services import change_stock
+
+        obj.quantity = original_quantity  # change_stock() ecrit lui-meme la quantite finale, avec sa trace
+        super().save_model(request, obj, form, change)
+        change_stock(
+            obj.product,
+            obj.point_of_sale,
+            set_to=new_quantity,
+            reason=StockMovement.Reason.MANUAL,
+            reference="admin",
+            user=request.user,
+        )
+        obj.quantity = new_quantity
 
 
 @admin.register(StockMovement)
