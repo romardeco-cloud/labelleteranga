@@ -18,13 +18,17 @@ class DailyClosingSerializer(serializers.ModelSerializer):
     sales_total = serializers.SerializerMethodField()
 
     def get_opening_cash(self, obj):
-        """Fond de caisse du premier jour couvert (deja compris dans expected_cash/expected_total)."""
+        """
+        Fond de caisse du premier jour couvert : purement informatif, affiche a cote de la fermeture pour que
+        le caissier puisse le recompter separement, mais jamais ajoute a expected_cash/expected_total (voir
+        apps.pos.services._sales_totals_range) ni a aucun montant de la fermeture.
+        """
         opening = CashierOpening.objects.filter(date=obj.date, point_of_sale=obj.point_of_sale, cashier=obj.cashier).first()
         return opening.opening_cash if opening else 0
 
     def get_sales_total(self, obj):
-        """Ventes seules (expected_total moins le fond de caisse) : comparable a un rapport de chiffre d'affaires."""
-        return obj.expected_total - self.get_opening_cash(obj)
+        """Ventes de la fermeture (identique a expected_total, qui ne contient deja que des ventes)."""
+        return obj.expected_total
 
     class Meta:
         model = DailyClosing
