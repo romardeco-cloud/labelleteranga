@@ -108,8 +108,17 @@ def _series(period, day, start, end, store):
 
     t = Totals(s, e, store)
     by_day = defaultdict(float)
-    for r in t.orders.annotate(d=TruncDate("paid_at")).values("d").annotate(v=Sum("total_amount")):
-        by_day[r["d"]] += _f(r["v"])
+    # Ventes en caisse (POS) groupees par jour commercial, pas par date calendaire brute (meme periode de
+    # grace de 2h30 que Totals ci-dessus) : sinon une vente faite juste apres minuit apparaitrait sur le
+    # mauvais point du graphique, en contradiction avec les chiffres d'en-tete.
+    from apps.pos.services import GRACE_CUTOFF
+
+    for o in t.orders.only("id", "channel", "paid_at", "total_amount"):
+        local_paid_at = timezone.localtime(o.paid_at)
+        business_day = local_paid_at.date()
+        if o.channel == Order.Channel.POS and local_paid_at.time() < GRACE_CUTOFF:
+            business_day -= timedelta(days=1)
+        by_day[business_day] += _f(o.total_amount)
     for r in t.inv_pay.values("date").annotate(v=Sum("amount")):
         by_day[r["date"]] += _f(r["v"])
 

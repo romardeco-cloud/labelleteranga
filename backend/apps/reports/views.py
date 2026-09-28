@@ -1,3 +1,4 @@
+from collections import defaultdict
 from datetime import date as date_cls
 from datetime import timedelta
 
@@ -57,14 +58,23 @@ class DailySalesView(APIView):
     def get(self, request):
         days = int(request.query_params.get("days", 30))
         start = timezone.now() - timedelta(days=days)
-        qs = (
-            _paid_orders_qs(start=start)
-            .annotate(day=TruncDate("paid_at"))
-            .values("day")
-            .annotate(revenue=Sum("total_amount"), orders_count=Count("id"))
-            .order_by("day")
-        )
-        return Response(list(qs))
+        # Groupe par jour commercial, pas par date calendaire brute (meme periode de grace de 2h30 que les
+        # autres rapports - voir apps.pos.services.GRACE_CUTOFF) : sinon une vente en caisse faite juste apres
+        # minuit apparaitrait sous le mauvais jour ici, en contradiction avec les autres ecrans.
+        by_day = defaultdict(lambda: [0.0, 0])
+        for o in _paid_orders_qs(start=start).only("id", "channel", "paid_at", "total_amount"):
+            local_paid_at = timezone.localtime(o.paid_at)
+            business_day = local_paid_at.date()
+            if o.channel == Order.Channel.POS and local_paid_at.time() < GRACE_CUTOFF:
+                business_day -= timedelta(days=1)
+            row = by_day[business_day]
+            row[0] += float(o.total_amount or 0)
+            row[1] += 1
+        qs = [
+            {"day": d, "revenue": v, "orders_count": n}
+            for d, (v, n) in sorted(by_day.items())
+        ]
+        return Response(qs)
 
 
 class MonthlySalesView(APIView):
