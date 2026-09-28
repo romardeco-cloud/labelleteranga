@@ -425,7 +425,8 @@ def _month_starts(first, last):
 
 def sales_report_pdf(start, end, store=None):
     from apps.documents.models import Invoice, InvoicePayment, PaymentMethod
-    from apps.orders.models import OrderItem
+    from apps.orders.models import Order, OrderItem
+    from apps.pos.services import GRACE_CUTOFF
     from apps.reports.dashboard import METHOD_LABELS, Totals
     from apps.reports.models import DailyClosing
     from apps.stores.models import PointOfSale
@@ -518,9 +519,16 @@ def sales_report_pdf(start, end, store=None):
     # -- detail par jour (periodes courtes)
     if (end - start).days <= 92:
         by_day = defaultdict(lambda: [0, 0.0])
-        for r in cur.orders.annotate(d=TruncDate("paid_at")).values("d").annotate(v=Sum("total_amount"), n=Count("id")):
-            by_day[r["d"]][0] += r["n"]
-            by_day[r["d"]][1] += float(r["v"] or 0)
+        # Ventes en caisse (POS) groupees par jour commercial, pas par date calendaire brute (voir Totals
+        # ci-dessus, qui applique deja la meme periode de grace de 2h30) : sinon une vente faite juste apres
+        # minuit apparaitrait ici sous le mauvais jour, meme si le total de la periode est correct.
+        for o in cur.orders.only("id", "channel", "paid_at", "total_amount"):
+            local_paid_at = timezone.localtime(o.paid_at)
+            business_day = local_paid_at.date()
+            if o.channel == Order.Channel.POS and local_paid_at.time() < GRACE_CUTOFF:
+                business_day -= timedelta(days=1)
+            by_day[business_day][0] += 1
+            by_day[business_day][1] += float(o.total_amount or 0)
         for r in cur.inv_pay.values("date").annotate(v=Sum("amount")):
             by_day[r["date"]][1] += float(r["v"] or 0)
         all_days = []  # chaque jour de la periode, meme sans vente (0 FCFA) : le rapport ne saute aucune date
