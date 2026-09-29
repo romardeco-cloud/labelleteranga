@@ -146,12 +146,16 @@ def _closing_covered_order_ids(cashier_profile, ignore_closing_date=None):
     correction) est elle-meme datee de `start_date` - sinon une fermeture existante s'excluerait ses propres
     commandes en se recalculant (voir close_cashier_day, qui recalcule une fermeture deja creee pour la
     corriger apres que le caissier a vu son ecart).
+
+    Compte aussi les fermetures GLOBALES du point de vente (cashier vide : cloture faite par l'admin sans
+    caissier precis) - elles couvrent bien les ventes de ce caissier, sinon celui-ci les verrait reapparaitre
+    comme non fermees (voir _unclosed_prior_dates, qui utilise le meme filtre).
     """
     from django.db.models import Q
 
     store = cashier_profile.point_of_sale
     ids = set()
-    for c in DailyClosing.objects.filter(point_of_sale=store, cashier=cashier_profile.user):
+    for c in DailyClosing.objects.filter(point_of_sale=store).filter(Q(cashier=cashier_profile.user) | Q(cashier__isnull=True)):
         if ignore_closing_date is not None and c.date == ignore_closing_date:
             continue
         c_end = c.covers_through or c.date
@@ -170,7 +174,10 @@ def _unclosed_prior_dates(cashier_profile, before_date):
     """Jours strictement avant `before_date` ou ce caissier a vendu, sans fermeture enregistree (argent jamais retire du tiroir).
     Un jour est considere ferme s'il a sa propre fermeture, OU s'il tombe dans l'intervalle [date, covers_through]
     d'une fermeture qui regroupe plusieurs jours (le caissier a ferme plus tard, apres minuit ou apres un oubli,
-    mais la fermeture reste datee du premier jour concerne)."""
+    mais la fermeture reste datee du premier jour concerne). Une fermeture GLOBALE du point de vente (cashier
+    vide) compte aussi comme fermeture de ce caissier (voir _closing_covered_order_ids)."""
+    from django.db.models import Q
+
     store = cashier_profile.point_of_sale
     covered_ids = _closing_covered_order_ids(cashier_profile)
     dates = (
@@ -190,13 +197,14 @@ def _unclosed_prior_dates(cashier_profile, before_date):
     dates = list(dates)
     if not dates:
         return []
+    own_or_global = Q(cashier=cashier_profile.user) | Q(cashier__isnull=True)
     closed = set(
-        DailyClosing.objects.filter(point_of_sale=store, cashier=cashier_profile.user, date__in=dates).values_list("date", flat=True)
+        DailyClosing.objects.filter(point_of_sale=store, date__in=dates).filter(own_or_global).values_list("date", flat=True)
     )
     ranges = list(
-        DailyClosing.objects.filter(
-            point_of_sale=store, cashier=cashier_profile.user, covers_through__isnull=False, date__lt=before_date
-        ).values_list("date", "covers_through")
+        DailyClosing.objects.filter(point_of_sale=store, covers_through__isnull=False, date__lt=before_date)
+        .filter(own_or_global)
+        .values_list("date", "covers_through")
     )
     return sorted(d for d in dates if d not in closed and not any(start <= d <= end for start, end in ranges))
 

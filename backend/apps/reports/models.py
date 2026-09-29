@@ -76,11 +76,19 @@ class DailyClosing(models.Model):
         La fermeture qui couvre cette date (ou None), qu'elle soit normale (date == date) ou regroupee
         (date <= date <= covers_through). A utiliser partout ou l'on demande "cette journee est-elle fermee ?",
         sinon une fermeture regroupee semble ouverte a sa propre date. `filters` : point_of_sale(_id)=...,
-        cashier(_id)=... comme pour un .filter() normal.
+        cashier(_id)=... comme pour un .filter() normal. Un filtre cashier(_id) trouve aussi une fermeture
+        GLOBALE du point de vente (cashier vide : cloture faite par l'admin sans caissier precis) - elle ferme
+        bien la journee pour tous les caissiers de ce point de vente, pas seulement pour celui qui l'a saisie.
         """
         from django.db.models import Q
 
-        return cls.objects.filter(**filters).filter(Q(date=date) | Q(date__lte=date, covers_through__gte=date)).first()
+        cashier = filters.pop("cashier", None)
+        cashier_id = filters.pop("cashier_id", None)
+        qs = cls.objects.filter(**filters).filter(Q(date=date) | Q(date__lte=date, covers_through__gte=date))
+        if cashier is not None or cashier_id is not None:
+            own = Q(cashier=cashier) if cashier is not None else Q(cashier_id=cashier_id)
+            qs = qs.filter(own | Q(cashier__isnull=True))
+        return qs.first()
 
     def blocks(self, date):
         """
