@@ -255,9 +255,17 @@ def closing_date_for(cashier_profile, for_date):
 
 
 def opening_cash_for(cashier_profile, for_date):
-    """Fond de caisse (especes) ouvert ce jour-la par ce caissier, ou None si sa caisse n'a pas ete ouverte."""
-    opening = CashierOpening.objects.filter(date=for_date, point_of_sale=cashier_profile.point_of_sale, cashier=cashier_profile.user).first()
-    return opening.opening_cash if opening else None
+    """
+    Fond de caisse (especes) ouvert ce jour-la par ce caissier, ou None si sa caisse n'a pas ete ouverte. Une
+    fois la journee fermee, l'ouverture est supprimee (voir _reset_opening_after_closing) : on lit alors le fond
+    recopie sur la fermeture qui commence ce jour-la.
+    """
+    filters = {"date": for_date, "point_of_sale": cashier_profile.point_of_sale, "cashier": cashier_profile.user}
+    opening = CashierOpening.objects.filter(**filters).first()
+    if opening:
+        return opening.opening_cash
+    closing = DailyClosing.objects.filter(**filters, opening_cash__isnull=False).first()
+    return closing.opening_cash if closing else None
 
 
 @transaction.atomic
@@ -291,6 +299,24 @@ def open_cashier_day(cashier_profile, opening_cash, notes="", for_date=None, ope
     return opening, created
 
 
+def _reset_opening_after_closing(cashier_profile, closing, until):
+    """
+    Reinitialise le fond de caisse a chaque fermeture : recopie d'abord sur la fermeture le fond de son premier
+    jour couvert (historique, voir DailyClosing.opening_cash), puis supprime les ouvertures de ce caissier du
+    premier jour couvert jusqu'a `until` inclus. Si la caisse est ensuite rouverte (bouton « Rouvrir » de
+    l'admin), le caissier doit donc ressaisir un nouveau fond avant de pouvoir vendre (voir create_pos_sale).
+    """
+    openings = CashierOpening.objects.filter(
+        point_of_sale=cashier_profile.point_of_sale, cashier=cashier_profile.user, date__gte=closing.date, date__lte=until
+    )
+    if closing.opening_cash is None:
+        first = openings.filter(date=closing.date).first()
+        if first:
+            closing.opening_cash = first.opening_cash
+            closing.save(update_fields=["opening_cash"])
+    openings.delete()
+
+
 @transaction.atomic
 def close_cashier_day(cashier_profile, declared, notes="", for_date=None, closed_by=None):
     """
@@ -315,6 +341,10 @@ def close_cashier_day(cashier_profile, declared, notes="", for_date=None, closed
     closing_date = closing_date_for(cashier_profile, today)
     covers_through = today if closing_date != today else None
     totals, tips_total, _n = _sales_totals_range(cashier_profile, closing_date, today)
+    # fermeture depuis la caisse juste apres minuit : le fond eventuellement saisi pour la date calendaire du
+    # jour (necessaire pour les ventes de grace) est lui aussi reinitialise. Jamais pour une date passee choisie
+    # par l'admin, pour ne pas effacer le fond du jour d'un caissier en train de travailler.
+    reset_until = today if for_date else max(today, timezone.localdate())
 
     def amount(key):
         try:
@@ -365,6 +395,7 @@ def close_cashier_day(cashier_profile, declared, notes="", for_date=None, closed
         )
         closing.initial_discrepancy_total = closing.discrepancy_total
         closing.save()
+        _reset_opening_after_closing(cashier_profile, closing, reset_until)
         return closing, True
 
     for field, value in {**values, **expected}.items():
@@ -376,6 +407,7 @@ def close_cashier_day(cashier_profile, declared, notes="", for_date=None, closed
         closing.notes = notes
     closing.revision_count += 1
     closing.save()
+    _reset_opening_after_closing(cashier_profile, closing, reset_until)
     return closing, False
 
 
@@ -444,7 +476,7 @@ def auto_close_overdue_cashiers(only_profile=None, store=None):
             continue
         closing_date = min(overdue)
         totals, tips_total, _n = _grace_period_totals(profile, closing_date, today)
-        DailyClosing.objects.create(
+        closing = DailyClosing.objects.create(
             date=closing_date,
             point_of_sale=profile.point_of_sale,
             cashier=profile.user,
@@ -456,5 +488,7 @@ def auto_close_overdue_cashiers(only_profile=None, store=None):
             tips_total=tips_total,
             auto_closed=True,
         )
+        # jamais le fond d'aujourd'hui : la fermeture automatique ne doit pas gener le caissier deja au travail
+        _reset_opening_after_closing(profile, closing, most_recent)
         closed += 1
     return closed

@@ -141,3 +141,88 @@ class BusinessDayGroupingTests(TestCase):
         line_after = text[idx_after : idx_after + 60]
         self.assertIn("13 000", line_before)
         self.assertNotIn("8 000", line_after)
+
+
+class OpeningResetOnClosingTests(TestCase):
+    """
+    Le fond de caisse est reinitialise a chaque fermeture : l'ouverture est supprimee (le caissier doit en
+    ressaisir une s'il est rouvert), mais son montant reste visible sur la fermeture pour l'historique.
+    """
+
+    def setUp(self):
+        from apps.accounts.models import CashierProfile
+
+        self.store = PointOfSale.objects.create(name="Magasin Fond")
+        self.user = User.objects.create_user("caissier-fond")
+        self.profile = CashierProfile.objects.create(user=self.user, point_of_sale=self.store)
+        self.day = date(2024, 5, 10)
+
+    def _sell(self, d, amount=5000):
+        Order.objects.create(
+            channel=Order.Channel.POS,
+            status=Order.Status.PAID,
+            payment_method=Order.PaymentMethod.CASH,
+            customer_name="Client",
+            total_amount=amount,
+            point_of_sale=self.store,
+            cashier=self.user,
+            paid_at=_aware(d, 12, 0),
+        )
+
+    def test_closing_resets_opening_but_keeps_amount(self):
+        from apps.pos.services import close_cashier_day, open_cashier_day, opening_cash_for
+        from apps.reports.models import CashierOpening, DailyClosing
+        from apps.reports.serializers import DailyClosingSerializer
+
+        open_cashier_day(self.profile, 10000, for_date=self.day)
+        self._sell(self.day)
+        closing, created = close_cashier_day(self.profile, {"cash": 5000}, for_date=self.day)
+
+        self.assertTrue(created)
+        self.assertFalse(CashierOpening.objects.filter(cashier=self.user).exists())
+        self.assertEqual(closing.opening_cash, 10000)
+        # le fond n'est jamais ajoute aux montants de la fermeture ni aux ventes
+        self.assertEqual(closing.expected_total, 5000)
+        self.assertEqual(closing.expected_cash, 5000)
+        self.assertEqual(DailyClosingSerializer(closing).data["sales_total"], 5000)
+        self.assertEqual(DailyClosingSerializer(closing).data["opening_cash"], 10000)
+        self.assertEqual(opening_cash_for(self.profile, self.day), 10000)
+
+        # une correction apres coup garde le fond recopie
+        closing, created = close_cashier_day(self.profile, {"cash": 5000}, for_date=self.day)
+        self.assertFalse(created)
+        self.assertEqual(closing.opening_cash, 10000)
+
+        # « Rouvrir » (suppression de la fermeture) : plus aucun fond, le caissier doit le ressaisir
+        DailyClosing.objects.filter(pk=closing.pk).delete()
+        self.assertIsNone(opening_cash_for(self.profile, self.day))
+
+    def test_admin_closing_of_past_day_keeps_todays_opening(self):
+        from apps.pos.services import close_cashier_day, open_cashier_day
+        from apps.reports.models import CashierOpening
+
+        today = timezone.localdate()
+        open_cashier_day(self.profile, 10000, for_date=self.day)
+        open_cashier_day(self.profile, 7000, for_date=today)
+        self._sell(self.day)
+        close_cashier_day(self.profile, {"cash": 5000}, for_date=self.day)
+
+        self.assertEqual(list(CashierOpening.objects.filter(cashier=self.user).values_list("date", flat=True)), [today])
+
+    def test_auto_close_resets_opening_of_forgotten_day_only(self):
+        from datetime import timedelta
+
+        from apps.pos.services import auto_close_overdue_cashiers, open_cashier_day
+        from apps.reports.models import CashierOpening, DailyClosing
+
+        today = timezone.localdate()
+        forgotten = today - timedelta(days=3)
+        open_cashier_day(self.profile, 10000, for_date=forgotten)
+        open_cashier_day(self.profile, 7000, for_date=today)
+        self._sell(forgotten)
+
+        self.assertEqual(auto_close_overdue_cashiers(only_profile=self.profile), 1)
+        closing = DailyClosing.objects.get(cashier=self.user)
+        self.assertTrue(closing.auto_closed)
+        self.assertEqual(closing.opening_cash, 10000)
+        self.assertEqual(list(CashierOpening.objects.filter(cashier=self.user).values_list("date", flat=True)), [today])

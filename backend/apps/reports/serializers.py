@@ -23,6 +23,8 @@ class DailyClosingSerializer(serializers.ModelSerializer):
         le caissier puisse le recompter separement, mais jamais ajoute a expected_cash/expected_total (voir
         apps.pos.services._sales_totals_range) ni a aucun montant de la fermeture.
         """
+        if obj.opening_cash is not None:
+            return obj.opening_cash
         opening = CashierOpening.objects.filter(date=obj.date, point_of_sale=obj.point_of_sale, cashier=obj.cashier).first()
         return opening.opening_cash if opening else 0
 

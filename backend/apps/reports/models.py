@@ -49,6 +49,11 @@ class DailyClosing(models.Model):
     # total encaisse), jamais retire de ces montants ni compare a un attendu propre. N'entre dans AUCUN des
     # discrepancy_* ci-dessous, qui ne portent que sur expected_*/declared_*.
     tips_total = models.DecimalField("Pourboires (informatif)", max_digits=12, decimal_places=2, default=0)
+    # Fond de caisse du premier jour couvert, recopie ici au moment de la fermeture (purement informatif, comme
+    # tips_total). L'ouverture (CashierOpening) est ensuite supprimee pour que le caissier doive ressaisir un
+    # nouveau fond s'il rouvre sa caisse : c'est donc ce champ, et non plus CashierOpening, qui garde l'historique.
+    # Vide = fermeture anterieure a ce mecanisme, ou fermeture globale (sans caissier).
+    opening_cash = models.DecimalField("Fond de caisse (informatif)", max_digits=12, decimal_places=2, null=True, blank=True)
 
     notes = models.TextField(blank=True)
     # Suivi des corrections faites par un caissier apres avoir vu son ecart

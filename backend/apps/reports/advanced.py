@@ -96,10 +96,9 @@ def _by_day_synced_with_closings(orders, start, end, store):
         closings_qs = closings_qs.filter(point_of_sale_id=store)
     covered_ids = set()
     for c in closings_qs:
-        # NB : on ne peut pas utiliser c.expected_total ici - il sert a verifier le tiroir-caisse (comptage
-        # especes) et inclut donc le fond de caisse du matin (voir _sales_totals_range), qui n'est pas une
-        # vente (meme probleme deja corrige pour l'historique des clotures, via DailyClosingSerializer.sales_total).
-        # Le chiffre d'affaires reel de la fermeture est la somme des commandes qu'elle couvre.
+        # NB : le chiffre d'affaires reel de la fermeture est la somme des commandes qu'elle couvre, jamais un
+        # montant de la fermeture elle-meme. Le fond de caisse (DailyClosing.opening_cash) n'est pas une vente :
+        # il n'entre ni dans expected_*/declared_* (voir _sales_totals_range) ni dans ce rapport.
         closing_orders = _closing_order_ids(c)
         agg = closing_orders.aggregate(revenue=Sum("total_amount"), n=Count("id"))
         ids = list(closing_orders.values_list("id", flat=True))
