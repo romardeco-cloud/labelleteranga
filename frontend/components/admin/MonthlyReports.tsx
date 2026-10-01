@@ -1,5 +1,6 @@
 "use client";
 
+import { dakarTodayDate } from "@/lib/today";
 import { useState } from "react";
 import { downloadExport, openPdf } from "@/lib/documents";
 
@@ -9,7 +10,7 @@ const pad = (n: number) => String(n).padStart(2, "0");
 /** Rapports mensuels (PDF avec totaux de ventes du mois et cumul de l'annee) : un clic en fin de mois. */
 export default function MonthlyReports({ storeId, months = 12, compact = false }: { storeId: number | null; months?: number; compact?: boolean }) {
   const [busy, setBusy] = useState<string | null>(null);
-  const now = new Date();
+  const now = dakarTodayDate(); // jour au Senegal, jamais celui de l'appareil
   const todayIso = `${now.getFullYear()}-${pad(now.getMonth() + 1)}-${pad(now.getDate())}`;
   const [custom, setCustom] = useState({ start: `${now.getFullYear()}-${pad(now.getMonth() + 1)}-01`, end: todayIso });
   const rows = Array.from({ length: months }, (_, i) => {

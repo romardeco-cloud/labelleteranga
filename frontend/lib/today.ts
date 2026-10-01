@@ -32,6 +32,30 @@ export function formatToday(d = new Date()) {
   };
 }
 
+/** Date du jour au Senegal, format YYYY-MM-DD - meme si l'appareil est regle sur un autre fuseau (ex. Canada). */
+export function dakarTodayIso() {
+  return formatToday().key;
+}
+
+/**
+ * Date du jour au Senegal sous forme de Date (a midi, heure de l'appareil) : ses getFullYear/getMonth/getDate
+ * donnent le jour SENEGALAIS. A utiliser pour les calculs de periodes (debut du mois, 7 derniers jours...).
+ */
+export function dakarTodayDate() {
+  const [y, m, d] = dakarTodayIso().split("-").map(Number);
+  return new Date(y, m - 1, d, 12);
+}
+
+/** Heure actuelle au Senegal (0-23). */
+export function dakarHour() {
+  return Number(new Date().toLocaleString("en-GB", { ...SENEGAL_TZ, hour: "2-digit", hourCycle: "h23" }));
+}
+
+/** Date YYYY-MM-DD d'une Date construite en heure de l'appareil (ex. dakarTodayDate() decalee), sans passer par l'UTC. */
+export function localIso(d: Date) {
+  return `${d.getFullYear()}-${String(d.getMonth() + 1).padStart(2, "0")}-${String(d.getDate()).padStart(2, "0")}`;
+}
+
 export function useToday() {
   const [today, setToday] = useState(() => formatToday());
   useEffect(() => {

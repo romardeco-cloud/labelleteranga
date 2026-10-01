@@ -1,5 +1,6 @@
 "use client";
 
+import { dakarTodayIso } from "@/lib/today";
 import Image from "next/image";
 import Link from "next/link";
 import { useParams, useRouter } from "next/navigation";
@@ -21,7 +22,7 @@ import {
   openPdf,
 } from "@/lib/documents";
 
-const today = () => new Date().toISOString().slice(0, 10);
+const today = dakarTodayIso;
 
 export default function DocumentDetailPage() {
   const company = useCompanyContact();

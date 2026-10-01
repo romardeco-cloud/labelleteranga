@@ -1,12 +1,13 @@
 "use client";
 
+import { SENEGAL_TZ } from "@/lib/today";
 import { useEffect, useState } from "react";
 import { useSite } from "@/components/site/SiteContext";
 import { socialHref } from "@/components/SocialLinks";
 import { Combo, fetchSiteCombos, submitComboRequest } from "@/lib/engage";
 
 const money = (v: string | number) => new Intl.NumberFormat("fr-SN", { maximumFractionDigits: 0 }).format(Number(v)) + " FCFA";
-const iso = (d: Date) => new Date(d.getTime() - d.getTimezoneOffset() * 60000).toISOString().slice(0, 10);
+const iso = (d: Date) => d.toLocaleDateString("en-CA", SENEGAL_TZ); // jour au Senegal
 
 function occasionEmoji(o: string) {
   const s = o.toLowerCase();

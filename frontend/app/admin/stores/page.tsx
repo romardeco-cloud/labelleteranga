@@ -1,5 +1,6 @@
 "use client";
 
+import { dakarTodayIso } from "@/lib/today";
 import Link from "next/link";
 import { useEffect, useState } from "react";
 import { PointOfSale, api, createPointOfSale, fetchPointsOfSale, updatePointOfSale } from "@/lib/api";
@@ -39,7 +40,7 @@ export default function AdminStoresPage() {
       const url = URL.createObjectURL(res.data);
       const a = document.createElement("a");
       a.href = url;
-      a.download = `sauvegarde_${reset.store.slug ?? reset.store.id}_${new Date().toISOString().slice(0, 10)}.xlsx`;
+      a.download = `sauvegarde_${reset.store.slug ?? reset.store.id}_${dakarTodayIso()}.xlsx`;
       a.click();
       URL.revokeObjectURL(url);
       setReset({ ...reset, backedUp: true });

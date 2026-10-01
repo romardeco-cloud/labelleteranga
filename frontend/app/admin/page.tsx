@@ -1,5 +1,6 @@
 "use client";
 
+import { dakarHour, dakarTodayIso } from "@/lib/today";
 import SealBlock from "@/components/SealBlock";
 import Link from "next/link";
 import { useCallback, useEffect, useMemo, useState } from "react";
@@ -36,7 +37,7 @@ const KPI_STYLE: Record<DashboardKpi["key"], { icon: IconName; tile: string }> =
   tips: { icon: "gift", tile: "bg-fuchsia-500/15 text-fuchsia-400" },
 };
 
-/* ---------- dates (toujours en heure locale, format YYYY-MM-DD) ---------- */
+/* ---------- dates (format YYYY-MM-DD ; « aujourd'hui » = jour au Senegal, jamais celui de l'appareil) ---------- */
 const iso = (d: Date) => `${d.getFullYear()}-${String(d.getMonth() + 1).padStart(2, "0")}-${String(d.getDate()).padStart(2, "0")}`;
 const parse = (s: string) => {
   const [y, m, d] = s.split("-").map(Number);
@@ -56,10 +57,10 @@ function label(date: string, period: Period) {
   return String(d.getFullYear());
 }
 const periodKey = (d: string, period: Period) => d.slice(0, period === "year" ? 4 : period === "month" ? 7 : 10);
-const isFuture = (date: string, period: Period) => periodKey(shift(date, period, 1), period) > periodKey(iso(new Date()), period);
+const isFuture = (date: string, period: Period) => periodKey(shift(date, period, 1), period) > periodKey(dakarTodayIso(), period);
 
 function greeting() {
-  const h = new Date().getHours();
+  const h = dakarHour();
   return h < 12 ? "Bonjour" : h < 18 ? "Bon apres-midi" : "Bonsoir";
 }
 
@@ -67,7 +68,7 @@ const compact = (v: number) => (v >= 1_000_000 ? `${(v / 1_000_000).toFixed(1)}M
 
 export default function AdminDashboardPage() {
   const [period, setPeriod] = useState<Period>("day");
-  const [date, setDate] = useState(iso(new Date()));
+  const [date, setDate] = useState(dakarTodayIso());
   const [storeId, setStoreId] = useState<number | null>(null);
   const [stores, setStores] = useState<PointOfSale[]>([]);
   const [data, setData] = useState<Dashboard | null>(null);
@@ -189,11 +190,11 @@ export default function AdminDashboardPage() {
         <input
           type="date"
           value={date}
-          max={iso(new Date())}
+          max={dakarTodayIso()}
           onChange={(e) => e.target.value && setDate(e.target.value)}
           className="ml-auto border rounded-lg px-2 py-1 text-sm print:hidden"
         />
-        <button onClick={() => setDate(iso(new Date()))} className="text-sm text-[#f5b942] px-2 print:hidden">
+        <button onClick={() => setDate(dakarTodayIso())} className="text-sm text-[#f5b942] px-2 print:hidden">
           Aujourd&apos;hui
         </button>
       </div>

@@ -1,5 +1,6 @@
 "use client";
 
+import { dakarTodayIso } from "@/lib/today";
 import { useEffect, useMemo, useState } from "react";
 import { useRouter } from "next/navigation";
 import { PointOfSale, Product, api, fetchPointsOfSale } from "@/lib/api";
@@ -18,7 +19,7 @@ import {
   saveParty,
 } from "@/lib/documents";
 
-const today = () => new Date().toISOString().slice(0, 10);
+const today = dakarTodayIso;
 const emptyLine = (): DocLine => ({ product: null, description: "", quantity: "1", unit_price: "", discount_percent: "0" });
 
 export default function DocumentForm({ type, id }: { type: DocType; id?: number }) {

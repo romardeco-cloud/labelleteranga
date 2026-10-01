@@ -1,5 +1,6 @@
 "use client";
 
+import { dakarTodayDate, localIso } from "@/lib/today";
 import MonthlyReports from "@/components/admin/MonthlyReports";
 import Link from "next/link";
 import SealOptionsBar from "@/components/SealOptionsBar";
@@ -21,9 +22,9 @@ import {
   formatXof,
 } from "@/lib/documents";
 
-const iso = (d: Date) => d.toISOString().slice(0, 10);
+const iso = localIso;
 function presets() {
-  const now = new Date();
+  const now = dakarTodayDate(); // jour au Senegal, meme si l'ordinateur est a l'heure du Canada
   const monthStart = new Date(now.getFullYear(), now.getMonth(), 1);
   const prevStart = new Date(now.getFullYear(), now.getMonth() - 1, 1);
   const prevEnd = new Date(now.getFullYear(), now.getMonth(), 0);

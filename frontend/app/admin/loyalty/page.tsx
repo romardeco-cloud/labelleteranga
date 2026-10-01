@@ -1,5 +1,6 @@
 "use client";
 
+import { formatDakarDate } from "@/lib/today";
 import Link from "next/link";
 import { useCallback, useEffect, useState } from "react";
 import { PointOfSale, fetchPointsOfSale } from "@/lib/api";
@@ -99,7 +100,7 @@ export default function LoyaltyAdminPage() {
                       m.rewards.map((r) => (
                         <div key={r.id} className="flex items-center gap-2 mb-1">
                           <span>
-                            🎁 {r.label} <span className="text-xs text-gray-500">({r.code}{r.expires_at ? `, jusqu'au ${new Date(r.expires_at).toLocaleDateString("fr-FR")}` : ""})</span>
+                            🎁 {r.label} <span className="text-xs text-gray-500">({r.code}{r.expires_at ? `, jusqu'au ${formatDakarDate(r.expires_at)}` : ""})</span>
                           </span>
                           <button onClick={() => markUsed(m, r.id)} className="text-xs border rounded px-2 py-0.5 hover:border-[#f5b942]">
                             Remise

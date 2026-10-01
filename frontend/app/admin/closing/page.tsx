@@ -1,5 +1,6 @@
 "use client";
 
+import { dakarTodayIso } from "@/lib/today";
 import { useEffect, useState } from "react";
 import CashierTills from "@/components/admin/CashierTills";
 import StoreGaps from "@/components/admin/StoreGaps";
@@ -28,7 +29,7 @@ function formatXof(value: number | string) {
 }
 
 function todayIso() {
-  return new Date().toISOString().slice(0, 10);
+  return dakarTodayIso();
 }
 
 export default function AdminClosingPage() {

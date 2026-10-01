@@ -60,8 +60,10 @@ export default function AdminPromotionsPage() {
         category: form.category ? Number(form.category) : null,
         point_of_sale: form.point_of_sale ? Number(form.point_of_sale) : null,
         products: selectedProducts,
-        start_date: new Date(form.start_date).toISOString(),
-        end_date: new Date(form.end_date).toISOString(),
+        // heures saisies = heure du Senegal : envoyees telles quelles, le serveur (Africa/Dakar) les interprete,
+        // jamais converties depuis le fuseau de l'appareil
+        start_date: form.start_date,
+        end_date: form.end_date,
         is_active: true,
       });
       setForm(emptyForm);

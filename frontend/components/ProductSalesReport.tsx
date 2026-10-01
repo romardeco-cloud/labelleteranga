@@ -1,5 +1,6 @@
 "use client";
 
+import { dakarTodayIso } from "@/lib/today";
 import { useEffect, useState } from "react";
 import { PointOfSale, ProductSalesRow, fetchPointsOfSale, fetchProductSales } from "@/lib/api";
 
@@ -8,7 +9,7 @@ function formatXof(value: number) {
 }
 
 function currentMonthValue() {
-  return new Date().toISOString().slice(0, 7);
+  return dakarTodayIso().slice(0, 7);
 }
 
 function monthBounds(monthValue: string) {

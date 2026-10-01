@@ -1,5 +1,6 @@
 "use client";
 
+import { dakarTodayIso } from "@/lib/today";
 import { useCallback, useEffect, useMemo, useState } from "react";
 import ProductVisual from "@/components/ProductVisual";
 import { PointOfSale, Product, api, fetchPointsOfSale } from "@/lib/api";
@@ -7,7 +8,7 @@ import { apiErrorMessage, formatXof } from "@/lib/documents";
 import { categoryRank, effectiveCategories, loadMenuCategories, saveMenuCategories } from "@/lib/meals";
 import { MenuKind, deleteDailyMenu, fetchDailyMenuAdmin, saveDailyMenu } from "@/lib/store-admin";
 
-const today = () => new Date().toISOString().slice(0, 10);
+const today = dakarTodayIso;
 const addDays = (iso: string, n: number) => {
   const d = new Date(iso + "T12:00:00");
   d.setDate(d.getDate() + n);

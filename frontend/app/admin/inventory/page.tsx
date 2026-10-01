@@ -4,7 +4,7 @@ import Link from "next/link";
 import { useRouter } from "next/navigation";
 import { useEffect, useState } from "react";
 import { PointOfSale, fetchPointsOfSale } from "@/lib/api";
-import { formatDakarTime } from "@/lib/today";
+import { dakarTodayIso, formatDakarTime } from "@/lib/today";
 import {
   InventoryCount,
   MOVEMENT_REASONS,
@@ -23,7 +23,7 @@ const STATUS_STYLE: Record<string, string> = {
   cancelled: "bg-gray-100 text-gray-500",
 };
 
-const today = () => new Date().toISOString().slice(0, 10);
+const today = dakarTodayIso;
 
 export default function InventoryPage() {
   const router = useRouter();

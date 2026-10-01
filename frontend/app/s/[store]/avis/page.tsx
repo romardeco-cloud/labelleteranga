@@ -1,5 +1,6 @@
 "use client";
 
+import { formatDakarDate } from "@/lib/today";
 import { Suspense, useEffect, useState } from "react";
 import { useSearchParams } from "next/navigation";
 import { useSite } from "@/components/site/SiteContext";
@@ -13,7 +14,7 @@ const RECOMMEND = [
   { key: "no", label: "Non" },
 ] as const;
 
-const fmtDate = (iso: string) => new Date(iso).toLocaleDateString("fr-FR", { day: "numeric", month: "long", year: "numeric" });
+const fmtDate = (iso: string) => formatDakarDate(iso, { day: "numeric", month: "long", year: "numeric" });
 
 function ReviewsContent() {
   const { site } = useSite();
