@@ -423,12 +423,17 @@ def _grace_period_totals(cashier_profile, start_date, today, grace_cutoff=None):
 
     grace_cutoff = grace_cutoff or GRACE_CUTOFF
     totals = {key: Decimal("0") for key, _ in Order.PaymentMethod.choices}
+    # comme _sales_totals_range : on exclut les ventes deja couvertes par une fermeture existante. Sans cela, les
+    # ventes faites juste apres minuit le premier jour (deja comptees dans la fermeture de la VEILLE grace a la
+    # periode de grace) etaient comptees une seconde fois ici (constate les 28/09 et 29/09 : +8 000 et +6 100 FCFA).
+    covered_ids = _closing_covered_order_ids(cashier_profile)
     qs = Order.objects.filter(
         status=Order.Status.PAID,
         channel=Order.Channel.POS,
         cashier=cashier_profile.user,
         point_of_sale=cashier_profile.point_of_sale,
     ).filter(Q(paid_at__date__gte=start_date, paid_at__date__lt=today) | Q(paid_at__date=today, paid_at__time__lt=grace_cutoff))
+    qs = qs.exclude(pk__in=covered_ids)
     for row in qs.values("payment_method").annotate(total=Sum("total_amount")):
         totals[row["payment_method"]] = row["total"] or Decimal("0")
     # NB : pas de fond de caisse ajoute ici non plus (voir _sales_totals_range) - "cash" reste uniquement les

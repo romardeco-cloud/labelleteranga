@@ -276,6 +276,18 @@ class DailyClosingViewSet(viewsets.ModelViewSet):
             expected_cash=totals.get(Order.PaymentMethod.CASH, 0),
         )
 
+    @staticmethod
+    def _replace_auto_closings(for_date, point_of_sale):
+        """
+        La cloture globale de l'admin remplace les fermetures AUTOMATIQUES des caissiers de ce point de vente pour
+        ce jour : quand l'admin cloture apres 2h30 (heure du Senegal), la fermeture automatique est passee avant
+        lui et la journee apparaissait deux fois dans l'historique. Les fermetures faites par un caissier ou par
+        l'admin pour un caissier precis (auto_closed=False) ne sont jamais touchees.
+        """
+        DailyClosing.objects.filter(
+            date=for_date, point_of_sale_id=point_of_sale, cashier__isnull=False, auto_closed=True
+        ).delete()
+
     def perform_create(self, serializer):
         for_date = serializer.validated_data["date"]
         point_of_sale = serializer.validated_data.get("point_of_sale")
@@ -285,11 +297,15 @@ class DailyClosingViewSet(viewsets.ModelViewSet):
             raise ValidationError({"date": "Une cloture existe deja pour ce jour et ce point de vente."})
         serializer.save(closed_by=self.request.user)
         self._apply_expected_totals(serializer, for_date, point_of_sale.id if point_of_sale else None)
+        if point_of_sale:
+            self._replace_auto_closings(for_date, point_of_sale.id)
 
     def perform_update(self, serializer):
         for_date = serializer.instance.date
         point_of_sale = serializer.instance.point_of_sale_id
         self._apply_expected_totals(serializer, for_date, point_of_sale)
+        if point_of_sale and serializer.instance.cashier_id is None:
+            self._replace_auto_closings(for_date, point_of_sale)
 
     @action(detail=True, methods=["get"], url_path="pdf")
     def pdf(self, request, pk=None):

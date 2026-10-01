@@ -226,3 +226,71 @@ class OpeningResetOnClosingTests(TestCase):
         self.assertTrue(closing.auto_closed)
         self.assertEqual(closing.opening_cash, 10000)
         self.assertEqual(list(CashierOpening.objects.filter(cashier=self.user).values_list("date", flat=True)), [today])
+
+
+class AutoCloseAfterMidnightTests(TestCase):
+    """
+    Une vente faite juste apres minuit appartient a la fermeture de la veille (periode de grace) : la fermeture
+    automatique du jour suivant ne doit jamais la compter une seconde fois (doublons constates les 28/09 et
+    29/09/2026 : fermeture automatique = bonne fermeture + ventes d'apres minuit de la nuit precedente).
+    """
+
+    def test_auto_close_does_not_recount_previous_night(self):
+        from datetime import timedelta
+
+        from apps.accounts.models import CashierProfile
+        from apps.pos.services import auto_close_overdue_cashiers
+        from apps.reports.models import DailyClosing
+
+        store = PointOfSale.objects.create(name="Resto Test")
+        user = User.objects.create_user("resto-test")
+        profile = CashierProfile.objects.create(user=user, point_of_sale=store)
+        today = timezone.localdate()
+        day1 = today - timedelta(days=3)
+        day2 = today - timedelta(days=2)
+
+        def sell(d, h, m, amount):
+            Order.objects.create(
+                channel=Order.Channel.POS, status=Order.Status.PAID, payment_method=Order.PaymentMethod.CASH,
+                customer_name="Client", total_amount=amount, point_of_sale=store, cashier=user, paid_at=_aware(d, h, m),
+            )
+
+        sell(day1, 20, 0, 60800)
+        sell(day2, 0, 10, 6100)  # nuit du jour 1 : appartient a la fermeture du jour 1
+        sell(day2, 21, 0, 60000)
+        sell(day2 + timedelta(days=1), 0, 12, 3500)  # nuit du jour 2
+        # cloture globale du jour 1 par l'admin (66 900 = 60 800 + 6 100)
+        DailyClosing.objects.create(date=day1, point_of_sale=store, cashier=None, expected_cash=66900, declared_cash=66900)
+
+        self.assertEqual(auto_close_overdue_cashiers(only_profile=profile), 1)
+        auto = DailyClosing.objects.get(cashier=user, auto_closed=True)
+        self.assertEqual(auto.date, day2)
+        self.assertEqual(auto.expected_total, 63500)  # 60 000 + 3 500, jamais + 6 100
+
+    def test_admin_global_closing_replaces_auto_closing(self):
+        """Admin qui cloture apres 2h30 : sa cloture globale remplace la fermeture automatique du meme jour."""
+        from rest_framework.test import APIRequestFactory, force_authenticate
+
+        from apps.accounts.models import CashierProfile
+        from apps.reports.models import DailyClosing
+        from apps.reports.views import DailyClosingViewSet
+
+        store = PointOfSale.objects.create(name="Resto Remplacement")
+        user = User.objects.create_user("resto-remplacement")
+        other = User.objects.create_user("caissier-manuel")
+        CashierProfile.objects.create(user=user, point_of_sale=store)
+        day = date(2024, 6, 1)
+        DailyClosing.objects.create(date=day, point_of_sale=store, cashier=user, auto_closed=True, expected_cash=63500, declared_cash=63500)
+        manual = DailyClosing.objects.create(date=day, point_of_sale=store, cashier=other, auto_closed=False)
+
+        admin = User.objects.create_superuser("admin-remplacement", "a@test.local", "x")
+        request = APIRequestFactory().post(
+            "/api/reports/closings/", {"date": day.isoformat(), "point_of_sale": store.id, "notes": ""}, format="json"
+        )
+        force_authenticate(request, user=admin)
+        response = DailyClosingViewSet.as_view({"post": "create"})(request)
+
+        self.assertEqual(response.status_code, 201, response.data)
+        self.assertFalse(DailyClosing.objects.filter(auto_closed=True).exists())
+        self.assertTrue(DailyClosing.objects.filter(pk=manual.pk).exists())
+        self.assertTrue(DailyClosing.objects.filter(date=day, point_of_sale=store, cashier__isnull=True).exists())
