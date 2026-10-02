@@ -101,12 +101,27 @@ export default function AdminProductsPage() {
 
   useEffect(() => {
     fetchPointsOfSale().then((list) => setStores(list.filter((x) => x.is_active)));
-    fetchCategories().then(setCategories);
     api
       .get("/catalog/products/image-storage/")
       .then((res) => setImgStatus(res.data))
       .catch(() => setImgStatus(null));
   }, []);
+
+  // point de vente choisi : seulement ses categories (celles qui ont au moins un de ses produits)
+  const loadCategories = () => fetchCategories(storeId).then(setCategories);
+
+  useEffect(() => {
+    let current = true;
+    fetchCategories(storeId).then((list) => {
+      if (!current) return;
+      setCategories(list);
+      // le filtre en cours n'existe pas dans ce point de vente : on revient a "Toutes les categories"
+      setCategoryFilter((f) => (f && f !== "none" && !list.some((c) => String(c.id) === f) ? "" : f));
+    });
+    return () => {
+      current = false;
+    };
+  }, [storeId]);
 
   async function runBulk(action: string, extra: Record<string, unknown> = {}) {
     return runBulkFor([...selected], action, extra);
@@ -131,6 +146,8 @@ export default function AdminProductsPage() {
       if (action === "delete" || (action === "assign_store" && extra.mode === "move")) setSelected(new Set());
       setBulkKind(null);
       reload();
+      // suppression, deplacement ou changement de categorie : une categorie peut apparaitre ou disparaitre ici
+      if (["delete", "assign_store", "set_category", "auto_category"].includes(action)) loadCategories();
     } catch (err) {
       setBulkMsg({ ok: false, text: apiErrorMessage(err, "Action impossible.") });
     } finally {
@@ -768,7 +785,6 @@ export default function AdminProductsPage() {
                   disabled={bulkBusy || (!bulkCategory && !bulkCategoryName.trim())}
                   onClick={async () => {
                     await runBulk("set_category", bulkCategory ? { category: Number(bulkCategory) } : { category_name: bulkCategoryName.trim() });
-                    fetchCategories().then(setCategories);
                   }}
                   className="w-full bg-brand text-white rounded-lg py-2.5 font-medium disabled:opacity-40"
                 >

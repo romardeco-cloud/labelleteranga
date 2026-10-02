@@ -82,3 +82,26 @@ class BulkDeleteProductsTests(TestCase):
         res = self.client.post("/api/catalog/products/bulk-update/", {"ids": [p.pk], "action": "delete"}, format="json")
         self.assertEqual(res.status_code, 400)  # sans confirm=true
         self.assertTrue(Product.objects.filter(pk=p.pk).exists())
+
+
+class CategoriesByStoreTests(TestCase):
+    """Admin > Produits : avec un point de vente choisi, seules ses categories (celles de ses produits) sont proposees."""
+
+    def test_categories_filtered_by_store(self):
+        from apps.catalog.models import Category
+
+        client = APIClient()
+        client.force_authenticate(User.objects.create_user("admin-cat", is_staff=True))
+        sm, resto = PointOfSale.objects.create(name="SM"), PointOfSale.objects.create(name="Resto")
+        fruits, plats, vide = (Category.objects.create(name=n) for n in ("Fruits", "Plats", "Vide"))
+        for i, (cat, store) in enumerate([(fruits, sm), (fruits, sm), (plats, resto)]):
+            p = Product.objects.create(sku=f"C-{i}", name=f"P{i}", price=100, category=cat)
+            Stock.objects.create(product=p, point_of_sale=store)
+
+        def names(params):
+            res = client.get("/api/catalog/categories/", params)
+            return sorted(c["name"] for c in res.data.get("results", res.data))
+
+        self.assertEqual(names({"point_of_sale": sm.pk}), ["Fruits"])
+        self.assertEqual(names({"point_of_sale": resto.pk}), ["Plats"])
+        self.assertTrue({"Fruits", "Plats", "Vide"} <= set(names({"page_size": 100})))  # sans filtre : toutes

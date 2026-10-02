@@ -27,6 +27,13 @@ class CategoryViewSet(viewsets.ModelViewSet):
     serializer_class = CategorySerializer
     permission_classes = [IsAdminOrReadOnly]
 
+    def get_queryset(self):
+        qs = super().get_queryset()
+        store = self.request.query_params.get("point_of_sale")
+        if store:  # categories qui ont au moins un produit de ce point de vente (admin > Produits)
+            qs = qs.filter(products__stocks__point_of_sale_id=store).distinct()
+        return qs
+
 
 class ProductViewSet(viewsets.ModelViewSet):
     queryset = Product.objects.select_related("category").prefetch_related("stocks__point_of_sale").all()

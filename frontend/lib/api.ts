@@ -72,8 +72,11 @@ export type Product = {
   combo_items?: string[];
 };
 
-export async function fetchCategories() {
-  const { data } = await api.get("/catalog/categories/", { params: { page_size: 100 } });
+/** Avec `pointOfSale` : seulement les categories qui ont au moins un produit de ce point de vente. */
+export async function fetchCategories(pointOfSale?: number | null) {
+  const { data } = await api.get("/catalog/categories/", {
+    params: { page_size: 100, ...(pointOfSale ? { point_of_sale: pointOfSale } : {}) },
+  });
   return (data.results ?? data) as Category[];
 }
 
