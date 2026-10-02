@@ -165,9 +165,24 @@ def _closing_covered_order_ids(cashier_profile, ignore_closing_date=None):
             channel=Order.Channel.POS,
             cashier=cashier_profile.user,
             point_of_sale=store,
-        ).filter(Q(paid_at__date__gte=c.date, paid_at__date__lte=c_end) | Q(paid_at__date=grace_day, paid_at__time__lt=GRACE_CUTOFF))
+        ).filter(Q(paid_at__date__gte=c.date, paid_at__date__lte=c_end) | _grace_q(c_end, before=c.closed_at))
         ids.update(qs.values_list("id", flat=True))
     return ids
+
+
+def _grace_q(day, before=None):
+    """
+    Ventes de la periode de grace rattachees a la journee commerciale `day` : celles du lendemain avant
+    GRACE_CUTOFF, et seulement celles faites AVANT `before` (l'heure de la fermeture). Une vente faite apres
+    minuit mais apres que le caissier a deja ferme appartient a la journee suivante, jamais a une fermeture
+    qui ne l'a pas comptee.
+    """
+    from django.db.models import Q
+
+    q = Q(paid_at__date=day + timedelta(days=1), paid_at__time__lt=GRACE_CUTOFF)
+    if before is not None:
+        q &= Q(paid_at__lt=before)
+    return q
 
 
 def _unclosed_prior_dates(cashier_profile, before_date):
@@ -219,18 +234,27 @@ def _sales_totals_range(cashier_profile, start_date, end_date):
     NB : le fond de caisse (CashierOpening) n'est PAS ajoute ici - "cash" ne represente que les ventes en
     especes. Le fond de caisse reste un montant a part, jamais mele au chiffre d'affaires ni au montant de
     la fermeture (voir opening_cash_for) ; c'est au frontend de le faire recompter separement s'il le souhaite.
+
+    Inclut aussi les ventes faites juste apres minuit (lendemain de end_date, avant GRACE_CUTOFF) : sans cela,
+    une fermeture faite a 0h45 pour la veille oubliait les ventes de 0h00 a 0h45, alors que l'apercu les
+    montrait - le caissier comptait juste et un faux ecart positif etait enregistre (constate le 01/10 : +1 500).
     """
-    from django.db.models import Count, Sum
+    from django.db.models import Count, Q, Sum
 
     totals = {key: Decimal("0") for key, _ in Order.PaymentMethod.choices}
     covered_ids = _closing_covered_order_ids(cashier_profile, ignore_closing_date=start_date)
+    # correction d'une fermeture existante : seules les ventes de grace faites avant SA fermeture lui reviennent
+    existing = DailyClosing.objects.filter(
+        date=start_date, point_of_sale=cashier_profile.point_of_sale, cashier=cashier_profile.user
+    ).first()
     qs = Order.objects.filter(
         status=Order.Status.PAID,
         channel=Order.Channel.POS,
         cashier=cashier_profile.user,
         point_of_sale=cashier_profile.point_of_sale,
-        paid_at__date__gte=start_date,
-        paid_at__date__lte=end_date,
+    ).filter(
+        Q(paid_at__date__gte=start_date, paid_at__date__lte=end_date)
+        | _grace_q(end_date, before=existing.closed_at if existing else None)
     ).exclude(pk__in=covered_ids)
     for row in qs.values("payment_method").annotate(total=Sum("total_amount")):
         totals[row["payment_method"]] = row["total"] or Decimal("0")

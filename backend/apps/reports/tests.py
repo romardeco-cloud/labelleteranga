@@ -294,3 +294,51 @@ class AutoCloseAfterMidnightTests(TestCase):
         self.assertFalse(DailyClosing.objects.filter(auto_closed=True).exists())
         self.assertTrue(DailyClosing.objects.filter(pk=manual.pk).exists())
         self.assertTrue(DailyClosing.objects.filter(date=day, point_of_sale=store, cashier__isnull=True).exists())
+
+
+class CashierClosingAfterMidnightTests(TestCase):
+    """
+    Un caissier qui ferme sa caisse apres minuit (avant 2h30) pour la journee de la veille doit voir enregistre
+    le meme attendu que celui de l'apercu, ventes d'apres minuit comprises. Constate le 01/10/2026 : apercu
+    41 300, fermeture enregistree avec un attendu de 39 800 et un faux ecart de +1 500 FCFA.
+    """
+
+    def setUp(self):
+        from apps.accounts.models import CashierProfile
+
+        self.store = PointOfSale.objects.create(name="Resto Minuit")
+        self.user = User.objects.create_user("resto-minuit")
+        self.profile = CashierProfile.objects.create(user=self.user, point_of_sale=self.store)
+        self.day = date(2024, 5, 10)
+        self.next_day = date(2024, 5, 11)
+
+    def _sell(self, d, h, m, amount):
+        Order.objects.create(
+            channel=Order.Channel.POS, status=Order.Status.PAID, payment_method=Order.PaymentMethod.CASH,
+            customer_name="Client", total_amount=amount, point_of_sale=self.store, cashier=self.user,
+            paid_at=_aware(d, h, m),
+        )
+
+    def test_closing_after_midnight_counts_night_sales(self):
+        from unittest import mock
+
+        from apps.pos.services import _sales_totals_range, close_cashier_day
+
+        self._sell(self.day, 20, 0, 39800)
+        self._sell(self.next_day, 0, 20, 1500)
+
+        with mock.patch("django.utils.timezone.now", return_value=_aware(self.next_day, 0, 45)):
+            closing, created = close_cashier_day(self.profile, {"cash": 41300})
+        self.assertTrue(created)
+        self.assertEqual(closing.date, self.day)
+        self.assertEqual(closing.expected_total, 41300)
+        self.assertEqual(closing.discrepancy_total, 0)
+
+        # vente faite APRES la fermeture (01h00) : elle appartient au jour suivant, jamais a cette fermeture
+        self._sell(self.next_day, 1, 0, 2000)
+        with mock.patch("django.utils.timezone.now", return_value=_aware(self.next_day, 1, 30)):
+            closing, created = close_cashier_day(self.profile, {"cash": 41300})
+        self.assertFalse(created)
+        self.assertEqual(closing.expected_total, 41300)
+        totals, _tips, n = _sales_totals_range(self.profile, self.next_day, self.next_day)
+        self.assertEqual((totals["cash"], n), (2000, 1))
