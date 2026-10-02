@@ -62,3 +62,23 @@ class BulkDeleteProductsTests(TestCase):
         res = self._delete(ids, confirm=True)
         self.assertEqual(res.data["updated"], 600)
         self.assertLess(time.monotonic() - start, 10)
+
+    def test_delete_without_store_removes_products_everywhere(self):
+        shared = self._product("partage", self.store, self.other)
+        kept = self._product("garde", self.store)
+        res = self.client.post(
+            "/api/catalog/products/bulk-update/", {"ids": [shared.pk], "action": "delete", "confirm": True}, format="json"
+        )
+        self.assertEqual(res.status_code, 200, res.data)
+        self.assertEqual(res.data["updated"], 1)
+        self.assertFalse(Product.objects.filter(pk=shared.pk).exists())
+        self.assertFalse(Stock.objects.filter(product_id=shared.pk).exists())
+        self.assertTrue(Product.objects.filter(pk=kept.pk).exists())
+
+    def test_other_actions_still_require_store(self):
+        p = self._product(1, self.store)
+        res = self.client.post("/api/catalog/products/bulk-update/", {"ids": [p.pk], "action": "deactivate"}, format="json")
+        self.assertEqual(res.status_code, 400)
+        res = self.client.post("/api/catalog/products/bulk-update/", {"ids": [p.pk], "action": "delete"}, format="json")
+        self.assertEqual(res.status_code, 400)  # sans confirm=true
+        self.assertTrue(Product.objects.filter(pk=p.pk).exists())

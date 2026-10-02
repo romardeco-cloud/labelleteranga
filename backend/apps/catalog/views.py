@@ -128,7 +128,8 @@ class ProductViewSet(viewsets.ModelViewSet):
           action = activate | deactivate        (activate ignore les produits sans prix, sauf include_unpriced=true)
           action = set_price   price, activate?  meme prix pour toute la liste
           action = set_stock   quantity, mode = set | add   meme stock pour toute la liste
-          action = delete      confirm=true      suppression definitive (les ventes passees sont conservees)
+          action = delete      confirm=true      suppression definitive (les ventes passees sont conservees) ; seule
+                                                 action possible sans point_of_sale : le produit est alors supprime partout
         """
         from decimal import Decimal, InvalidOperation
 
@@ -141,9 +142,16 @@ class ProductViewSet(viewsets.ModelViewSet):
         if not isinstance(ids, list) or not ids:
             raise ValidationError({"ids": "Selectionnez au moins un produit."})
         store = self._store_from(request.data.get("point_of_sale"))
+        act = request.data.get("action")
+        if act == "delete" and not store:
+            # sans point de vente (filtre "Tous") : suppression definitive partout, dans tous les points de vente
+            if request.data.get("confirm") is not True:
+                raise ValidationError({"confirm": "Confirmation requise."})
+            wanted = {int(i) for i in ids}
+            removed = Product.objects.filter(pk__in=wanted).delete()[1].get("catalog.Product", 0)
+            return Response({"updated": removed, "skipped": len(wanted) - removed, "skipped_reason": ""})
         if not store:
             raise ValidationError({"point_of_sale": "Choisissez un point de vente : les modifications ne s'appliquent qu'a lui."})
-        act = request.data.get("action")
 
         # uniquement les produits de CE point de vente ; ceux qu'un autre point de vente vend aussi (prix, statut et categorie
         # sont partages) ne sont jamais modifies ici, pour ne pas changer les autres points de vente

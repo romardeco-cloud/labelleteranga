@@ -572,7 +572,7 @@ export default function AdminProductsPage() {
         <button onClick={toggleAll} disabled={products.length === 0} className="border rounded-lg px-3 py-1.5 text-sm bg-white disabled:opacity-40">
           {allSelected ? "Tout deselectionner" : `Tout selectionner (${products.length})`}
         </button>
-        {storeId && products.length > 0 && (
+        {products.length > 0 && (
           <button
             onClick={() => {
               setSelected(new Set(products.map((p) => p.id)));
@@ -581,7 +581,11 @@ export default function AdminProductsPage() {
             }}
             disabled={bulkBusy}
             className="bg-red-600 text-white rounded-lg px-3 py-1.5 text-sm hover:bg-red-700 disabled:opacity-40"
-            title="Supprime tous les produits affiches (filtres compris) de ce point de vente, apres confirmation"
+            title={
+              storeId
+                ? "Supprime tous les produits affiches (filtres compris) de ce point de vente, apres confirmation"
+                : "Supprime tous les produits affiches (filtres compris) de TOUS les points de vente, apres confirmation"
+            }
           >
             Supprimer tous les produits affiches ({products.length})
           </button>
@@ -620,9 +624,13 @@ export default function AdminProductsPage() {
             );
           })()}
         {selected.size > 0 && !storeId && (
-          <span className="text-sm text-amber-500">
-            {selected.size} selectionne(s) : choisissez d&apos;abord un point de vente (boutons ci-dessus) - les modifications ne s&apos;appliquent qu&apos;a lui.
-          </span>
+          <>
+            <span className="text-sm font-medium">{selected.size} selectionne(s) - tous les points de vente :</span>
+            <button onClick={() => setBulkKind("delete")} className="border border-red-500 text-red-600 rounded-lg px-3 py-1.5 text-sm bg-white">
+              Supprimer
+            </button>
+            <span className="text-xs text-amber-500">Pour les autres actions (prix, stock, categorie...), choisissez d&apos;abord un point de vente.</span>
+          </>
         )}
         {selected.size > 0 && storeId && (
           <>
@@ -771,9 +779,14 @@ export default function AdminProductsPage() {
             {bulkKind === "delete" && (
               <>
                 <h2 className="font-bold text-lg text-red-600">
-                  Supprimer {selected.size} produit(s) de {store?.name.replace(/ La Belle Teranga$/i, "")} ?
+                  Supprimer {selected.size} produit(s) {store ? `de ${store.name.replace(/ La Belle Teranga$/i, "")}` : "de TOUS les points de vente"} ?
                 </h2>
-                <p className="text-sm text-gray-600">Suppression definitive de ces produits, de leur stock et de leurs photos. Les ventes passees restent dans les rapports.</p>
+                <p className="text-sm text-gray-600">
+                  {store
+                    ? "Suppression definitive de ces produits, de leur stock et de leurs photos. Un produit vendu aussi ailleurs est seulement retire de ce point de vente."
+                    : "Aucun point de vente choisi : ces produits seront supprimes partout, dans tous les points de vente, avec leur stock et leurs photos."}{" "}
+                  Les ventes passees restent dans les rapports.
+                </p>
                 <label className="block text-sm">
                   Tapez <strong>SUPPRIMER</strong> pour confirmer
                   <input value={bulkConfirm} onChange={(e) => setBulkConfirm(e.target.value)} className="w-full border rounded px-3 py-2 mt-1" />
