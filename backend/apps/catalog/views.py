@@ -274,15 +274,14 @@ class ProductViewSet(viewsets.ModelViewSet):
         if act == "delete":
             if request.data.get("confirm") is not True:
                 raise ValidationError({"confirm": "Confirmation requise."})
-            removed = detached = 0
+            # en une seule fois (et non produit par produit) : "Supprimer tous les produits" peut viser plusieurs centaines
+            # de produits, qui depasseraient sinon le delai de 60 s du serveur (gunicorn.conf.py)
+            ids_here = list(mine.values_list("pk", flat=True))
             with transaction.atomic():
-                for product in mine:
-                    if product.pk in shared_ids:
-                        Stock.objects.filter(product=product, point_of_sale=store).delete()  # retire seulement de ce point de vente
-                        detached += 1
-                    else:
-                        product.delete()
-                        removed += 1
+                # produits partages : retires seulement de ce point de vente
+                detached = Stock.objects.filter(product_id__in=shared_ids, point_of_sale=store).delete()[1].get("stores.Stock", 0)
+                own = [pk for pk in ids_here if pk not in shared_ids]
+                removed = Product.objects.filter(pk__in=own).delete()[1].get("catalog.Product", 0)
             extra = f"{detached} produit(s) partage(s) retire(s) de ce point de vente seulement" if detached else ""
             return Response({"updated": removed + detached, "skipped": total - removed - detached, "skipped_reason": extra})
 

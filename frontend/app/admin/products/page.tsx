@@ -72,18 +72,31 @@ export default function AdminProductsPage() {
   const store = stores.find((x) => x.id === storeId) ?? null;
   const storeSlug = store ? store.name.toLowerCase().replace(/[^a-z0-9]+/g, "-").replace(/^-|-$/g, "") : "";
 
-  function reload() {
-    api
-      .get("/catalog/products/", {
-        params: {
-          page_size: 500,
-          ...(storeId ? { point_of_sale: storeId } : {}),
-          ...(search ? { search } : {}),
-          ...(categoryFilter === "none" ? { no_category: 1 } : categoryFilter ? { category: categoryFilter } : {}),
-          ...(statusFilter !== "all" ? { is_active: statusFilter === "active" ? "true" : "false" } : {}),
-        },
-      })
-      .then((res) => setProducts(res.data.results ?? res.data));
+  const reloadCall = useRef(0);
+
+  async function reload() {
+    // le serveur renvoie au plus 500 produits par page : on charge toutes les pages, sinon les produits au-dela
+    // (567 au Supermarche) n'apparaissent pas et "Tout selectionner" / "Supprimer tous" les oublient
+    const params = {
+      page_size: 500,
+      ...(storeId ? { point_of_sale: storeId } : {}),
+      ...(search ? { search } : {}),
+      ...(categoryFilter === "none" ? { no_category: 1 } : categoryFilter ? { category: categoryFilter } : {}),
+      ...(statusFilter !== "all" ? { is_active: statusFilter === "active" ? "true" : "false" } : {}),
+    };
+    const call = ++reloadCall.current; // un changement de filtre pendant le chargement l'emporte sur l'ancien
+    const all: Product[] = [];
+    for (let page = 1; ; page++) {
+      const res = await api.get("/catalog/products/", { params: { ...params, page } });
+      if (call !== reloadCall.current) return;
+      if (!res.data.results) {
+        setProducts(res.data);
+        return;
+      }
+      all.push(...res.data.results);
+      if (!res.data.next) break;
+    }
+    setProducts(all);
   }
 
   useEffect(() => {
@@ -559,6 +572,20 @@ export default function AdminProductsPage() {
         <button onClick={toggleAll} disabled={products.length === 0} className="border rounded-lg px-3 py-1.5 text-sm bg-white disabled:opacity-40">
           {allSelected ? "Tout deselectionner" : `Tout selectionner (${products.length})`}
         </button>
+        {storeId && products.length > 0 && (
+          <button
+            onClick={() => {
+              setSelected(new Set(products.map((p) => p.id)));
+              setBulkConfirm("");
+              setBulkKind("delete");
+            }}
+            disabled={bulkBusy}
+            className="bg-red-600 text-white rounded-lg px-3 py-1.5 text-sm hover:bg-red-700 disabled:opacity-40"
+            title="Supprime tous les produits affiches (filtres compris) de ce point de vente, apres confirmation"
+          >
+            Supprimer tous les produits affiches ({products.length})
+          </button>
+        )}
         {storeId && products.some((x) => !x.category) && (
           <button
             onClick={() => {
@@ -743,7 +770,9 @@ export default function AdminProductsPage() {
             )}
             {bulkKind === "delete" && (
               <>
-                <h2 className="font-bold text-lg text-red-600">Supprimer {selected.size} produit(s) ?</h2>
+                <h2 className="font-bold text-lg text-red-600">
+                  Supprimer {selected.size} produit(s) de {store?.name.replace(/ La Belle Teranga$/i, "")} ?
+                </h2>
                 <p className="text-sm text-gray-600">Suppression definitive de ces produits, de leur stock et de leurs photos. Les ventes passees restent dans les rapports.</p>
                 <label className="block text-sm">
                   Tapez <strong>SUPPRIMER</strong> pour confirmer
