@@ -16,6 +16,7 @@ import ProductVisual from "@/components/ProductVisual";
 import { getAdminToken } from "@/lib/auth";
 import { matchKey, prepareImage } from "@/lib/images";
 import { apiErrorMessage, downloadFile } from "@/lib/documents";
+import { telechargerImageAvecPrix } from "@/lib/productLabel";
 
 function formatXof(value: string | number) {
   return new Intl.NumberFormat("fr-SN", { maximumFractionDigits: 0 }).format(Number(value)) + " FCFA";
@@ -1070,6 +1071,17 @@ export default function AdminProductsPage() {
                     </button>
                     <button onClick={() => startEdit(p)} className="text-brand text-xs underline">
                       Modifier
+                    </button>
+                    <button
+                      onClick={() =>
+                        telechargerImageAvecPrix(p, (store?.name ?? "La Belle Teranga").replace(/ La Belle Teranga$/i, "")).catch(() =>
+                          setPhotoErr("L'image avec prix n'a pas pu etre creee.")
+                        )
+                      }
+                      className="text-brand text-xs underline"
+                      title="Telecharge une image carree du produit avec son nom, son poids et son prix actuels"
+                    >
+                      Image avec prix
                     </button>
                     <button onClick={() => handleDelete(p.id)} className="text-red-500 text-xs">
                       Supprimer

@@ -3,7 +3,9 @@
 import { useEffect, useState } from "react";
 import { useParams } from "next/navigation";
 import Link from "next/link";
+import PriceTag from "@/components/PriceTag";
 import ProductVisual from "@/components/ProductVisual";
+import { telechargerImageAvecPrix } from "@/lib/productLabel";
 import ProductShowcase from "@/components/ProductShowcase";
 import { useSite } from "@/components/site/SiteContext";
 import { Product, api, addToCart } from "@/lib/api";
@@ -61,8 +63,18 @@ export default function ProductDetailPage() {
 
   return (
     <div className="max-w-3xl mx-auto px-4 py-8 grid sm:grid-cols-2 gap-8">
-      <div className={`bg-brand-light rounded-lg flex items-center justify-center overflow-hidden ${product.image ? "" : "aspect-square"}`}>
-        <ProductVisual image={product.image} name={product.name} category={product.category?.name} natural />
+      <div>
+        <div className={`relative bg-brand-light rounded-lg flex items-center justify-center overflow-hidden ${product.image ? "" : "aspect-square"}`}>
+          <ProductVisual image={product.image} name={product.name} category={product.category?.name} natural />
+          {product.image && <PriceTag product={product} size="large" />}
+        </div>
+        <button
+          onClick={() => telechargerImageAvecPrix(product, site.name.replace(/ La Belle Teranga$/i, "")).catch(() => setError("Image impossible a creer."))}
+          className="mt-2 w-full border border-brand text-brand rounded-lg py-2 text-sm font-medium hover:bg-brand-light"
+          title="Image carree avec la photo, le nom, le poids et le prix actuels (WhatsApp, Facebook, impression)"
+        >
+          Télécharger l&apos;image avec prix
+        </button>
       </div>
       <div>
         <span className="text-xs text-gray-400">{product.category?.name}</span>
