@@ -3,45 +3,44 @@
 import { useState } from "react";
 import ProductVisual, { thumb } from "@/components/ProductVisual";
 import type { PriceZone, Product, ZoneArea } from "@/lib/api";
-import { money, poids, prixAffiche } from "@/lib/productLabel";
+import { miseEnPage, poids } from "@/lib/productLabel";
 
-/** Texte a ecrire dans la zone : prix actuel, precede du poids/format si demande. */
-export function lignesZone(p: Pick<Product, "unit" | "price" | "effective_price">, zone: PriceZone) {
-  const prix = money(prixAffiche(p).actuel);
-  const f = poids(p);
-  return zone.contenu === "poids_prix" && f ? [f, prix] : [prix];
-}
-
-/** Cache de la zone (en pixels de la photo d'origine) avec le prix actuel : SVG qui suit la taille de la photo. */
-export function CacheZone({ zone, lignes, largeur, hauteur }: { zone: ZoneArea; lignes: string[]; largeur: number; hauteur: number }) {
-  const W = zone.w * largeur;
-  const H = zone.h * hauteur;
-  const long = Math.max(...lignes.map((l) => l.length));
-  const taille = Math.min((H / lignes.length) * 0.72, (W * 0.88) / (long * 0.62));
+/** Cache d'un cadre (en pixels de la photo d'origine) avec le texte a jour : SVG qui suit la taille de la photo. */
+export function CacheZone({
+  product,
+  zone,
+  area,
+  cadre,
+  largeur,
+  hauteur,
+}: {
+  product: Pick<Product, "unit" | "price" | "effective_price">;
+  zone: PriceZone;
+  area: ZoneArea;
+  cadre: "prix" | "poids";
+  largeur: number;
+  hauteur: number;
+}) {
+  const W = area.w * largeur;
+  const H = area.h * hauteur;
+  const ovale = zone.forme === "ovale" && cadre === "prix";
   return (
     <svg
       viewBox={`0 0 ${W} ${H}`}
       preserveAspectRatio="none"
+      overflow="visible"
       className="pointer-events-none absolute"
-      style={{ left: `${zone.x * 100}%`, top: `${zone.y * 100}%`, width: `${zone.w * 100}%`, height: `${zone.h * 100}%` }}
+      style={{ left: `${area.x * 100}%`, top: `${area.y * 100}%`, width: `${area.w * 100}%`, height: `${area.h * 100}%`, overflow: "visible" }}
       aria-hidden
     >
-      <rect width={W} height={H} rx={Math.min(W, H) * 0.18} fill={zone.bg} />
-      {lignes.map((l, i) => (
-        <text
-          key={i}
-          x={W / 2}
-          y={(H / lignes.length) * (i + 0.5)}
-          dominantBaseline="central"
-          textAnchor="middle"
-          fill={zone.fg}
-          fontFamily="Arial, sans-serif"
-          fontWeight={i === lignes.length - 1 ? 800 : 600}
-          fontSize={i === lignes.length - 1 ? taille : taille * 0.8}
-          textLength={l.length * taille * 0.62 > W * 0.92 ? W * 0.92 : undefined}
-          lengthAdjust="spacingAndGlyphs"
-        >
-          {l}
+      {ovale ? (
+        <ellipse cx={W / 2} cy={H / 2} rx={W / 2 + W * 0.06} ry={H / 2 + H * 0.12} fill={area.bg} />
+      ) : (
+        <rect width={W} height={H} rx={Math.min(W, H) * 0.18} fill={area.bg} />
+      )}
+      {miseEnPage(product, zone, W, H, cadre).map((l, i) => (
+        <text key={i} x={W / 2} y={l.y} dominantBaseline="central" textAnchor="middle" fill={area.fg} fontFamily="Arial, sans-serif" fontWeight={l.gras ? 800 : 600} fontSize={l.taille}>
+          {l.t}
         </text>
       ))}
     </svg>
@@ -53,8 +52,8 @@ export function CachesProduit({ product, zone, largeur, hauteur }: { product: Pr
   const f = poids(product);
   return (
     <>
-      <CacheZone zone={zone} lignes={lignesZone(product, zone)} largeur={largeur} hauteur={hauteur} />
-      {zone.poids && f && <CacheZone zone={zone.poids} lignes={[f]} largeur={largeur} hauteur={hauteur} />}
+      <CacheZone product={product} zone={zone} area={zone} cadre="prix" largeur={largeur} hauteur={hauteur} />
+      {zone.poids && f && <CacheZone product={product} zone={zone} area={zone.poids} cadre="poids" largeur={largeur} hauteur={hauteur} />}
     </>
   );
 }

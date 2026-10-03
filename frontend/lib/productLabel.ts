@@ -1,4 +1,4 @@
-import type { Product, ZoneArea } from "@/lib/api";
+import type { PriceZone, Product, ZoneArea } from "@/lib/api";
 
 export const money = (v: string | number) => new Intl.NumberFormat("fr-SN", { maximumFractionDigits: 0 }).format(Number(v)) + " FCFA";
 
@@ -79,26 +79,22 @@ export async function imageAvecPrix(p: Product, magasin: string): Promise<Blob> 
       ctx.drawImage(img, ix, iy, w, h);
       // prix deja ecrit dans la photo : recouvert par le prix actuel (meme rendu que sur le site)
       const z = p.price_zone;
-      const cacher = (a: ZoneArea, txt: string[]) => {
+      const cacher = (a: ZoneArea, zone: PriceZone, cadre: "prix" | "poids") => {
         const zx = ix + a.x * w, zy = iy + a.y * h, zw = a.w * w, zh = a.h * h;
         ctx.fillStyle = a.bg;
         ctx.beginPath();
-        ctx.roundRect(zx, zy, zw, zh, Math.min(zw, zh) * 0.18);
+        if (zone.forme === "ovale" && cadre === "prix") ctx.ellipse(zx + zw / 2, zy + zh / 2, zw / 2 + zw * 0.06, zh / 2 + zh * 0.12, 0, 0, Math.PI * 2);
+        else ctx.roundRect(zx, zy, zw, zh, Math.min(zw, zh) * 0.18);
         ctx.fill();
-        const long = Math.max(...txt.map((t) => t.length));
-        const taille = Math.min((zh / txt.length) * 0.72, (zw * 0.88) / (long * 0.62));
         ctx.fillStyle = a.fg;
-        txt.forEach((t, i) => {
-          const last = i === txt.length - 1;
-          ctx.font = `${last ? "bold " : ""}${Math.round(last ? taille : taille * 0.8)}px Arial, sans-serif`;
-          ctx.fillText(t, zx + zw / 2, zy + (zh / txt.length) * (i + 0.5), zw * 0.92);
-        });
+        for (const l of miseEnPage(p, zone, zw, zh, cadre)) {
+          ctx.font = `${l.gras ? "bold " : ""}${Math.round(l.taille)}px Arial, sans-serif`;
+          ctx.fillText(l.t, zx + zw / 2, zy + l.y, zw * 0.94);
+        }
       };
       if (z) {
-        const f = poids(p);
-        const prix = money(prixAffiche(p).actuel);
-        cacher(z, z.contenu === "poids_prix" && f ? [f, prix] : [prix]);
-        if (z.poids && f) cacher(z.poids, [f]);
+        cacher(z, z, "prix");
+        if (z.poids && poids(p)) cacher(z.poids, z, "poids");
       }
     } catch {
       /* photo indisponible : l'image reste lisible avec le nom et le prix */
@@ -153,4 +149,33 @@ export async function telechargerImageAvecPrix(p: Product, magasin: string) {
   a.click();
   a.remove();
   setTimeout(() => URL.revokeObjectURL(a.href), 5000);
+}
+
+export type LigneZone = { t: string; taille: number; gras: boolean; y: number };
+
+/**
+ * Texte a ecrire dans un cadre de W x H pixels : prix actuel (sur 2 lignes "1 500" / "FCFA" si le cadre est haut,
+ * comme sur les affiches), precede du poids si demande ; ou le poids seul pour le cadre du poids.
+ */
+export function miseEnPage(p: Pick<Product, "unit" | "price" | "effective_price">, zone: PriceZone, W: number, H: number, cadre: "prix" | "poids" = "prix"): LigneZone[] {
+  const f = poids(p);
+  const nombre = new Intl.NumberFormat("fr-SN", { maximumFractionDigits: 0 }).format(prixAffiche(p).actuel);
+  let lignes: { t: string; k: number; gras: boolean }[];
+  if (cadre === "poids") lignes = [{ t: f, k: 1, gras: true }];
+  else {
+    const haut = H / W > 0.42;
+    lignes = haut ? [{ t: nombre, k: 1, gras: true }, { t: "FCFA", k: 0.48, gras: true }] : [{ t: `${nombre} FCFA`, k: 1, gras: true }];
+    if (zone.contenu === "poids_prix" && f) lignes.unshift({ t: f, k: 0.6, gras: false });
+  }
+  const somme = lignes.reduce((a, l) => a + l.k, 0);
+  let taille = (H * 0.86) / (somme * 1.08);
+  for (const l of lignes) taille = Math.min(taille, (W * 0.9) / (Math.max(l.t.length, 1) * 0.6 * l.k));
+  const total = somme * taille * 1.08;
+  let y = (H - total) / 2;
+  return lignes.map((l) => {
+    const h = l.k * taille * 1.08;
+    const out = { t: l.t, taille: l.k * taille, gras: l.gras, y: y + h / 2 };
+    y += h;
+    return out;
+  });
 }

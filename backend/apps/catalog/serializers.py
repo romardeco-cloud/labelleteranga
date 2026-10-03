@@ -78,6 +78,7 @@ class ProductSerializer(serializers.ModelSerializer):
             c = str(value.get(k) or defaut)
             zone[k] = c if re.fullmatch(r"#[0-9a-fA-F]{6}", c) else defaut
         zone["contenu"] = "poids_prix" if value.get("contenu") == "poids_prix" else "prix"
+        zone["forme"] = "ovale" if value.get("forme") == "ovale" else "rect"
         # zone facultative du poids, quand il est ecrit a part sur la photo (pastille "1 kg")
         pz = value.get("poids")
         if isinstance(pz, dict):

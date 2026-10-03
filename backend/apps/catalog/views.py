@@ -97,11 +97,23 @@ class ProductViewSet(viewsets.ModelViewSet):
                 }
             )
 
+    def _zone_auto(self, product):
+        """Nouvelle photo sans zone donnee : si un prix est deja dessine dessus (medaillon), le site le recouvrira
+        avec le prix actuel. Seule la modification du prix dans l'admin suffit ensuite."""
+        if "image" not in self.request.FILES or "price_zone" in self.request.data or not product.image:
+            return
+        from .zone_detect import zone_pour_photo
+
+        zone = zone_pour_photo(product.image)
+        if zone:
+            product.price_zone = zone
+            product.save(update_fields=["price_zone"])
+
     def perform_create(self, serializer):
-        self._save_with_photo_guard(serializer)
+        self._zone_auto(self._save_with_photo_guard(serializer))
 
     def perform_update(self, serializer):
-        self._save_with_photo_guard(serializer)
+        self._zone_auto(self._save_with_photo_guard(serializer))
 
     @action(detail=False, methods=["get"], permission_classes=[permissions.IsAdminUser], url_path="image-storage")
     def image_storage(self, request):

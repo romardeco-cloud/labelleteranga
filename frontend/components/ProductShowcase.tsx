@@ -59,10 +59,7 @@ export default function ProductShowcase({ product, site }: { product: Product; s
     return (
       <div className="rounded-2xl overflow-hidden shadow-lg bg-[#6e0d0d]">
         <div className="relative">
-          {product.image && (
-            // eslint-disable-next-line @next/next/no-img-element
-            <img src={product.image} alt={product.name} className="block w-full h-auto" />
-          )}
+          {product.image && <PhotoPrix product={product} mode="natural" />}
           <div className="absolute -bottom-9 right-5 sm:right-10 w-20 h-20 sm:w-24 sm:h-24 rounded-full bg-[#deb25a] ring-4 ring-[#f5e6c8] shadow-xl flex flex-col items-center justify-center">
             <span className="font-serif font-bold text-[#6e0d0d] text-base sm:text-lg leading-none">{formatXof(product.price).replace(" FCFA", "")}</span>
             <span className="text-[#6e0d0d] text-[9px] sm:text-[10px] font-bold mt-1">FCFA</span>

@@ -154,3 +154,50 @@ class PriceZoneTests(TestCase):
         self.assertEqual(res.status_code, 200, res.data)
         self.p.refresh_from_db()
         self.assertIsNone(self.p.price_zone)
+
+
+def _affiche_resto(avec_prix=True):
+    """Affiche synthetique au style du Resto : photo claire en haut, bandeau bordeaux, medaillon dore a droite."""
+    from PIL import Image, ImageDraw
+
+    img = Image.new("RGB", (1000, 1000), (205, 190, 170))
+    d = ImageDraw.Draw(img)
+    d.rectangle([0, 520, 1000, 1000], fill=(110, 13, 13))
+    d.ellipse([760, 420, 940, 600], fill=(222, 178, 91), outline=(245, 230, 200), width=6)
+    if avec_prix:
+        for i in range(4):  # "1500" : 4 chiffres epais
+            d.rectangle([792 + i * 30, 482, 803 + i * 30, 520], fill=(108, 25, 4))
+        d.rectangle([815, 535, 885, 542], fill=(108, 25, 4))  # "FCFA"
+    return img
+
+
+class PriceZoneDetectionTests(TestCase):
+    """Nouvelle photo envoyee : le prix dessine sur une affiche du Resto est repere tout seul."""
+
+    def test_detecte_le_medaillon_et_rien_sur_une_photo_simple(self):
+        from PIL import Image
+
+        from apps.catalog.zone_detect import detecter_medaillon
+
+        z = detecter_medaillon(_affiche_resto())
+        self.assertIsNotNone(z)
+        self.assertTrue(0.76 < z["x"] < 0.82 and 0.45 < z["y"] < 0.5, z)
+        self.assertEqual(z["forme"], "ovale")
+        self.assertIsNone(detecter_medaillon(_affiche_resto(avec_prix=False)))
+        self.assertIsNone(detecter_medaillon(Image.new("RGB", (800, 800), (230, 180, 90))))
+
+    def test_envoi_photo_definit_la_zone(self):
+        import io
+
+        client = APIClient()
+        client.force_authenticate(User.objects.create_user("admin-auto", is_staff=True))
+        p = Product.objects.create(sku="R-1", name="Thiep", price=1500)
+        buf = io.BytesIO()
+        _affiche_resto().save(buf, "PNG")
+        buf.name = "affiche.png"
+        buf.seek(0)
+        res = client.patch(f"/api/catalog/products/{p.pk}/", {"image": buf}, format="multipart")
+        self.assertEqual(res.status_code, 200, res.data)
+        p.refresh_from_db()
+        self.assertIsNotNone(p.price_zone)
+        self.assertEqual(p.price_zone["forme"], "ovale")
