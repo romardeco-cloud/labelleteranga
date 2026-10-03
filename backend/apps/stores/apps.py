@@ -6,3 +6,6 @@ class StoresConfig(AppConfig):
     name = "apps.stores"
     label = "stores"
     verbose_name = "Points de vente"
+
+    def ready(self):
+        from . import signals  # noqa: F401 - supermarches lies (signals.py)

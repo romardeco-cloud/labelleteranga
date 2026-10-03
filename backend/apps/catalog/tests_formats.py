@@ -126,3 +126,23 @@ class CaisseListeFormatsTests(FormatsTests):
         self.assertEqual(riz["stock"], 12)  # somme des formats : le produit n'est pas affiche en rupture
         self.assertTrue(par_nom["Tomates"]["sold_by_weight"])
         self.assertEqual(par_nom["Sucre 1kg"]["variants"], [])
+
+
+class SupermarchesLiesTests(TestCase):
+    """Un produit ajoute a un supermarche lie est ajoute a l'autre (visible, meme suivi de stock, rayon)."""
+
+    def test_ajout_dans_les_deux(self):
+        from apps.catalog.models import Category
+        from apps.stores.models import StoreCategory
+
+        mbour, _ = PointOfSale.objects.get_or_create(slug="supermarche", defaults={"name": "SM Mbour"})
+        zig, _ = PointOfSale.objects.get_or_create(slug="supermarche-la-belle-teranga-ziguinchor", defaults={"name": "SM Zig"})
+        resto = PointOfSale.objects.create(name="Resto", slug="resto-test")
+        cat = Category.objects.create(name="Epicerie test")
+        p = Product.objects.create(sku="SYNC-1", name="Riz", price=700, category=cat)
+        Stock.objects.create(product=p, point_of_sale=zig, track_stock=False)
+        self.assertTrue(Stock.objects.filter(product=p, point_of_sale=mbour, track_stock=False, quantity=0).exists())
+        self.assertTrue(StoreCategory.objects.filter(point_of_sale=mbour, category=cat).exists())
+        autre = Product.objects.create(sku="SYNC-2", name="Thiep", price=1500)
+        Stock.objects.create(product=autre, point_of_sale=resto)
+        self.assertEqual(Stock.objects.filter(product=autre).count(), 1)  # le Resto n'est pas concerne
