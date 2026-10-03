@@ -33,7 +33,7 @@ class POSProductListView(APIView):
         auto_close_overdue_cashiers(only_profile=profile)  # ferme les journees oubliees avant que le caissier ne recommence a vendre
         store = profile.point_of_sale
         # seuls les produits rattaches a ce point de vente (une ligne de stock, meme a 0)
-        qs = Product.objects.filter(is_active=True, stocks__point_of_sale=store).select_related("category").prefetch_related("variants")
+        qs = Product.objects.filter(is_active=True, stocks__point_of_sale=store).select_related("category").prefetch_related("variants", "stocks")
         search = request.query_params.get("search", "").strip()
         if search:
             qs = qs.filter(Q(name__icontains=search) | Q(sku__icontains=search))
@@ -51,7 +51,11 @@ class POSProductListView(APIView):
         combos = combo_items_map(store)
         from apps.stores.models import VariantStock
 
-        stock_formats = dict(VariantStock.objects.filter(point_of_sale=store, variant__product__in=qs).values_list("variant_id", "quantity"))
+        from apps.stores.services import prix_format_magasin, prix_produit_magasin
+
+        rows_formats = list(VariantStock.objects.filter(point_of_sale=store, variant__product__in=qs).values_list("variant_id", "quantity", "price_override"))
+        stock_formats = {v: q for v, q, _ in rows_formats}
+        prix_fixes = {v: p for v, _, p in rows_formats if p is not None}
         results = []
         for p in qs:
             price, promo_label = price_for(p, store, specials, promos)
@@ -61,8 +65,8 @@ class POSProductListView(APIView):
                 {
                     "id": v.id,
                     "label": v.label,
-                    "price": str(v.price),
-                    "effective_price": str(promo.discounted_price(v.price) if promo else v.price),
+                    "price": str(prix_format_magasin(v, store, prix_fixes)),
+                    "effective_price": str(promo.discounted_price(prix_format_magasin(v, store, prix_fixes)) if promo else prix_format_magasin(v, store, prix_fixes)),
                     "stock": UNLIMITED_STOCK if illimite else stock_formats.get(v.id, 0),
                 }
                 for v in p.variants.all()
@@ -75,7 +79,7 @@ class POSProductListView(APIView):
                     "name": p.name,
                     "category": p.category.name if p.category else None,
                     "unit": p.unit,
-                    "price": str(p.price),
+                    "price": str(prix_produit_magasin(p, store)),
                     "effective_price": str(price),
                     "promotion": promo_label,
                     # produit a formats : somme des stocks de ses formats ; vente au poids : toujours disponible

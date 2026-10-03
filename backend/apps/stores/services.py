@@ -29,6 +29,64 @@ def load_promotions():
     return [(p, {x.pk for x in p.products.all()} or None) for p in Promotion.objects.filter(is_active=True).current().prefetch_related("products")]
 
 
+_MAJORATION = {}  # {store_id: (pourcentage, expire)} : evite une requete par produit dans les listes
+
+
+def majoration(store):
+    """Supplement (%) des prix de ce magasin (ex. transport jusqu'a Ziguinchor), 0 si aucun."""
+    import time
+    from decimal import Decimal
+
+    from .models import StoreSettings
+
+    if store is None:
+        return Decimal("0")
+    hit = _MAJORATION.get(store.pk)
+    if hit and hit[1] > time.monotonic():
+        return hit[0]
+    pct = StoreSettings.objects.filter(point_of_sale=store).values_list("price_markup_percent", flat=True).first() or Decimal("0")
+    _MAJORATION[store.pk] = (pct, time.monotonic() + 30)
+    return pct
+
+
+def majorer(prix, store):
+    """Prix + supplement du magasin, arrondi aux 25 FCFA superieurs (prix inchange sans supplement)."""
+    from decimal import ROUND_CEILING, Decimal
+
+    pct = majoration(store)
+    if not pct or prix is None:
+        return prix
+    return ((Decimal(prix) * (100 + pct) / 100) / 25).quantize(Decimal("1"), rounding=ROUND_CEILING) * 25
+
+
+def prix_produit_magasin(product, store):
+    """Prix de base du produit dans ce magasin : prix fixe du magasin s'il existe, sinon prix du produit + supplement."""
+    if store is None:
+        return product.price
+    cache = getattr(product, "_prefetched_objects_cache", {})
+    if "stocks" in cache:
+        row = next((s for s in product.stocks.all() if s.point_of_sale_id == store.pk), None)
+    else:
+        row = Stock.objects.filter(product=product, point_of_sale=store).only("price_override").first()
+    if row is not None and row.price_override is not None:
+        return row.price_override
+    return majorer(product.price, store)
+
+
+def prix_format_magasin(variant, store, overrides=None):
+    """Prix d'un format dans ce magasin : prix fixe du magasin pour ce format, sinon prix du format + supplement.
+    `overrides` : {variant_id: prix} deja charge pour les listes."""
+    from .models import VariantStock
+
+    if store is None:
+        return variant.price
+    if overrides is not None:
+        fixe = overrides.get(variant.pk)
+    else:
+        fixe = VariantStock.objects.filter(variant=variant, point_of_sale=store).values_list("price_override", flat=True).first()
+    return fixe if fixe is not None else majorer(variant.price, store)
+
+
 def _best_promotion(product, store, promos):
     """Meme choix que Product.active_promotion, sans aucune requete (promotions deja chargees)."""
     best, best_price = None, product.price
@@ -48,10 +106,11 @@ def _best_promotion(product, store, promos):
 
 def price_for(product, store, specials=None, promos=None):
     """(prix a payer, libelle) : promotion en cours et/ou special du jour, le prix le plus bas l'emporte. `promos` : resultat de load_promotions() pour les listes."""
-    price, label = product.price, None
+    base = prix_produit_magasin(product, store)
+    price, label = base, None
     promo = _best_promotion(product, store, promos) if promos is not None else product.active_promotion(store)
     if promo:
-        price, label = promo.discounted_price(product.price), promo.name
+        price, label = promo.discounted_price(base), promo.name
     special = (specials if specials is not None else special_prices_map(store)).get(product.id)
     if special is not None and special < price:
         price, label = special, "Special du jour"

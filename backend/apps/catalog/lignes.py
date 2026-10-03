@@ -54,8 +54,11 @@ def resoudre_ligne(product, store, variant_id=None, weight_kg=None, specials=Non
         variant = next((v for v in formats if variant_id is not None and v.pk == int(variant_id)), None)
         if variant is None:
             raise ValidationError({"variant": f"Choisissez un format pour {product.name}."})
+        from apps.stores.services import prix_format_magasin
+
+        base = prix_format_magasin(variant, store)
         promo = product.active_promotion(store)
-        prix = promo.discounted_price(variant.price) if promo else variant.price
+        prix = promo.discounted_price(base) if promo else base
         return Ligne(variant, None, prix, f"{product.name} - {variant.label}", variant.label)
     if product.sold_by_weight:
         poids = lire_poids(weight_kg)

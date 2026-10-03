@@ -4,7 +4,7 @@ import { useState } from "react";
 import { PointOfSale, Product, api, updateProduct } from "@/lib/api";
 import { apiErrorMessage } from "@/lib/documents";
 
-type Ligne = { id?: number; label: string; price: string; is_active: boolean; stock: string; stockInitial: string };
+type Ligne = { id?: number; label: string; price: string; is_active: boolean; stock: string; stockInitial: string; base: string; prixInitial: string };
 
 const money = (v: string | number) => new Intl.NumberFormat("fr-SN", { maximumFractionDigits: 0 }).format(Number(v)) + " FCFA";
 
@@ -25,15 +25,20 @@ export default function FormatsEditor({
   onSaved: (p: Product) => void;
 }) {
   const stockDe = (stocks?: Record<string, number>) => (store ? String(stocks?.[String(store.id)] ?? 0) : "");
+  // magasin avec supplement (ex. Ziguinchor) : les prix saisis ne valent que pour lui
+  const prixMagasin = Boolean(store && Number(store.price_markup_percent ?? 0) > 0);
   const [auPoids, setAuPoids] = useState(Boolean(product.sold_by_weight));
   const [lignes, setLignes] = useState<Ligne[]>(
-    (product.variants ?? []).map((v) => ({ id: v.id, label: v.label, price: String(Number(v.price)), is_active: v.is_active, stock: stockDe(v.stocks), stockInitial: stockDe(v.stocks) }))
+    (product.variants ?? []).map((v) => {
+      const prix = String(Number(v.price));
+      return { id: v.id, label: v.label, price: prix, prixInitial: prix, base: String(Number(v.base_price ?? v.price)), is_active: v.is_active, stock: stockDe(v.stocks), stockInitial: stockDe(v.stocks) };
+    })
   );
   const [busy, setBusy] = useState(false);
   const [msg, setMsg] = useState("");
 
   const maj = (i: number, champ: Partial<Ligne>) => setLignes((l) => l.map((x, j) => (j === i ? { ...x, ...champ } : x)));
-  const ajouter = (label = "", price = "") => setLignes((l) => [...l, { label, price, is_active: true, stock: store ? "0" : "", stockInitial: "" }]);
+  const ajouter = (label = "", price = "") => setLignes((l) => [...l, { label, price, prixInitial: "", base: price, is_active: true, stock: store ? "0" : "", stockInitial: "" }]);
 
   async function enregistrer() {
     setBusy(true);
@@ -42,8 +47,19 @@ export default function FormatsEditor({
       const formats = lignes.filter((l) => l.label.trim());
       let p = await updateProduct(product.id, {
         sold_by_weight: auPoids && formats.length === 0,
-        variants: formats.map((l) => ({ id: l.id, label: l.label.trim(), price: l.price || "0", is_active: l.is_active })),
+        // prix de base commun ; dans un magasin a supplement, un nouveau format prend le prix saisi comme base
+        variants: formats.map((l) => ({ id: l.id, label: l.label.trim(), price: prixMagasin && l.id ? l.base : l.price || "0", is_active: l.is_active })),
       });
+      // prix propres a ce magasin (seulement ceux modifies) : les autres magasins ne changent pas
+      if (prixMagasin && store) {
+        for (const l of formats) {
+          if (!l.id || l.price === l.prixInitial) continue;
+          const v = (p.variants ?? []).find((x) => x.id === l.id);
+          if (!v) continue;
+          const { data } = await api.post<Product>(`/catalog/products/${product.id}/store-price/`, { point_of_sale: store.id, variant: v.id, price: l.price });
+          p = data;
+        }
+      }
       // stock de chaque format dans le point de vente choisi (seulement ceux modifies)
       if (store) {
         for (const l of formats) {
@@ -79,6 +95,12 @@ export default function FormatsEditor({
 
         <div className="space-y-2">
           <p className="font-semibold text-sm">Formats (taille, grandeur, poids conditionné) avec leur prix</p>
+          {prixMagasin && store && (
+            <p className="text-xs text-amber-700 bg-amber-50 rounded p-2">
+              Prix de {store.name} (supplément {Number(store.price_markup_percent)} % inclus). Un prix modifié ici ne vaut que pour ce magasin : les
+              autres magasins ne changent pas.
+            </p>
+          )}
           {lignes.length === 0 && <p className="text-xs text-gray-500">Aucun format : le produit se vend à son prix unique ({money(product.price)}).</p>}
           {lignes.map((l, i) => (
             <div key={l.id ?? `n${i}`} className="flex flex-wrap items-center gap-2">

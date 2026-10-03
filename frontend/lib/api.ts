@@ -33,6 +33,8 @@ export type PointOfSale = {
   name: string;
   slug?: string | null;
   online_enabled?: boolean;
+  /** supplement (%) applique aux prix de ce magasin (ex. transport) */
+  price_markup_percent?: string;
   description?: string;
   address: string;
   phone: string;
@@ -73,6 +75,8 @@ export type Product = {
   sold_by_weight?: boolean;
   /** formats (taille, grandeur, poids conditionne) avec leur propre prix et stock */
   variants?: ProductFormat[];
+  /** admin, point de vente choisi : prix dans ce magasin (fixed = prix saisi pour ce magasin) */
+  store_price?: { price: string; fixed: boolean } | null;
   is_active: boolean;
   in_stock: boolean;
   combo_items?: string[];
@@ -86,6 +90,10 @@ export type ProductFormat = {
   price: string;
   effective_price: string;
   is_active: boolean;
+  /** prix de base du format (commun a tous les magasins) ; `price` = prix dans le magasin affiche */
+  base_price?: string;
+  /** prix saisi specialement pour ce magasin */
+  fixed?: boolean;
   /** stock dans le point de vente du site (null cote admin) */
   stock: number | null;
   /** admin : stock par point de vente {id: quantite} */

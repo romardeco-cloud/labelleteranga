@@ -78,6 +78,9 @@ class ProductViewSet(viewsets.ModelViewSet):
         site = self.request.query_params.get("store")
         if site:
             ctx["store"] = PointOfSale.objects.filter(slug=site).first()
+        pos = self.request.query_params.get("point_of_sale")
+        if pos and self.request.user and self.request.user.is_staff and str(pos).isdigit():
+            ctx["admin_store"] = PointOfSale.objects.filter(pk=pos).first()  # admin : prix affiches dans ce magasin
         return ctx
 
     # --- photos : erreurs de stockage lisibles + diagnostic ---------------------------------
@@ -114,6 +117,40 @@ class ProductViewSet(viewsets.ModelViewSet):
 
     def perform_update(self, serializer):
         self._zone_auto(self._save_with_photo_guard(serializer))
+
+    @action(detail=True, methods=["post"], permission_classes=[permissions.IsAdminUser], url_path="store-price")
+    def store_price(self, request, pk=None):
+        """POST {point_of_sale, price (vide = automatique), variant?} : prix du produit (ou d'un format) dans CE magasin
+        seulement ; les autres magasins ne changent pas. Prix vide : retour au prix de base + supplement du magasin."""
+        from decimal import Decimal, InvalidOperation
+
+        from apps.stores.models import VariantStock
+
+        product = self.get_object()
+        store = self._store_from(request.data.get("point_of_sale"))
+        if not store:
+            raise ValidationError({"point_of_sale": "Choisissez un point de vente."})
+        raw = request.data.get("price")
+        prix = None
+        if raw not in (None, ""):
+            try:
+                prix = Decimal(str(raw).replace(" ", "").replace(",", "."))
+            except InvalidOperation:
+                raise ValidationError({"price": "Prix invalide."})
+            if prix < 0:
+                raise ValidationError({"price": "Prix invalide."})
+        Stock.objects.get_or_create(product=product, point_of_sale=store)
+        if request.data.get("variant"):
+            variant = product.variants.filter(pk=request.data.get("variant")).first()
+            if not variant:
+                raise ValidationError({"variant": "Format introuvable pour ce produit."})
+            row, _ = VariantStock.objects.get_or_create(variant=variant, point_of_sale=store)
+            row.price_override = prix
+            row.save(update_fields=["price_override", "updated_at"])
+        else:
+            Stock.objects.filter(product=product, point_of_sale=store).update(price_override=prix)
+        fresh = Product.objects.prefetch_related("stocks__point_of_sale", "variants").get(pk=product.pk)
+        return Response(ProductSerializer(fresh, context={**self.get_serializer_context(), "admin_store": store}).data)
 
     @action(detail=True, methods=["post"], permission_classes=[permissions.IsAdminUser], url_path="variant-stock")
     def variant_stock(self, request, pk=None):
@@ -241,6 +278,14 @@ class ProductViewSet(viewsets.ModelViewSet):
                 raise ValidationError({"price": "Prix invalide."})
             if price < 0:
                 raise ValidationError({"price": "Le prix ne peut pas etre negatif."})
+            from apps.stores.services import majoration
+
+            if majoration(store):
+                # magasin avec supplement (ex. Ziguinchor) : prix fixe pour CE magasin seulement, les autres ne changent pas
+                n = Stock.objects.filter(point_of_sale=store, product__in=mine).update(price_override=price)
+                if request.data.get("activate") and price > 0:
+                    qs.update(is_active=True)
+                return Response({"updated": n, "skipped": total - n, "skipped_reason": ""})
             fields = {"price": price}
             if request.data.get("activate") and price > 0:
                 fields["is_active"] = True

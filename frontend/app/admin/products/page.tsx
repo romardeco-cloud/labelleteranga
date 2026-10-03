@@ -206,7 +206,7 @@ export default function AdminProductsPage() {
     setEditForm({
       sku: p.sku,
       name: p.name,
-      price: p.price,
+      price: p.store_price ? String(Number(p.store_price.price)) : p.price,
       compare_at_price: p.compare_at_price ?? "",
       category_id: p.category?.id ? String(p.category.id) : "",
       unit: p.unit,
@@ -216,16 +216,30 @@ export default function AdminProductsPage() {
     setEditImage(null);
   }
 
+  // magasin avec supplement (ex. Ziguinchor) : un prix saisi ici ne vaut que pour ce magasin, les autres ne changent pas
+  const prixPropreAuMagasin = Boolean(store && Number(store.price_markup_percent ?? 0) > 0);
+
   async function saveEdit(id: number) {
     if (!editForm) return;
+    const original = products.find((x) => x.id === id);
+    const prixMagasin = prixPropreAuMagasin && store ? editForm.price !== (original?.store_price?.price ?? original?.price) : false;
     const data = new FormData();
     Object.entries(editForm).forEach(([k, v]) => {
+      if (k === "price" && prixPropreAuMagasin) return; // envoye a part, pour ce magasin seulement
       if (k === "is_active") {
         data.append(k, String(v));
       } else if (v) {
         data.append(k, String(v));
       }
     });
+    if (prixMagasin && store) {
+      try {
+        await api.post(`/catalog/products/${id}/store-price/`, { point_of_sale: store.id, price: editForm.price });
+      } catch (err) {
+        setPhotoErr(apiErrorMessage(err, "Prix non enregistre."));
+        return;
+      }
+    }
     if (editImage) data.append("image", await prepareImage(editImage));
     try {
       await updateProduct(id, data);
@@ -1010,6 +1024,11 @@ export default function AdminProductsPage() {
                         <span className="line-through text-gray-400 mr-1">{formatXof(p.price)}</span>
                         <span className="text-red-600 font-medium">{formatXof(p.effective_price)}</span>
                       </>
+                    ) : p.store_price && prixPropreAuMagasin ? (
+                      <span title={p.store_price.fixed ? "Prix saisi pour ce magasin" : `Prix de base ${formatXof(p.price)} + supplement du magasin`}>
+                        {formatXof(p.store_price.price)}
+                        <span className={`ml-1 text-[10px] ${p.store_price.fixed ? "text-green-700" : "text-gray-400"}`}>{p.store_price.fixed ? "fixe" : "auto"}</span>
+                      </span>
                     ) : (
                       formatXof(p.price)
                     )}

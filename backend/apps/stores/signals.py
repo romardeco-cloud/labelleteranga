@@ -25,3 +25,14 @@ def ajouter_au_supermarche_lie(sender, instance, created, raw=False, **kwargs):
         category_id = instance.product.category_id
         if category_id and not StoreCategory.objects.filter(point_of_sale=autre, category_id=category_id).exists():
             StoreCategory.objects.create(point_of_sale=autre, category_id=category_id, order=StoreCategory.objects.filter(point_of_sale=autre).count())
+
+
+from .models import StoreSettings  # noqa: E402
+
+
+@receiver(post_save, sender=StoreSettings)
+def vider_cache_majoration(sender, instance, **kwargs):
+    """Supplement modifie dans les parametres : pris en compte tout de suite (pas apres l'expiration du cache)."""
+    from .services import _MAJORATION
+
+    _MAJORATION.pop(instance.point_of_sale_id, None)

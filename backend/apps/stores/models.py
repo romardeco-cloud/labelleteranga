@@ -25,6 +25,8 @@ class Stock(models.Model):
     point_of_sale = models.ForeignKey(PointOfSale, related_name="stocks", on_delete=models.CASCADE)
     quantity = models.PositiveIntegerField(default=0)
     track_stock = models.BooleanField("Suivre le stock de ce produit", default=True)
+    # prix propre a ce magasin (vide = prix du produit + supplement du magasin, voir stores.services.prix_produit_magasin)
+    price_override = models.DecimalField("Prix dans ce magasin", max_digits=12, decimal_places=2, null=True, blank=True)
     updated_at = models.DateTimeField(auto_now=True)
 
     class Meta:
@@ -42,6 +44,7 @@ class VariantStock(models.Model):
     variant = models.ForeignKey("catalog.ProductVariant", related_name="stocks", on_delete=models.CASCADE)
     point_of_sale = models.ForeignKey(PointOfSale, related_name="variant_stocks", on_delete=models.CASCADE)
     quantity = models.PositiveIntegerField(default=0)
+    price_override = models.DecimalField("Prix de ce format dans ce magasin", max_digits=12, decimal_places=2, null=True, blank=True)
     updated_at = models.DateTimeField(auto_now=True)
 
     class Meta:
@@ -170,6 +173,8 @@ class StoreSettings(models.Model):
     orange_number = models.CharField("Numero marchand Orange Money", max_length=30, blank=True)
     # suivi du stock : desactive (restaurant, plats faits a la commande) => jamais de rupture ni de sortie de stock
     track_stock = models.BooleanField("Suivi du stock", default=True)
+    # supplement applique a tous les prix de ce magasin (ex. transport), sauf prix fixes produit par produit
+    price_markup_percent = models.DecimalField("Supplement sur les prix (%)", max_digits=5, decimal_places=2, default=0)
     receipt_slogan = models.CharField(max_length=120, blank=True, default="L'art du service")
     receipt_footer = models.CharField(max_length=200, blank=True, default="Merci de votre visite !")
     # modules de la caisse

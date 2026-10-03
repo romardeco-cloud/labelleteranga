@@ -24,6 +24,7 @@ class ProductSerializer(serializers.ModelSerializer):
     store_stock = serializers.SerializerMethodField()
     combo_items = serializers.SerializerMethodField()
     variants = serializers.SerializerMethodField()
+    store_price = serializers.SerializerMethodField()
 
     class Meta:
         model = Product
@@ -46,6 +47,7 @@ class ProductSerializer(serializers.ModelSerializer):
             "price_zone",
             "sold_by_weight",
             "variants",
+            "store_price",
             "is_active",
             "in_stock",
             "store_stock",
@@ -165,6 +167,29 @@ class ProductSerializer(serializers.ModelSerializer):
         if hasattr(product, "_prefetched_objects_cache"):
             product._prefetched_objects_cache.pop("variants", None)
 
+    def _magasin_prix(self):
+        """Magasin dont on affiche les prix : site web (store) ou admin avec un point de vente choisi."""
+        return self.context.get("store") or self.context.get("admin_store")
+
+    def get_store_price(self, product):
+        """Admin : {price, fixed} dans le point de vente choisi (fixed = prix saisi pour ce magasin)."""
+        from apps.stores.services import prix_produit_magasin
+
+        store = self.context.get("admin_store")
+        if not store:
+            return None
+        row = next((s for s in product.stocks.all() if s.point_of_sale_id == store.pk), None)
+        return {"price": str(prix_produit_magasin(product, store)), "fixed": bool(row and row.price_override is not None)}
+
+    def to_representation(self, product):
+        data = super().to_representation(product)
+        store = self.context.get("store")
+        if store is not None:  # site web : le prix affiche est celui de ce magasin (supplement ou prix fixe compris)
+            from apps.stores.services import prix_produit_magasin
+
+            data["price"] = str(prix_produit_magasin(product, store))
+        return data
+
     def get_variants(self, product):
         """Formats du produit, avec leur prix (promotion comprise) et leur stock (dans le point de vente du site, ou par magasin)."""
         from apps.stores.models import UNLIMITED_STOCK, VariantStock, tracks_stock
@@ -174,19 +199,27 @@ class ProductSerializer(serializers.ModelSerializer):
             return []
         store = self.context.get("store")
         promo = product.active_promotion(store) if self._price_label(product)[1] and self._price_label(product)[1] != "Special du jour" else None
-        stocks = {}
+        from apps.stores.services import prix_format_magasin
+
+        stocks, fixes = {}, {}
+        magasin = self._magasin_prix()
         for row in VariantStock.objects.filter(variant__in=formats):
             stocks.setdefault(row.variant_id, {})[row.point_of_sale_id] = row.quantity
+            if magasin is not None and row.point_of_sale_id == magasin.pk and row.price_override is not None:
+                fixes[row.variant_id] = row.price_override
         illimite = store is not None and (not tracks_stock(store) or self._store_quantity(product) == UNLIMITED_STOCK)
         out = []
         for v in formats:
             if store is not None and not v.is_active:
                 continue  # site web : formats actifs seulement
+            prix = prix_format_magasin(v, magasin, fixes) if magasin is not None else v.price
             out.append({
                 "id": v.id,
                 "label": v.label,
-                "price": str(v.price),
-                "effective_price": str(promo.discounted_price(v.price) if promo else v.price),
+                "price": str(prix),
+                "base_price": str(v.price),
+                "fixed": v.id in fixes,
+                "effective_price": str(promo.discounted_price(prix) if promo else prix),
                 "is_active": v.is_active,
                 "stock": (UNLIMITED_STOCK if illimite else stocks.get(v.id, {}).get(store.id, 0)) if store is not None else None,
                 "stocks": stocks.get(v.id, {}),

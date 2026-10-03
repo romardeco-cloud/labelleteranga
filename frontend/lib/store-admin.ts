@@ -49,6 +49,8 @@ export type StoreConfig = {
   ninea: string;
   rccm: string;
   vat_rate: string;
+  /** supplement (%) sur tous les prix de ce magasin (ex. transport) */
+  price_markup_percent?: string;
   prices_include_vat: boolean;
   payment_methods: PayMethodKey[];
   track_stock: boolean;
