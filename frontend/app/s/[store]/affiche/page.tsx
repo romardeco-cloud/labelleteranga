@@ -2,6 +2,7 @@
 
 import { useEffect, useState } from "react";
 import PhotoPrix from "@/components/PhotoPrix";
+import { prixSpecial } from "@/lib/productLabel";
 import { useSite } from "@/components/site/SiteContext";
 import { Product, fetchProducts } from "@/lib/api";
 import { shortName } from "@/lib/site";
@@ -114,9 +115,9 @@ export default function AffichePage() {
                         </div>
                         <p className="mt-1 text-[11px] sm:text-xs font-semibold leading-tight text-gray-900 line-clamp-2">{p.name}</p>
                         {format(p) && <p className="text-[10px] sm:text-[11px] text-gray-500 leading-tight">{format(p)}</p>}
-                        {promo && <p className="text-[10px] text-gray-400 line-through leading-tight">{money(p.price)}</p>}
+                        {promo && !prixSpecial(p) && <p className="text-[10px] text-gray-400 line-through leading-tight">{money(p.price)}</p>}
                         <p className="mt-auto w-full rounded-full text-white text-[11px] sm:text-xs font-bold py-0.5" style={{ background: promo ? "#d6283a" : couleur }}>
-                          {money(p.effective_price)}
+                          {prixSpecial(p) ?? money(p.effective_price)}
                         </p>
                       </div>
                     );

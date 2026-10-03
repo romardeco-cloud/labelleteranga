@@ -33,7 +33,7 @@ class POSProductListView(APIView):
         auto_close_overdue_cashiers(only_profile=profile)  # ferme les journees oubliees avant que le caissier ne recommence a vendre
         store = profile.point_of_sale
         # seuls les produits rattaches a ce point de vente (une ligne de stock, meme a 0)
-        qs = Product.objects.filter(is_active=True, stocks__point_of_sale=store).select_related("category")
+        qs = Product.objects.filter(is_active=True, stocks__point_of_sale=store).select_related("category").prefetch_related("variants")
         search = request.query_params.get("search", "").strip()
         if search:
             qs = qs.filter(Q(name__icontains=search) | Q(sku__icontains=search))
@@ -49,9 +49,25 @@ class POSProductListView(APIView):
         from apps.stores.combo_items import combo_items_map, norm_name
 
         combos = combo_items_map(store)
+        from apps.stores.models import VariantStock
+
+        stock_formats = dict(VariantStock.objects.filter(point_of_sale=store, variant__product__in=qs).values_list("variant_id", "quantity"))
         results = []
         for p in qs:
             price, promo_label = price_for(p, store, specials, promos)
+            illimite = not tracked or p.id in untracked
+            promo = p.active_promotion(store) if promo_label and promo_label != "Special du jour" and any(v.is_active for v in p.variants.all()) else None
+            formats = [
+                {
+                    "id": v.id,
+                    "label": v.label,
+                    "price": str(v.price),
+                    "effective_price": str(promo.discounted_price(v.price) if promo else v.price),
+                    "stock": UNLIMITED_STOCK if illimite else stock_formats.get(v.id, 0),
+                }
+                for v in p.variants.all()
+                if v.is_active
+            ]
             results.append(
                 {
                     "id": p.id,
@@ -62,9 +78,14 @@ class POSProductListView(APIView):
                     "price": str(p.price),
                     "effective_price": str(price),
                     "promotion": promo_label,
-                    "stock": stock_by_product.get(p.id, 0) if tracked and p.id not in untracked else UNLIMITED_STOCK,
+                    # produit a formats : somme des stocks de ses formats ; vente au poids : toujours disponible
+                    "stock": UNLIMITED_STOCK
+                    if illimite or (p.sold_by_weight and not formats)
+                    else (min(UNLIMITED_STOCK, sum(f["stock"] for f in formats)) if formats else stock_by_product.get(p.id, 0)),
                     "image": request.build_absolute_uri(p.image.url) if p.image else None,
                     "combo_items": combos.get(norm_name(p.name), []),
+                    "sold_by_weight": p.sold_by_weight,
+                    "variants": formats,
                 }
             )
         from apps.stores.models import DailyMenu

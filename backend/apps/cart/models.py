@@ -33,15 +33,17 @@ class CartItem(models.Model):
     cart = models.ForeignKey(Cart, related_name="items", on_delete=models.CASCADE)
     product = models.ForeignKey(Product, on_delete=models.CASCADE)
     quantity = models.PositiveIntegerField(default=1)
+    variant = models.ForeignKey("catalog.ProductVariant", null=True, blank=True, on_delete=models.CASCADE)
+    weight_kg = models.DecimalField("Poids choisi (kg)", max_digits=8, decimal_places=3, null=True, blank=True)
 
-    class Meta:
-        unique_together = ("cart", "product")
+    def ligne(self):
+        from apps.catalog.lignes import resoudre_ligne
+
+        return resoudre_ligne(self.product, self.cart.point_of_sale, self.variant_id, self.weight_kg)
 
     @property
     def subtotal(self):
-        from apps.stores.services import price_for
-
-        return price_for(self.product, self.cart.point_of_sale)[0] * self.quantity
+        return self.ligne().unit_price * self.quantity
 
     def __str__(self):
         return f"{self.product.name} x{self.quantity}"

@@ -92,6 +92,58 @@ def change_stock(product, store, *, reason, delta=None, set_to=None, reference="
 
 
 @transaction.atomic
+def change_variant_stock(variant, store, *, reason, delta=None, set_to=None, reference="", user=None):
+    """Comme change_stock, pour le stock d'un format (VariantStock) ; le mouvement est journalise sur le produit."""
+    from .models import VariantStock
+
+    if (delta is None) == (set_to is None):
+        raise ValueError("Preciser delta OU set_to.")
+    stock, _ = VariantStock.objects.select_for_update().get_or_create(variant=variant, point_of_sale=store)
+    new_quantity = stock.quantity + delta if delta is not None else set_to
+    if new_quantity < 0:
+        raise ValidationError({"items": f"Stock insuffisant pour '{variant.product.name} - {variant.label}' (disponible : {stock.quantity})."})
+    change = new_quantity - stock.quantity
+    if change == 0:
+        return None
+    stock.quantity = new_quantity
+    stock.save(update_fields=["quantity", "updated_at"])
+    return StockMovement.objects.create(
+        product=variant.product,
+        variant=variant,
+        point_of_sale=store,
+        delta=change,
+        quantity_after=new_quantity,
+        reason=reason,
+        reference=f"{reference} {variant.label}"[:60].strip(),
+        user=user,
+    )
+
+
+def sortie_stock_ligne(item, store, *, reason, reference="", user=None, sens=-1, forcer=False):
+    """
+    Sortie (sens=-1) ou retour (sens=+1) de stock d'une ligne de vente (OrderItem) selon son format : stock du format,
+    rien pour une vente au poids, sinon stock du produit. forcer=True : stock insuffisant -> mis a zero (commande deja payee).
+    """
+    from .models import tracks_stock
+
+    if not item.product_id or item.weight_kg is not None or not tracks_stock(store, item.product):
+        return
+    kwargs = dict(reason=reason, reference=reference, user=user)
+    try:
+        if item.variant_id:
+            change_variant_stock(item.variant, store, delta=sens * item.quantity, **kwargs)
+        else:
+            change_stock(item.product, store, delta=sens * item.quantity, **kwargs)
+    except ValidationError:
+        if not forcer:
+            raise
+        if item.variant_id:
+            change_variant_stock(item.variant, store, set_to=0, **kwargs)
+        else:
+            change_stock(item.product, store, set_to=0, **kwargs)
+
+
+@transaction.atomic
 def transfer_stock(product, from_store, to_store, quantity, user=None):
     """
     Deplace `quantity` unites de `product` de `from_store` vers `to_store`, en une seule operation atomique

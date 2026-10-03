@@ -36,6 +36,8 @@ class Product(models.Model):
     # Zone de la photo ou un prix est deja ecrit (affiche, photo avec etiquette) : le site la recouvre avec le prix
     # actuel. {"x", "y", "w", "h"} en fraction de l'image (0 a 1), "bg"/"fg" couleurs, "contenu" : prix | poids_prix.
     price_zone = models.JSONField("Zone du prix sur la photo", null=True, blank=True)
+    # vente au poids : `price` est alors le prix au kilo, le client/caissier choisit le poids (voir catalog/lignes.py)
+    sold_by_weight = models.BooleanField("Vendu au poids (prix au kg)", default=False)
     is_active = models.BooleanField(default=True)
     created_at = models.DateTimeField(auto_now_add=True)
     updated_at = models.DateTimeField(auto_now=True)
@@ -84,6 +86,23 @@ class Product(models.Model):
     def __str__(self):
         return f"{self.name} ({self.sku})"
 
+
+
+class ProductVariant(models.Model):
+    """Format d'un produit (taille, grandeur, poids conditionne : "1 kg", "Sac 25 kg", "Grand"...) avec son propre prix.
+    Un produit qui a des formats actifs se vend toujours par format ; son stock est suivi par format (VariantStock)."""
+
+    product = models.ForeignKey(Product, related_name="variants", on_delete=models.CASCADE)
+    label = models.CharField("Format", max_length=60)
+    price = models.DecimalField("Prix (XOF)", max_digits=12, decimal_places=2)
+    order = models.PositiveIntegerField(default=0)
+    is_active = models.BooleanField(default=True)
+
+    class Meta:
+        ordering = ["order", "id"]
+
+    def __str__(self):
+        return f"{self.product.name} - {self.label}"
 
 class PromotionQuerySet(models.QuerySet):
     def current(self):

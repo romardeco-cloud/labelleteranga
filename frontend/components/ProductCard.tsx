@@ -2,6 +2,7 @@
 
 import Link from "next/link";
 import { useState } from "react";
+import ChoixFormat, { aChoisir, prixAffiche } from "@/components/ChoixFormat";
 import PriceTag from "@/components/PriceTag";
 import PhotoPrix from "@/components/PhotoPrix";
 import { useSite } from "@/components/site/SiteContext";
@@ -19,8 +20,14 @@ export default function ProductCard({ product }: { product: Product }) {
   const [loading, setLoading] = useState(false);
   const [added, setAdded] = useState(false);
   const [error, setError] = useState("");
+  const [choisir, setChoisir] = useState(false);
+  const options = site.slug !== "resto" && aChoisir(product);
 
   async function handleAdd() {
+    if (options) {
+      setChoisir(true);
+      return;
+    }
     setLoading(true);
     setError("");
     try {
@@ -58,7 +65,9 @@ export default function ProductCard({ product }: { product: Product }) {
           </span>
         )}
         <div className="mt-auto flex items-center justify-between pt-2">
-          {product.active_promotion_name ? (
+          {options ? (
+            <span className="font-bold text-brand-dark text-sm">{prixAffiche(product)}</span>
+          ) : product.active_promotion_name ? (
             <span className="flex flex-col">
               <span className="text-xs line-through text-gray-400">{formatXof(product.price)}</span>
               <span className="font-bold text-red-600">{formatXof(product.effective_price)}</span>
@@ -71,11 +80,24 @@ export default function ProductCard({ product }: { product: Product }) {
             disabled={loading || !product.in_stock}
             className="bg-brand text-white text-sm px-3 py-1.5 rounded disabled:opacity-40 hover:bg-brand-dark transition"
           >
-            {!product.in_stock ? "Rupture" : added ? "Ajoute" : "Ajouter"}
+            {!product.in_stock ? "Rupture" : added ? "Ajoute" : options ? "Choisir" : "Ajouter"}
           </button>
         </div>
         {error && <p className="text-xs text-red-600">{error}</p>}
       </div>
+      {choisir && (
+        <ChoixFormat
+          nom={product.name}
+          formats={product.variants}
+          prixKg={product.sold_by_weight ? product.effective_price : null}
+          onChoix={async (c) => {
+            await addToCart(product.id, c.quantity, { variant: c.variant, weight_kg: c.weight_kg });
+            setAdded(true);
+            setTimeout(() => setAdded(false), 1500);
+          }}
+          onClose={() => setChoisir(false)}
+        />
+      )}
     </div>
   );
 }

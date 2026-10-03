@@ -51,7 +51,7 @@ class CategoryViewSet(viewsets.ModelViewSet):
 
 
 class ProductViewSet(viewsets.ModelViewSet):
-    queryset = Product.objects.select_related("category").prefetch_related("stocks__point_of_sale").all()
+    queryset = Product.objects.select_related("category").prefetch_related("stocks__point_of_sale", "variants").all()
     serializer_class = ProductSerializer
     permission_classes = [IsAdminOrReadOnly]
     filter_backends = [DjangoFilterBackend, filters.SearchFilter, filters.OrderingFilter]
@@ -114,6 +114,29 @@ class ProductViewSet(viewsets.ModelViewSet):
 
     def perform_update(self, serializer):
         self._zone_auto(self._save_with_photo_guard(serializer))
+
+    @action(detail=True, methods=["post"], permission_classes=[permissions.IsAdminUser], url_path="variant-stock")
+    def variant_stock(self, request, pk=None):
+        """POST {variant, point_of_sale, quantity} : fixe le stock d'un format dans un point de vente (journalise)."""
+        from apps.stores.models import StockMovement
+        from apps.stores.services import change_variant_stock
+
+        product = self.get_object()
+        variant = product.variants.filter(pk=request.data.get("variant")).first()
+        if not variant:
+            raise ValidationError({"variant": "Format introuvable pour ce produit."})
+        store = self._store_from(request.data.get("point_of_sale"))
+        if not store:
+            raise ValidationError({"point_of_sale": "Choisissez un point de vente."})
+        try:
+            quantity = int(request.data.get("quantity"))
+        except (TypeError, ValueError):
+            raise ValidationError({"quantity": "Quantite invalide."})
+        if quantity < 0:
+            raise ValidationError({"quantity": "Le stock ne peut pas etre negatif."})
+        Stock.objects.get_or_create(product=product, point_of_sale=store)  # le produit est bien vendu dans ce magasin
+        change_variant_stock(variant, store, set_to=quantity, reason=StockMovement.Reason.MANUAL, user=request.user)
+        return Response(self.get_serializer(Product.objects.prefetch_related("stocks__point_of_sale", "variants").get(pk=product.pk)).data)
 
     @action(detail=False, methods=["get"], permission_classes=[permissions.IsAdminUser], url_path="image-storage")
     def image_storage(self, request):

@@ -5,6 +5,7 @@ import Image from "next/image";
 import Icon from "@/components/admin/Icon";
 import { LoyaltyStatus, PosMember, PosMenus, fetchPosLoyalty, fetchPosMenus, redeemPosReward, savePosMenu, searchPosMembers } from "@/lib/engage";
 import ProductVisual from "@/components/ProductVisual";
+import ChoixFormat, { Choix, aChoisir, prixAffiche } from "@/components/ChoixFormat";
 import { CompanyBranding, PAYMENT_QR, categoryEmoji, fetchCompanyBranding, storeImage } from "@/lib/branding";
 import { useToday, formatDakarTime, formatDakarDateTime } from "@/lib/today";
 import { categoryRank, effectiveCategories, loadMenuCategories, saveMenuCategories } from "@/lib/meals";
@@ -52,7 +53,8 @@ function xof(v: number | string) {
   return new Intl.NumberFormat("fr-SN", { maximumFractionDigits: 0 }).format(Number(v)) + " FCFA";
 }
 
-type Line = { product: POSProduct; quantity: number };
+/** Ligne du ticket : un produit, et pour le Supermarche son format (variant) ou son poids choisi. */
+type Line = { product: POSProduct; quantity: number; variant?: { id: number; label: string; effective_price: string; stock: number }; weight_kg?: number };
 type Held = { id: number; at: string; lines: Line[]; table?: string };
 type Mode = "direct" | "dine_in" | "orders";
 
@@ -64,7 +66,14 @@ const DEFAULT_SETTINGS: POSSettings = {
 };
 
 const heldKey = (username: string) => `lbt_pos_held_${username}`;
-const linesTotal = (lines: Line[]) => lines.reduce((s, l) => s + Number(l.product.effective_price) * l.quantity, 0);
+/** Cle d'une ligne : un meme produit peut figurer en plusieurs formats ou poids. */
+const lineKey = (l: Line) => `${l.product.id}|${l.variant?.id ?? ""}|${l.weight_kg ?? ""}`;
+/** Prix unitaire : format choisi, ou prix au kg x poids (arrondi au franc, comme le serveur), ou prix du produit. */
+const lineUnit = (l: Line) =>
+  l.variant ? Number(l.variant.effective_price) : l.weight_kg != null ? Math.round(Number(l.product.effective_price) * l.weight_kg) : Number(l.product.effective_price);
+const lineStock = (l: Line) => (l.weight_kg != null ? Infinity : l.variant ? l.variant.stock : l.product.stock);
+const lineLabel = (l: Line) => (l.variant ? l.variant.label : l.weight_kg != null ? `${String(l.weight_kg).replace(".", ",")} kg` : "");
+const linesTotal = (lines: Line[]) => lines.reduce((s, l) => s + lineUnit(l) * l.quantity, 0);
 
 export default function CaissePage() {
   const [session, setSession] = useState<{ username: string; store: string } | null>(null);
@@ -80,6 +89,7 @@ export default function CaissePage() {
   const [category, setCategory] = useState("all");
   const [products, setProducts] = useState<POSProduct[]>([]);
   const [lines, setLines] = useState<Line[]>([]);
+  const [choix, setChoix] = useState<POSProduct | null>(null);
   const [held, setHeld] = useState<Held[]>([]);
   const heldLoaded = useRef(false);
   const [panel, setPanel] = useState<"held" | "history" | "drawer" | "menu" | "opening" | null>(null);
@@ -459,26 +469,43 @@ export default function CaissePage() {
 
   function addProduct(p: POSProduct) {
     setError("");
+    if (aChoisir(p)) {
+      setChoix(p); // format ou poids a choisir avant d'ajouter au ticket
+      return;
+    }
+    addLine({ product: p, quantity: 1 });
+  }
+
+  /** Ajoute (ou cumule) une ligne, dans la limite du stock du produit ou du format. */
+  function addLine(nouvelle: Line) {
+    setError("");
     setLines((prev) => {
-      const existing = prev.find((l) => l.product.id === p.id);
-      const current = existing?.quantity ?? 0;
-      if (current + 1 > p.stock) {
-        setError(`Stock insuffisant pour ${p.name} (disponible : ${p.stock}).`);
+      const key = lineKey(nouvelle);
+      const existing = nouvelle.weight_kg == null ? prev.find((l) => lineKey(l) === key) : undefined;
+      const q = (existing?.quantity ?? 0) + nouvelle.quantity;
+      if (q > lineStock(nouvelle)) {
+        setError(`Stock insuffisant pour ${nouvelle.product.name} ${lineLabel(nouvelle)} (disponible : ${lineStock(nouvelle)}).`);
         return prev;
       }
-      if (existing) return prev.map((l) => (l.product.id === p.id ? { ...l, quantity: l.quantity + 1 } : l));
-      return [...prev, { product: p, quantity: 1 }];
+      if (existing) return prev.map((l) => (lineKey(l) === key ? { ...l, quantity: q } : l));
+      return [...prev, nouvelle];
     });
   }
 
-  function changeQty(id: number, delta: number) {
+  function choisirFormat(c: Choix) {
+    if (!choix) return;
+    const v = choix.variants?.find((x) => x.id === c.variant);
+    addLine({ product: choix, quantity: c.quantity, ...(v ? { variant: v } : {}), ...(c.weight_kg != null ? { weight_kg: c.weight_kg } : {}) });
+  }
+
+  function changeQty(key: string, delta: number) {
     setLines((prev) =>
       prev
         .map((l) => {
-          if (l.product.id !== id) return l;
+          if (lineKey(l) !== key) return l;
           const q = l.quantity + delta;
-          if (q > l.product.stock) {
-            setError(`Stock insuffisant pour ${l.product.name} (disponible : ${l.product.stock}).`);
+          if (q > lineStock(l)) {
+            setError(`Stock insuffisant pour ${l.product.name} ${lineLabel(l)} (disponible : ${lineStock(l)}).`);
             return l;
           }
           return { ...l, quantity: q };
@@ -487,7 +514,7 @@ export default function CaissePage() {
     );
   }
 
-  const removeLine = (id: number) => setLines((prev) => prev.filter((l) => l.product.id !== id));
+  const removeLine = (key: string) => setLines((prev) => prev.filter((l) => lineKey(l) !== key));
 
   /* ----- ventes en attente ----- */
   function holdCurrent() {
@@ -504,7 +531,13 @@ export default function CaissePage() {
     const fresh: Line[] = [];
     for (const l of h.lines) {
       const p = products.find((x) => x.id === l.product.id);
-      if (p && p.stock > 0) fresh.push({ product: p, quantity: Math.min(l.quantity, p.stock) });
+      if (!p) continue;
+      if (l.variant) {
+        const v = p.variants?.find((x) => x.id === l.variant!.id);
+        if (v && v.stock > 0) fresh.push({ product: p, variant: v, quantity: Math.min(l.quantity, v.stock) });
+      } else if (l.weight_kg != null) {
+        if (p.sold_by_weight) fresh.push({ product: p, weight_kg: l.weight_kg, quantity: l.quantity });
+      } else if (p.stock > 0) fresh.push({ product: p, quantity: Math.min(l.quantity, p.stock) });
     }
     setHeld((all) => {
       const rest = all.filter((x) => x.id !== h.id);
@@ -701,7 +734,7 @@ export default function CaissePage() {
   const itemsCount = lines.reduce((n, l) => n + l.quantity, 0);
   const receivedNum = Number(received || 0);
   const change = method === "cash" && received ? receivedNum - total : null;
-  const inCart = (id: number) => lines.find((l) => l.product.id === id)?.quantity ?? 0;
+  const inCart = (id: number) => lines.filter((l) => l.product.id === id).reduce((n, l) => n + l.quantity, 0);
 
   async function validate() {
     setError("");
@@ -717,7 +750,12 @@ export default function CaissePage() {
     setBusy(true);
     try {
       const r = await createPOSSale({
-        items: lines.map((l) => ({ product: l.product.id, quantity: l.quantity })),
+        items: lines.map((l) => ({
+          product: l.product.id,
+          quantity: l.quantity,
+          ...(l.variant ? { variant: l.variant.id } : {}),
+          ...(l.weight_kg != null ? { weight_kg: l.weight_kg } : {}),
+        })),
         payment_method: method,
         amount_received: method === "cash" && received ? receivedNum : null,
         ...(custPhone.trim() ? { customer_phone: custPhone.trim() } : {}),
@@ -1404,8 +1442,8 @@ export default function CaissePage() {
                               </ul>
                             )}
                             <p className="mt-1.5 font-bold text-[#f5b942]">
-                              {xof(p.effective_price)}
-                              {p.promotion && <span className="ml-1.5 text-xs font-normal line-through text-gray-500">{xof(p.price)}</span>}
+                              {aChoisir(p) ? prixAffiche(p) : xof(p.effective_price)}
+                              {p.promotion && !aChoisir(p) && <span className="ml-1.5 text-xs font-normal line-through text-gray-500">{xof(p.price)}</span>}
                             </p>
                             {!out && p.stock <= 5 && <p className="text-[11px] text-amber-400 mt-0.5">Plus que {p.stock} en stock</p>}
                           </div>
@@ -1446,29 +1484,32 @@ export default function CaissePage() {
               ) : (
                 <ul className="divide-y">
                   {lines.map((l) => (
-                    <li key={l.product.id} className="px-4 py-3 flex items-center gap-3">
+                    <li key={lineKey(l)} className="px-4 py-3 flex items-center gap-3">
                       <div className="w-12 h-12 rounded-lg overflow-hidden shrink-0 bg-[#251c1a]">
                         <ProductVisual image={l.product.image} name={l.product.name} category={l.product.category} size="tile" />
                       </div>
                       <div className="flex-1 min-w-0">
                         <p className="text-sm font-medium leading-tight truncate">{l.product.name}</p>
-                        <p className="text-xs text-gray-500">{xof(l.product.effective_price)}</p>
+                        <p className="text-xs text-gray-500">
+                          {lineLabel(l) && <span className="text-[#f5b942] font-semibold mr-1">{lineLabel(l)}</span>}
+                          {xof(lineUnit(l))}
+                        </p>
                         {l.product.combo_items && l.product.combo_items.length > 0 && (
                           <p className="text-[11px] leading-tight text-gray-400 mt-0.5">{l.product.combo_items.join(" · ")}</p>
                         )}
                         <div className="flex items-center gap-1.5 mt-1.5">
-                          <button onClick={() => changeQty(l.product.id, -1)} className="w-7 h-7 border rounded-lg hover:bg-white/5">
+                          <button onClick={() => changeQty(lineKey(l), -1)} className="w-7 h-7 border rounded-lg hover:bg-white/5">
                             −
                           </button>
                           <span className="w-7 text-center text-sm">{l.quantity}</span>
-                          <button onClick={() => changeQty(l.product.id, 1)} className="w-7 h-7 border rounded-lg hover:bg-white/5">
+                          <button onClick={() => changeQty(lineKey(l), 1)} className="w-7 h-7 border rounded-lg hover:bg-white/5">
                             +
                           </button>
                         </div>
                       </div>
                       <div className="text-right">
-                        <p className="text-sm font-semibold">{xof(Number(l.product.effective_price) * l.quantity)}</p>
-                        <button onClick={() => removeLine(l.product.id)} aria-label="Retirer" className="mt-2 text-gray-500 hover:text-red-400">
+                        <p className="text-sm font-semibold">{xof(lineUnit(l) * l.quantity)}</p>
+                        <button onClick={() => removeLine(lineKey(l))} aria-label="Retirer" className="mt-2 text-gray-500 hover:text-red-400">
                           <Icon name="trash" className="w-4 h-4" />
                         </button>
                       </div>
@@ -2148,6 +2189,16 @@ export default function CaissePage() {
       )}
 
       {/* Ticket */}
+      {choix && (
+        <ChoixFormat
+          nom={choix.name}
+          formats={choix.variants}
+          prixKg={choix.sold_by_weight ? choix.effective_price : null}
+          confirmer="Ajouter au ticket"
+          onChoix={choisirFormat}
+          onClose={() => setChoix(null)}
+        />
+      )}
       {receipt && (
         <div className="fixed inset-0 bg-black/60 flex items-center justify-center p-4 z-50 print:static print:bg-transparent print:p-0">
           <div className="rounded-xl p-5 w-full max-w-sm print:shadow-none print:max-w-none" style={{ background: "#fff", color: "#111" }}>

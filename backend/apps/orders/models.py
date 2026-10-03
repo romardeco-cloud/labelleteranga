@@ -138,6 +138,10 @@ class OrderItem(models.Model):
     product_name = models.CharField(max_length=200)
     unit_price = models.DecimalField(max_digits=12, decimal_places=2)
     quantity = models.PositiveIntegerField(default=1)
+    # format choisi (le nom du format est aussi recopie dans product_name) ; poids pour un produit vendu au poids
+    # (unit_price est alors le prix de la ligne : prix au kg x poids)
+    variant = models.ForeignKey("catalog.ProductVariant", null=True, blank=True, on_delete=models.SET_NULL, related_name="+")
+    weight_kg = models.DecimalField(max_digits=8, decimal_places=3, null=True, blank=True)
 
     @property
     def subtotal(self):

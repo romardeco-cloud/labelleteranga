@@ -3,6 +3,7 @@
 import { useEffect, useState } from "react";
 import { useParams } from "next/navigation";
 import Link from "next/link";
+import ChoixFormat, { aChoisir, prixAffiche } from "@/components/ChoixFormat";
 import PriceTag from "@/components/PriceTag";
 import PhotoPrix from "@/components/PhotoPrix";
 import { telechargerImageAvecPrix } from "@/lib/productLabel";
@@ -20,6 +21,7 @@ export default function ProductDetailPage() {
   const [added, setAdded] = useState(false);
   const [error, setError] = useState("");
   const { site, base } = useSite();
+  const [choisir, setChoisir] = useState(false);
 
   useEffect(() => {
     api.get(`/catalog/products/${params.id}/`, { params: { store: site.slug } }).then((res) => setProduct(res.data));
@@ -27,10 +29,15 @@ export default function ProductDetailPage() {
 
   if (!product) return <p className="p-8">Chargement...</p>;
 
+  const options = site.slug !== "resto" && aChoisir(product);
   const addButton = (
     <button
       onClick={async () => {
         setError("");
+        if (options) {
+          setChoisir(true);
+          return;
+        }
         try {
           await addToCart(product.id, 1);
           setAdded(true);
@@ -90,8 +97,25 @@ export default function ProductDetailPage() {
             </ul>
           </div>
         )}
-        <p className="text-2xl font-bold text-brand-dark mb-4">{formatXof(product.price)}</p>
+        <p className="text-2xl font-bold text-brand-dark mb-2">{options ? prixAffiche(product) : formatXof(product.price)}</p>
+        {options && product.variants && product.variants.length > 0 && (
+          <p className="text-sm text-gray-600 mb-4">Formats : {product.variants.map((v) => `${v.label} (${formatXof(v.effective_price)})`).join(" · ")}</p>
+        )}
+        {options && product.sold_by_weight && !product.variants?.length && <p className="text-sm text-gray-600 mb-4">Vendu au poids : choisissez la quantité voulue.</p>}
         {addButton}
+        {choisir && (
+          <ChoixFormat
+            nom={product.name}
+            formats={product.variants}
+            prixKg={product.sold_by_weight ? product.effective_price : null}
+            onChoix={async (c) => {
+              await addToCart(product.id, c.quantity, { variant: c.variant, weight_kg: c.weight_kg });
+              setAdded(true);
+              setTimeout(() => setAdded(false), 1500);
+            }}
+            onClose={() => setChoisir(false)}
+          />
+        )}
         {error && <p className="text-red-600 text-sm mt-2">{error}</p>}
         <Link href={base || "/"} className="block text-sm text-brand underline mt-4">
           &larr; Retour

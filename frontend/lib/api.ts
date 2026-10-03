@@ -69,6 +69,10 @@ export type Product = {
   image: string | null;
   /** Zone de la photo ou un prix est deja ecrit : le site la recouvre avec le prix actuel (voir PhotoPrix). */
   price_zone?: PriceZone | null;
+  /** vendu au poids : `price` est le prix au kilo, le client choisit le poids */
+  sold_by_weight?: boolean;
+  /** formats (taille, grandeur, poids conditionne) avec leur propre prix et stock */
+  variants?: ProductFormat[];
   is_active: boolean;
   in_stock: boolean;
   combo_items?: string[];
@@ -76,6 +80,18 @@ export type Product = {
 
 /** Rectangle de la photo (fractions 0 a 1) a recouvrir, avec ses couleurs. */
 export type ZoneArea = { x: number; y: number; w: number; h: number; bg: string; fg: string };
+export type ProductFormat = {
+  id: number;
+  label: string;
+  price: string;
+  effective_price: string;
+  is_active: boolean;
+  /** stock dans le point de vente du site (null cote admin) */
+  stock: number | null;
+  /** admin : stock par point de vente {id: quantite} */
+  stocks?: Record<string, number>;
+};
+
 export type PriceZone = ZoneArea & { contenu: "prix" | "poids_prix"; /** "ovale" : medaillon rond (affiches du Resto) */ forme?: "rect" | "ovale"; /** pastille du poids, ecrite a part */ poids?: ZoneArea };
 
 /** Avec `pointOfSale` : seulement les categories qui ont au moins un produit de ce point de vente. */
@@ -163,6 +179,11 @@ export type CartItem = {
   id: number;
   product: Product;
   quantity: number;
+  variant: number | null;
+  weight_kg: string | null;
+  /** format ou poids choisi ("Sac 25 kg", "1,35 kg"), vide pour un produit simple */
+  label: string;
+  unit_price: string;
   subtotal: string;
 };
 
@@ -200,11 +221,13 @@ export async function fetchCart() {
   return data;
 }
 
-export async function addToCart(productId: number, quantity = 1) {
+/** `choix` : format choisi (variant) ou poids voulu en kg (weight_kg), selon le produit. */
+export async function addToCart(productId: number, quantity = 1, choix: { variant?: number; weight_kg?: number } = {}) {
   const { data } = await api.post<CartData>(`/cart/${getSessionKey()}/add/`, {
     product_id: productId,
     quantity,
     store: getActiveStore(),
+    ...choix,
   });
   notifyCartChanged();
   return data;
@@ -456,6 +479,8 @@ export type POSProduct = {
   stock: number;
   image: string | null;
   combo_items?: string[];
+  sold_by_weight?: boolean;
+  variants?: { id: number; label: string; price: string; effective_price: string; stock: number }[];
 };
 
 export type POSReceipt = {

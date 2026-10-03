@@ -18,6 +18,7 @@ import { matchKey, prepareImage } from "@/lib/images";
 import { apiErrorMessage, downloadFile } from "@/lib/documents";
 import { telechargerImageAvecPrix } from "@/lib/productLabel";
 import ZonePrixEditor from "@/components/admin/ZonePrixEditor";
+import FormatsEditor from "@/components/admin/FormatsEditor";
 
 function formatXof(value: string | number) {
   return new Intl.NumberFormat("fr-SN", { maximumFractionDigits: 0 }).format(Number(value)) + " FCFA";
@@ -55,6 +56,7 @@ export default function AdminProductsPage() {
   const [photoMsg, setPhotoMsg] = useState("");
   const [photoErr, setPhotoErr] = useState("");
   const [zoneProduit, setZoneProduit] = useState<Product | null>(null);
+  const [formatsProduit, setFormatsProduit] = useState<Product | null>(null);
   const bulkRef = useRef<HTMLInputElement>(null);
   // --- actions groupees ---
   const [selected, setSelected] = useState<Set<number>>(new Set());
@@ -1085,6 +1087,15 @@ export default function AdminProductsPage() {
                     >
                       Image avec prix
                     </button>
+                    {store?.slug !== "resto" && (
+                      <button
+                        onClick={() => setFormatsProduit(p)}
+                        className={`text-xs underline ${p.variants?.length || p.sold_by_weight ? "text-green-700" : "text-brand"}`}
+                        title="Formats (taille, grandeur, poids) avec leur prix et leur stock, ou vente au poids"
+                      >
+                        {p.variants?.length ? `Formats (${p.variants.length})` : p.sold_by_weight ? "Au poids ✓" : "Formats / poids"}
+                      </button>
+                    )}
                     {p.image && (
                       <button
                         onClick={() => setZoneProduit(p)}
@@ -1128,6 +1139,14 @@ export default function AdminProductsPage() {
           ))}
         </tbody>
       </table>
+      {formatsProduit && (
+        <FormatsEditor
+          product={formatsProduit}
+          store={store}
+          onClose={() => setFormatsProduit(null)}
+          onSaved={(np) => setProducts((cur) => cur.map((x) => (x.id === np.id ? np : x)))}
+        />
+      )}
       {zoneProduit && (
         <ZonePrixEditor
           product={zoneProduit}

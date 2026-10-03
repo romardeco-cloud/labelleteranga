@@ -36,6 +36,21 @@ class Stock(models.Model):
         return f"{self.product.name} @ {self.point_of_sale.name} : {self.quantity}"
 
 
+class VariantStock(models.Model):
+    """Stock d'un format de produit (ProductVariant) dans un point de vente. Le suivi (track_stock) reste celui du produit."""
+
+    variant = models.ForeignKey("catalog.ProductVariant", related_name="stocks", on_delete=models.CASCADE)
+    point_of_sale = models.ForeignKey(PointOfSale, related_name="variant_stocks", on_delete=models.CASCADE)
+    quantity = models.PositiveIntegerField(default=0)
+    updated_at = models.DateTimeField(auto_now=True)
+
+    class Meta:
+        unique_together = ("variant", "point_of_sale")
+
+    def __str__(self):
+        return f"{self.variant} @ {self.point_of_sale.name} : {self.quantity}"
+
+
 class StockMovement(models.Model):
     """Journal de chaque variation de stock (ventes, receptions, inventaires, corrections...)."""
 
@@ -51,6 +66,7 @@ class StockMovement(models.Model):
         IMPORT = "import", "Import Excel"
 
     product = models.ForeignKey("catalog.Product", related_name="stock_movements", on_delete=models.CASCADE)
+    variant = models.ForeignKey("catalog.ProductVariant", null=True, blank=True, on_delete=models.SET_NULL, related_name="+")
     point_of_sale = models.ForeignKey(PointOfSale, related_name="stock_movements", on_delete=models.CASCADE)
     delta = models.IntegerField()
     quantity_after = models.PositiveIntegerField()

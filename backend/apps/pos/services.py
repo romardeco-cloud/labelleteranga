@@ -77,46 +77,56 @@ def create_pos_sale(cashier_profile, items, payment_method, customer_name="", am
 
     from apps.stores.services import price_for, special_prices_map
 
+    from apps.catalog.lignes import lire_poids, resoudre_ligne
+    from apps.stores.models import VariantStock
+    from apps.stores.services import change_variant_stock
+
     specials = special_prices_map(store)
     tracked = tracks_stock(store)
+    # une ligne = (produit, format, poids) : un meme produit peut etre vendu en plusieurs formats dans la meme vente
     merged = {}
     for line in items:
         pid = int(line["product"])
         qty = int(line["quantity"])
         if qty <= 0:
             raise ValidationError({"items": "Quantite invalide."})
-        merged[pid] = merged.get(pid, 0) + qty
+        variant_id = int(line["variant"]) if line.get("variant") not in (None, "") else None
+        poids = lire_poids(line.get("weight_kg"))
+        key = (pid, variant_id, poids)
+        merged[key] = merged.get(key, 0) + qty
 
-    for product_id, qty in merged.items():
-        product = Product.objects.filter(pk=product_id, is_active=True).first()
+    for (product_id, variant_id, poids), qty in merged.items():
+        product = Product.objects.filter(pk=product_id, is_active=True).prefetch_related("variants").first()
         if not product:
             raise ValidationError({"items": f"Produit {product_id} introuvable ou inactif."})
+        ligne = resoudre_ligne(product, store, variant_id, poids, specials)
 
-        product_tracked = tracked and tracks_stock(store, product)
+        # vente au poids : pas de sortie de stock (stock compte en unites entieres)
+        product_tracked = tracked and tracks_stock(store, product) and ligne.weight_kg is None
         if product_tracked:
-            stock = Stock.objects.select_for_update().filter(product=product, point_of_sale=store).first()
-            available = stock.quantity if stock else 0
+            if ligne.variant:
+                row = VariantStock.objects.select_for_update().filter(variant=ligne.variant, point_of_sale=store).first()
+            else:
+                row = Stock.objects.select_for_update().filter(product=product, point_of_sale=store).first()
+            available = row.quantity if row else 0
             if available < qty:
-                raise ValidationError({"items": f"Stock insuffisant pour '{product.name}' (disponible: {available})."})
-
-        unit_price, _label = price_for(product, store, specials)
+                raise ValidationError({"items": f"Stock insuffisant pour '{ligne.nom}' (disponible: {available})."})
 
         OrderItem.objects.create(
             order=order,
             product=product,
-            product_name=product.name,
-            unit_price=unit_price,
+            product_name=ligne.nom[:200],
+            unit_price=ligne.unit_price,
             quantity=qty,
+            variant=ligne.variant,
+            weight_kg=ligne.weight_kg,
         )
         if product_tracked:
-            change_stock(
-                product,
-                store,
-                delta=-qty,
-                reason=StockMovement.Reason.SALE_POS,
-                reference=order.reference[:8].upper(),
-                user=cashier_profile.user,
-            )
+            kwargs = dict(delta=-qty, reason=StockMovement.Reason.SALE_POS, reference=order.reference[:8].upper(), user=cashier_profile.user)
+            if ligne.variant:
+                change_variant_stock(ligne.variant, store, **kwargs)
+            else:
+                change_stock(product, store, **kwargs)
 
     order.recompute_total()
     order.save(update_fields=["total_amount"])

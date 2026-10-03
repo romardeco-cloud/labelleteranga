@@ -44,16 +44,20 @@ def create_order_from_cart(session_key, customer_data, payment_method, clear_car
         payment_method=payment_method,
     )
 
-    from apps.stores.services import price_for, special_prices_map
+    from apps.catalog.lignes import resoudre_ligne
+    from apps.stores.services import special_prices_map
 
     specials = special_prices_map(cart.point_of_sale)
     for cart_item in items:
+        ligne = resoudre_ligne(cart_item.product, cart.point_of_sale, cart_item.variant_id, cart_item.weight_kg, specials)
         OrderItem.objects.create(
             order=order,
             product=cart_item.product,
-            product_name=cart_item.product.name,
-            unit_price=price_for(cart_item.product, cart.point_of_sale, specials)[0],
+            product_name=ligne.nom[:200],
+            unit_price=ligne.unit_price,
             quantity=cart_item.quantity,
+            variant=ligne.variant,
+            weight_kg=ligne.weight_kg,
         )
 
     order.tip_amount = parse_tip(customer_data.get("tip_amount"))
@@ -120,19 +124,12 @@ def _decrement_store_stock(order):
 
     if not tracks_stock(order.point_of_sale):
         return
-    from rest_framework.exceptions import ValidationError
-
     from apps.stores.models import StockMovement
-    from apps.stores.services import change_stock
+    from apps.stores.services import sortie_stock_ligne
 
-    for item in order.items.select_related("product"):
-        if not item.product_id or not tracks_stock(order.point_of_sale, item.product):
-            continue
-        kwargs = dict(reason=StockMovement.Reason.ONLINE_ORDER, reference=order.reference[:8].upper())
-        try:
-            change_stock(item.product, order.point_of_sale, delta=-item.quantity, **kwargs)
-        except ValidationError:  # stock insuffisant : on met a zero plutot que de refuser une commande payee
-            change_stock(item.product, order.point_of_sale, set_to=0, **kwargs)
+    for item in order.items.select_related("product", "variant__product"):
+        # stock insuffisant : on met a zero plutot que de refuser une commande payee
+        sortie_stock_ligne(item, order.point_of_sale, reason=StockMovement.Reason.ONLINE_ORDER, reference=order.reference[:8].upper(), forcer=True)
 
 
 def closed_pos_day_for(order):
@@ -270,18 +267,12 @@ def void_order(order, user, reason):
 
         if was_paid and order.point_of_sale_id and tracks_stock(order.point_of_sale):
             from apps.stores.models import StockMovement
-            from apps.stores.services import change_stock
+            from apps.stores.services import sortie_stock_ligne
 
-            for item in order.items.select_related("product"):
-                if item.product_id and tracks_stock(order.point_of_sale, item.product):
-                    change_stock(
-                        item.product,
-                        order.point_of_sale,
-                        delta=item.quantity,
-                        reason=StockMovement.Reason.SALE_VOID,
-                        reference=order.reference[:8].upper(),
-                        user=user,
-                    )
+            for item in order.items.select_related("product", "variant__product"):
+                sortie_stock_ligne(
+                    item, order.point_of_sale, reason=StockMovement.Reason.SALE_VOID, reference=order.reference[:8].upper(), user=user, sens=+1
+                )
         order.status = Order.Status.CANCELLED
         order.voided_at = timezone.now()
         order.voided_by = user

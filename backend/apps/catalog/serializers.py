@@ -23,6 +23,7 @@ class ProductSerializer(serializers.ModelSerializer):
     in_stock = serializers.SerializerMethodField()
     store_stock = serializers.SerializerMethodField()
     combo_items = serializers.SerializerMethodField()
+    variants = serializers.SerializerMethodField()
 
     class Meta:
         model = Product
@@ -43,6 +44,8 @@ class ProductSerializer(serializers.ModelSerializer):
             "unit",
             "image",
             "price_zone",
+            "sold_by_weight",
+            "variants",
             "is_active",
             "in_stock",
             "store_stock",
@@ -100,7 +103,95 @@ class ProductSerializer(serializers.ModelSerializer):
         # nouvelle photo sans nouvelle zone : l'ancienne zone ne correspond plus a rien
         if "image" in validated_data and "price_zone" not in validated_data:
             validated_data["price_zone"] = None
-        return super().update(instance, validated_data)
+        formats = self._formats_envoyes()
+        product = super().update(instance, validated_data)
+        if formats is not None:
+            self._enregistrer_formats(product, formats)
+        return product
+
+    def create(self, validated_data):
+        formats = self._formats_envoyes()
+        product = super().create(validated_data)
+        if formats is not None:
+            self._enregistrer_formats(product, formats)
+        return product
+
+    # --- formats (taille, grandeur, poids conditionne) : liste complete envoyee dans "variants" -------------------
+    def _formats_envoyes(self):
+        """Liste [{id?, label, price, is_active?}] envoyee par l'admin, ou None si le champ n'est pas envoye."""
+        import json
+        from decimal import Decimal, InvalidOperation
+
+        raw = self.initial_data.get("variants") if hasattr(self, "initial_data") else None
+        if raw is None:
+            return None
+        if isinstance(raw, str):
+            try:
+                raw = json.loads(raw or "[]")
+            except ValueError:
+                raise serializers.ValidationError({"variants": "Formats invalides."})
+        if not isinstance(raw, list):
+            raise serializers.ValidationError({"variants": "Formats invalides."})
+        out, vus = [], set()
+        for i, f in enumerate(raw):
+            label = str((f or {}).get("label") or "").strip()[:60]
+            if not label:
+                continue
+            if label.lower() in vus:
+                raise serializers.ValidationError({"variants": f"Le format « {label} » est en double."})
+            vus.add(label.lower())
+            try:
+                prix = Decimal(str(f.get("price")).replace(",", ".").replace(" ", ""))
+            except (InvalidOperation, TypeError):
+                raise serializers.ValidationError({"variants": f"Prix invalide pour le format « {label} »."})
+            if prix < 0:
+                raise serializers.ValidationError({"variants": f"Prix invalide pour le format « {label} »."})
+            out.append({"id": f.get("id"), "label": label, "price": prix, "order": i, "is_active": f.get("is_active", True) is not False})
+        return out
+
+    def _enregistrer_formats(self, product, formats):
+        from .models import ProductVariant
+
+        existants = {v.pk: v for v in product.variants.all()}
+        gardes = set()
+        for f in formats:
+            v = existants.get(int(f["id"])) if str(f.get("id") or "").isdigit() else None
+            if v is None:
+                v = ProductVariant(product=product)
+            v.label, v.price, v.order, v.is_active = f["label"], f["price"], f["order"], f["is_active"]
+            v.save()
+            gardes.add(v.pk)
+        ProductVariant.objects.filter(product=product).exclude(pk__in=gardes).delete()
+        if hasattr(product, "_prefetched_objects_cache"):
+            product._prefetched_objects_cache.pop("variants", None)
+
+    def get_variants(self, product):
+        """Formats du produit, avec leur prix (promotion comprise) et leur stock (dans le point de vente du site, ou par magasin)."""
+        from apps.stores.models import UNLIMITED_STOCK, VariantStock, tracks_stock
+
+        formats = list(product.variants.all())
+        if not formats:
+            return []
+        store = self.context.get("store")
+        promo = product.active_promotion(store) if self._price_label(product)[1] and self._price_label(product)[1] != "Special du jour" else None
+        stocks = {}
+        for row in VariantStock.objects.filter(variant__in=formats):
+            stocks.setdefault(row.variant_id, {})[row.point_of_sale_id] = row.quantity
+        illimite = store is not None and (not tracks_stock(store) or self._store_quantity(product) == UNLIMITED_STOCK)
+        out = []
+        for v in formats:
+            if store is not None and not v.is_active:
+                continue  # site web : formats actifs seulement
+            out.append({
+                "id": v.id,
+                "label": v.label,
+                "price": str(v.price),
+                "effective_price": str(promo.discounted_price(v.price) if promo else v.price),
+                "is_active": v.is_active,
+                "stock": (UNLIMITED_STOCK if illimite else stocks.get(v.id, {}).get(store.id, 0)) if store is not None else None,
+                "stocks": stocks.get(v.id, {}),
+            })
+        return out
 
     def _total_stock(self, product):
         # somme en memoire sur les stocks deja precharges (prefetch_related) : evite une requete SQL par produit
@@ -138,6 +229,11 @@ class ProductSerializer(serializers.ModelSerializer):
         return self._store_quantity(product)
 
     def get_in_stock(self, product):
+        if product.sold_by_weight and not [v for v in product.variants.all() if v.is_active]:
+            return True  # vente au poids : pas de stock en unites
+        formats = [v for v in self.get_variants(product) if v["is_active"]]
+        if formats and self.context.get("store") is not None:
+            return any((f["stock"] or 0) > 0 for f in formats)
         q = self._store_quantity(product)
         return self._total_stock(product) > 0 if q is None else q > 0
 

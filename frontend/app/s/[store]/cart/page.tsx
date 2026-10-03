@@ -56,7 +56,13 @@ export default function CartPage() {
             <div key={item.id} className="flex items-center justify-between border rounded-lg p-4 bg-white">
               <div>
                 <p className="font-medium">{item.product.name}</p>
-                <p className="text-sm text-gray-500">{formatXof(item.product.price)} / {item.product.unit}</p>
+                {item.label ? (
+                  <p className="text-sm text-gray-500">
+                    {item.label} · {formatXof(item.unit_price)}
+                  </p>
+                ) : (
+                  <p className="text-sm text-gray-500">{formatXof(item.unit_price ?? item.product.price)} / {item.product.unit}</p>
+                )}
               </div>
               <div className="flex items-center gap-3">
                 <input

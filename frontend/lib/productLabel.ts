@@ -8,6 +8,17 @@ export function poids(p: Pick<Product, "unit">) {
   return u && !["unite", "unité", "piece", "pièce"].includes(u.toLowerCase()) ? u : "";
 }
 
+/** Texte du prix : "dès 700 FCFA" (formats), "800 FCFA / kg" (vente au poids), sinon le prix. Null = prix simple. */
+export function prixSpecial(p: Pick<Product, "effective_price" | "sold_by_weight" | "variants">) {
+  const formats = (p.variants ?? []).filter((v) => v.is_active !== false);
+  if (formats.length) {
+    const min = Math.min(...formats.map((v) => Number(v.effective_price)));
+    return formats.length > 1 ? `dès ${money(min)}` : money(min);
+  }
+  if (p.sold_by_weight) return `${money(p.effective_price)} / kg`;
+  return null;
+}
+
 /** Prix reellement paye (promotion comprise) et, s'il y a une promotion, l'ancien prix a barrer. */
 export function prixAffiche(p: Pick<Product, "price" | "effective_price">) {
   const actuel = Number(p.effective_price ?? p.price);
@@ -119,8 +130,10 @@ export async function imageAvecPrix(p: Product, magasin: string): Promise<Blob> 
   }
 
   // prix
-  const { actuel, avant } = prixAffiche(p);
-  const texte = money(actuel);
+  const special = prixSpecial(p);
+  const { actuel, avant: barre } = prixAffiche(p);
+  const avant = special ? null : barre;
+  const texte = special ?? money(actuel);
   ctx.font = "bold 62px Arial, sans-serif";
   const largeur = ctx.measureText(texte).width + 100;
   const py = Math.max(y + 10, S - 150);
