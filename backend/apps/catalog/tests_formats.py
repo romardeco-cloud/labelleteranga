@@ -106,3 +106,23 @@ class FormatsTests(TestCase):
         self.assertEqual({v["label"]: v["stock"] for v in res.data["variants"]}, {"1 kg": 10, "Sac 25 kg": 2})
         res = self.client.get(f"/api/catalog/products/{self.tomate.pk}/", {"store": "sm-test"})
         self.assertTrue(res.data["in_stock"] and res.data["sold_by_weight"])
+
+
+class CaisseListeFormatsTests(FormatsTests):
+    """La liste des produits de la caisse transmet les formats (prix, stock) et la vente au poids."""
+
+    def test_liste_caisse(self):
+        from apps.accounts.models import CashierProfile
+
+        user = User.objects.create_user("caisse-liste")
+        CashierProfile.objects.create(user=user, point_of_sale=self.store)
+        client = APIClient()
+        client.force_authenticate(user)
+        res = client.get("/api/pos/products/")
+        self.assertEqual(res.status_code, 200, res.data)
+        par_nom = {p["name"]: p for p in res.data["results"]}
+        riz = par_nom["Riz brise"]
+        self.assertEqual([(v["label"], v["effective_price"], v["stock"]) for v in riz["variants"]], [("1 kg", "700.00", 10), ("Sac 25 kg", "15000.00", 2)])
+        self.assertEqual(riz["stock"], 12)  # somme des formats : le produit n'est pas affiche en rupture
+        self.assertTrue(par_nom["Tomates"]["sold_by_weight"])
+        self.assertEqual(par_nom["Sucre 1kg"]["variants"], [])
