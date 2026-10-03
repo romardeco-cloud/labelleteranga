@@ -20,6 +20,7 @@ import { telechargerImageAvecPrix } from "@/lib/productLabel";
 import ZonePrixEditor from "@/components/admin/ZonePrixEditor";
 import FormatsEditor from "@/components/admin/FormatsEditor";
 import TransfertStock from "@/components/admin/TransfertStock";
+import OrdreProduits from "@/components/admin/OrdreProduits";
 
 function formatXof(value: string | number) {
   return new Intl.NumberFormat("fr-SN", { maximumFractionDigits: 0 }).format(Number(value)) + " FCFA";
@@ -59,6 +60,7 @@ export default function AdminProductsPage() {
   const [zoneProduit, setZoneProduit] = useState<Product | null>(null);
   const [formatsProduit, setFormatsProduit] = useState<Product | null>(null);
   const [transfertProduit, setTransfertProduit] = useState<Product | null>(null);
+  const [arranger, setArranger] = useState(false);
   const bulkRef = useRef<HTMLInputElement>(null);
   // --- actions groupees ---
   const [selected, setSelected] = useState<Set<number>>(new Set());
@@ -388,6 +390,15 @@ export default function AdminProductsPage() {
           <button onClick={handleExport} className="border px-3 py-1.5 rounded text-sm">
             Exporter Excel
           </button>
+          {store && (
+            <button
+              onClick={() => setArranger(true)}
+              className="border border-brand text-brand px-3 py-1.5 rounded text-sm font-medium"
+              title="Déplacer les produits pour choisir l'ordre dans lequel le site de ce magasin les affiche"
+            >
+              Arranger l&apos;ordre sur le site
+            </button>
+          )}
           {store?.slug && (
             <a
               href={`/s/${store.slug}/affiche`}
@@ -1175,6 +1186,16 @@ export default function AdminProductsPage() {
           store={store}
           onClose={() => setFormatsProduit(null)}
           onSaved={(np) => setProducts((cur) => cur.map((x) => (x.id === np.id ? np : x)))}
+        />
+      )}
+      {arranger && store && (
+        <OrdreProduits
+          store={store}
+          onClose={() => setArranger(false)}
+          onSaved={() => {
+            setPhotoMsg(`Nouvel ordre enregistré : le site de ${store.name} affiche maintenant les produits dans cet ordre.`);
+            reload();
+          }}
         />
       )}
       {transfertProduit && store && (

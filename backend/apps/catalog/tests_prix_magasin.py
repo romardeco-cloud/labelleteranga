@@ -85,6 +85,35 @@ class PrixParMagasinTests(TestCase):
         self.assertEqual(resoudre_ligne(self.riz, self.zig, self.sac.pk).unit_price, Decimal("24000"))
 
 
+class OrdreProduitsTests(PrixParMagasinTests):
+    """Ordre d'affichage choisi dans l'admin, propre a chaque magasin."""
+
+    def noms(self, slug, **params):
+        res = self.public.get("/api/catalog/products/", {"store": slug, **params})
+        return [p["name"] for p in res.data["results"]]
+
+    def test_arranger(self):
+        self.huile = Product.objects.create(sku="HUI-T", name="Huile", price=1500)
+        Stock.objects.create(product=self.huile, point_of_sale=self.mbour)
+        Stock.objects.create(product=self.huile, point_of_sale=self.zig)
+        # par defaut : les plus recents d'abord
+        self.assertEqual(self.noms("sm-mbour-test"), ["Huile", "Riz", "Sucre"])
+        url = "/api/catalog/products/reorder/"
+        res = self.admin.post(url, {"point_of_sale": self.mbour.pk, "ids": [self.sucre.pk, self.huile.pk, self.riz.pk]}, format="json")
+        self.assertEqual(res.status_code, 200, res.data)
+        self.assertEqual(self.noms("sm-mbour-test"), ["Sucre", "Huile", "Riz"])
+        # Ziguinchor garde son propre ordre
+        self.assertEqual(self.noms("sm-zig-test"), ["Huile", "Riz", "Sucre"])
+        # deplacer seulement deux produits : ils echangent leurs places, le troisieme ne bouge pas
+        self.admin.post(url, {"point_of_sale": self.mbour.pk, "ids": [self.riz.pk, self.sucre.pk]}, format="json")
+        self.assertEqual(self.noms("sm-mbour-test"), ["Riz", "Huile", "Sucre"])
+        # l'admin voit le meme ordre pour ce magasin
+        res = self.admin.get("/api/catalog/products/", {"point_of_sale": self.mbour.pk})
+        self.assertEqual([p["name"] for p in res.data["results"]], ["Riz", "Huile", "Sucre"])
+        # reserve a l'admin
+        self.assertIn(self.public.post(url, {"point_of_sale": self.mbour.pk, "ids": []}, format="json").status_code, (401, 403))
+
+
 class TransfertStockTests(PrixParMagasinTests):
     """Transfert de stock entre magasins : produit simple et format, refuse si stock insuffisant."""
 

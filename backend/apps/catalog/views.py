@@ -68,10 +68,21 @@ class ProductViewSet(viewsets.ModelViewSet):
         store = self.request.query_params.get("point_of_sale")
         if store:  # produits rattaches a ce point de vente
             qs = qs.filter(stocks__point_of_sale_id=store).distinct()
+            if str(store).isdigit():
+                qs = self._ordre_magasin(qs, point_of_sale_id=store)
         site = self.request.query_params.get("store")
         if site:  # site web d'un point de vente : ses produits actifs uniquement
             qs = qs.filter(is_active=True, stocks__point_of_sale__slug=site, stocks__point_of_sale__online_enabled=True).distinct()
+            qs = self._ordre_magasin(qs, point_of_sale__slug=site)
         return qs
+
+    @staticmethod
+    def _ordre_magasin(qs, **magasin):
+        """Ordre choisi dans l'admin pour ce magasin (Arranger l'ordre), puis les plus recents."""
+        from django.db.models import OuterRef, Subquery
+
+        rang = Stock.objects.filter(product=OuterRef("pk"), **magasin).values("position")[:1]
+        return qs.annotate(rang_magasin=Subquery(rang)).order_by("rang_magasin", "-created_at", "-id")
 
     def get_serializer_context(self):
         ctx = super().get_serializer_context()
@@ -117,6 +128,37 @@ class ProductViewSet(viewsets.ModelViewSet):
 
     def perform_update(self, serializer):
         self._zone_auto(self._save_with_photo_guard(serializer))
+
+    @action(detail=False, methods=["post"], permission_classes=[permissions.IsAdminUser], url_path="reorder")
+    def reorder(self, request):
+        """POST {point_of_sale, ids} : ids = produits dans l'ordre voulu sur le site de ce magasin. Seuls ces produits
+        changent de place entre eux (ex. une categorie) ; les autres gardent la leur."""
+        from django.db import transaction
+
+        store = self._store_from(request.data.get("point_of_sale"))
+        if not store:
+            raise ValidationError({"point_of_sale": "Choisissez un point de vente."})
+        try:
+            ids = [int(x) for x in request.data.get("ids") or []]
+        except (TypeError, ValueError):
+            raise ValidationError({"ids": "Liste de produits invalide."})
+        if len(ids) != len(set(ids)):
+            raise ValidationError({"ids": "Un produit apparait deux fois."})
+        with transaction.atomic():
+            lignes = list(
+                Stock.objects.select_for_update().filter(point_of_sale=store).order_by("position", "-product__created_at", "-product_id")
+            )
+            # numerotation continue 1..n dans l'ordre actuel (les produits jamais places, a 0, restent en tete)
+            for i, s in enumerate(lignes, start=1):
+                s.position = i
+            par_produit = {s.product_id: s for s in lignes}
+            choisis = [par_produit[i] for i in ids if i in par_produit]
+            # les produits deplaces reprennent les memes places, dans le nouvel ordre
+            places = sorted(s.position for s in choisis)
+            for s, place in zip(choisis, places):
+                s.position = place
+            Stock.objects.bulk_update(lignes, ["position"], batch_size=500)
+        return Response({"updated": len(choisis)})
 
     @action(detail=True, methods=["post"], permission_classes=[permissions.IsAdminUser], url_path="transfer-stock")
     def transfer_stock_view(self, request, pk=None):

@@ -27,6 +27,8 @@ class Stock(models.Model):
     track_stock = models.BooleanField("Suivre le stock de ce produit", default=True)
     # prix propre a ce magasin (vide = prix du produit + supplement du magasin, voir stores.services.prix_produit_magasin)
     price_override = models.DecimalField("Prix dans ce magasin", max_digits=12, decimal_places=2, null=True, blank=True)
+    # ordre d'affichage sur le site de ce magasin (Admin > Produits > Arranger l'ordre) ; 0 = pas encore place (en tete)
+    position = models.PositiveIntegerField("Ordre d'affichage", default=0)
     updated_at = models.DateTimeField(auto_now=True)
 
     class Meta:
