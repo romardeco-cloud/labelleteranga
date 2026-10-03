@@ -367,6 +367,17 @@ export default function AdminProductsPage() {
           <button onClick={handleExport} className="border px-3 py-1.5 rounded text-sm">
             Exporter Excel
           </button>
+          {store?.slug && (
+            <a
+              href={`/s/${store.slug}/affiche`}
+              target="_blank"
+              rel="noreferrer"
+              className="border px-3 py-1.5 rounded text-sm"
+              title="Affiche des prix générée à partir des produits : elle suit automatiquement les prix et les poids"
+            >
+              Voir l&apos;affiche des prix
+            </a>
+          )}
           <label
             className="border px-3 py-1.5 rounded text-sm cursor-pointer"
             title="Nommez chaque fichier avec la reference (SKU) ou le nom du produit"
@@ -547,7 +558,8 @@ export default function AdminProductsPage() {
             className="border rounded px-2 py-1.5 text-sm"
           />
           <input
-            placeholder="Unite"
+            placeholder="Poids / format (ex. 1kg, 500g, 1L)"
+            title="Affiché sous le nom du produit sur l'affiche des prix"
             value={form.unit}
             onChange={(e) => setForm({ ...form, unit: e.target.value })}
             className="border rounded px-2 py-1.5 text-sm"
@@ -873,7 +885,8 @@ export default function AdminProductsPage() {
                         placeholder="Prix"
                       />
                       <input
-                        placeholder="Unite"
+                        placeholder="Poids / format (ex. 1kg, 500g, 1L)"
+            title="Affiché sous le nom du produit sur l'affiche des prix"
                         value={editForm.unit}
                         onChange={(e) => setEditForm({ ...editForm, unit: e.target.value })}
                         className="border rounded px-2 py-1.5 text-sm"
