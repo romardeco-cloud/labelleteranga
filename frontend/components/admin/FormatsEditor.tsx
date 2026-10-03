@@ -26,7 +26,7 @@ export default function FormatsEditor({
 }) {
   const stockDe = (stocks?: Record<string, number>) => (store ? String(stocks?.[String(store.id)] ?? 0) : "");
   // magasin avec supplement (ex. Ziguinchor) : les prix saisis ne valent que pour lui
-  const prixMagasin = Boolean(store && Number(store.price_markup_percent ?? 0) > 0);
+  const prixMagasin = Boolean(store && (Number(store.price_markup_percent ?? 0) > 0 || Number(store.price_markup_amount ?? 0) > 0));
   const [auPoids, setAuPoids] = useState(Boolean(product.sold_by_weight));
   const [lignes, setLignes] = useState<Ligne[]>(
     (product.variants ?? []).map((v) => {
@@ -97,7 +97,11 @@ export default function FormatsEditor({
           <p className="font-semibold text-sm">Formats (taille, grandeur, poids conditionné) avec leur prix</p>
           {prixMagasin && store && (
             <p className="text-xs text-amber-700 bg-amber-50 rounded p-2">
-              Prix de {store.name} (supplément {Number(store.price_markup_percent)} % inclus). Un prix modifié ici ne vaut que pour ce magasin : les
+              Prix de {store.name} (supplément{" "}
+              {[Number(store.price_markup_percent ?? 0) > 0 && `${Number(store.price_markup_percent)} %`, Number(store.price_markup_amount ?? 0) > 0 && `${store.price_markup_amount} F`]
+                .filter(Boolean)
+                .join(" + ")}{" "}
+              inclus). Un prix modifié ici ne vaut que pour ce magasin : les
               autres magasins ne changent pas.
             </p>
           )}

@@ -219,7 +219,7 @@ export default function AdminProductsPage() {
   }
 
   // magasin avec supplement (ex. Ziguinchor) : un prix saisi ici ne vaut que pour ce magasin, les autres ne changent pas
-  const prixPropreAuMagasin = Boolean(store && Number(store.price_markup_percent ?? 0) > 0);
+  const prixPropreAuMagasin = Boolean(store && (Number(store.price_markup_percent ?? 0) > 0 || Number(store.price_markup_amount ?? 0) > 0));
 
   async function saveEdit(id: number) {
     if (!editForm) return;

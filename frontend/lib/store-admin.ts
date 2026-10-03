@@ -51,6 +51,8 @@ export type StoreConfig = {
   vat_rate: string;
   /** supplement (%) sur tous les prix de ce magasin (ex. transport) */
   price_markup_percent?: string;
+  /** montant fixe (FCFA) ajoute a chaque prix, en plus du pourcentage */
+  price_markup_amount?: number;
   prices_include_vat: boolean;
   payment_methods: PayMethodKey[];
   track_stock: boolean;

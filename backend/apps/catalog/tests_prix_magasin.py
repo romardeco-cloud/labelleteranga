@@ -55,6 +55,17 @@ class PrixParMagasinTests(TestCase):
         self.admin.post(url, {"point_of_sale": self.zig.pk, "price": ""}, format="json")
         self.assertEqual(self.prix(self.public, self.sucre, "sm-zig-test")["price"], "875")
 
+    def test_montant_fixe_en_plus_du_pourcentage(self):
+        # 700 + 15 % = 805, + 100 F = 905 -> 925 (arrondi aux 25 F)
+        StoreSettings.objects.filter(point_of_sale=self.zig).update(price_markup_amount=100)
+        _MAJORATION.clear()
+        self.assertEqual(self.prix(self.public, self.sucre, "sm-zig-test")["price"], "925")
+        self.assertEqual(self.prix(self.public, self.sucre, "sm-mbour-test")["price"], "700.00")
+        # montant seul, sans pourcentage : 700 + 100 = 800
+        StoreSettings.objects.filter(point_of_sale=self.mbour).update(price_markup_amount=100)
+        _MAJORATION.clear()
+        self.assertEqual(self.prix(self.public, self.sucre, "sm-mbour-test")["price"], "800")
+
     def test_prix_groupe_a_ziguinchor_ne_touche_pas_mbour(self):
         res = self.admin.post(
             "/api/catalog/products/bulk-update/", {"ids": [self.sucre.pk], "point_of_sale": self.zig.pk, "action": "set_price", "price": 1000}, format="json"

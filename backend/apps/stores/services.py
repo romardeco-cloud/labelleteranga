@@ -29,34 +29,41 @@ def load_promotions():
     return [(p, {x.pk for x in p.products.all()} or None) for p in Promotion.objects.filter(is_active=True).current().prefetch_related("products")]
 
 
-_MAJORATION = {}  # {store_id: (pourcentage, expire)} : evite une requete par produit dans les listes
+_MAJORATION = {}  # {store_id: ((pourcentage, montant), expire)} : evite une requete par produit dans les listes
 
 
-def majoration(store):
-    """Supplement (%) des prix de ce magasin (ex. transport jusqu'a Ziguinchor), 0 si aucun."""
+def supplement(store):
+    """Supplement des prix de ce magasin (ex. transport jusqu'a Ziguinchor) : (pourcentage, montant fixe FCFA), (0, 0) si aucun."""
     import time
     from decimal import Decimal
 
     from .models import StoreSettings
 
     if store is None:
-        return Decimal("0")
+        return Decimal("0"), 0
     hit = _MAJORATION.get(store.pk)
     if hit and hit[1] > time.monotonic():
         return hit[0]
-    pct = StoreSettings.objects.filter(point_of_sale=store).values_list("price_markup_percent", flat=True).first() or Decimal("0")
-    _MAJORATION[store.pk] = (pct, time.monotonic() + 30)
-    return pct
+    row = StoreSettings.objects.filter(point_of_sale=store).values_list("price_markup_percent", "price_markup_amount").first()
+    valeur = (row[0] or Decimal("0"), row[1] or 0) if row else (Decimal("0"), 0)
+    _MAJORATION[store.pk] = (valeur, time.monotonic() + 30)
+    return valeur
+
+
+def majoration(store):
+    """Vrai si ce magasin a un supplement (pourcentage ou montant fixe) sur ses prix."""
+    pct, montant = supplement(store)
+    return bool(pct or montant)
 
 
 def majorer(prix, store):
-    """Prix + supplement du magasin, arrondi aux 25 FCFA superieurs (prix inchange sans supplement)."""
+    """Prix + supplement du magasin (pourcentage puis montant fixe), arrondi aux 25 FCFA superieurs (inchange sans supplement)."""
     from decimal import ROUND_CEILING, Decimal
 
-    pct = majoration(store)
-    if not pct or prix is None:
+    pct, montant = supplement(store)
+    if not (pct or montant) or prix is None:
         return prix
-    return ((Decimal(prix) * (100 + pct) / 100) / 25).quantize(Decimal("1"), rounding=ROUND_CEILING) * 25
+    return ((Decimal(prix) * (100 + pct) / 100 + montant) / 25).quantize(Decimal("1"), rounding=ROUND_CEILING) * 25
 
 
 def prix_produit_magasin(product, store):

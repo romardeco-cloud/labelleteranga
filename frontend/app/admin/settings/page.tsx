@@ -72,7 +72,7 @@ const SOCIAL_FIELDS: [string, string, string][] = [
 
 const EDITABLE: (keyof StoreConfig)[] = [
   "name", "address", "phone", "slug", "online_enabled", "description", "timezone", "email", "legal_form", "share_capital", "ninea", "rccm", "vat_rate",
-  "prices_include_vat", "payment_methods", "wave_pay_url", "orange_pay_url", "wave_number", "orange_number", "price_markup_percent", "social_links", "loyalty_enabled", "loyalty_mode", "loyalty_threshold", "loyalty_min_order",
+  "prices_include_vat", "payment_methods", "wave_pay_url", "orange_pay_url", "wave_number", "orange_number", "price_markup_percent", "price_markup_amount", "social_links", "loyalty_enabled", "loyalty_mode", "loyalty_threshold", "loyalty_min_order",
   "loyalty_reward_type", "loyalty_reward_value", "loyalty_reward_label", "loyalty_valid_days", "track_stock", "receipt_slogan", "receipt_footer",
   "module_hold", "module_history", "module_qr", "module_dine_in", "module_customer_orders", "module_drawer", "module_xreport", "module_daily_menu",
 ];
@@ -354,6 +354,17 @@ export default function AdminSettingsPage() {
                   onChange={(e) => set("price_markup_percent", e.target.value)}
                   className={inputCls}
                   title="Ex. transport : ajouté à tous les prix de ce magasin (arrondi aux 25 FCFA), sauf les prix saisis pour ce magasin"
+                />
+              </Field>
+              <Field label="Supplément fixe sur les prix (FCFA)">
+                <input
+                  type="number"
+                  min={0}
+                  step="25"
+                  value={cfg.price_markup_amount ?? 0}
+                  onChange={(e) => set("price_markup_amount", Number(e.target.value || 0))}
+                  className={inputCls}
+                  title="Montant ajouté à chaque prix de ce magasin, en plus du pourcentage (ex. 100 F de transport par article), sauf les prix saisis pour ce magasin"
                 />
               </Field>
               <Field label="Prix affiches">

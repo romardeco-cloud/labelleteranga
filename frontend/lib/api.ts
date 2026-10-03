@@ -35,6 +35,8 @@ export type PointOfSale = {
   online_enabled?: boolean;
   /** supplement (%) applique aux prix de ce magasin (ex. transport) */
   price_markup_percent?: string;
+  /** montant fixe (FCFA) ajoute a chaque prix, en plus du pourcentage */
+  price_markup_amount?: number;
   description?: string;
   address: string;
   phone: string;

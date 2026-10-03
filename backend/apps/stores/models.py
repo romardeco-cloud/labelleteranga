@@ -175,6 +175,8 @@ class StoreSettings(models.Model):
     track_stock = models.BooleanField("Suivi du stock", default=True)
     # supplement applique a tous les prix de ce magasin (ex. transport), sauf prix fixes produit par produit
     price_markup_percent = models.DecimalField("Supplement sur les prix (%)", max_digits=5, decimal_places=2, default=0)
+    # montant fixe (FCFA) ajoute a chaque prix, en plus du pourcentage
+    price_markup_amount = models.PositiveIntegerField("Supplement fixe sur les prix (FCFA)", default=0)
     receipt_slogan = models.CharField(max_length=120, blank=True, default="L'art du service")
     receipt_footer = models.CharField(max_length=200, blank=True, default="Merci de votre visite !")
     # modules de la caisse

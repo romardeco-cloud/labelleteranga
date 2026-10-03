@@ -17,16 +17,20 @@ from .models import (
 class PointOfSaleSerializer(serializers.ModelSerializer):
     track_stock = serializers.SerializerMethodField()
     price_markup_percent = serializers.SerializerMethodField()
+    price_markup_amount = serializers.SerializerMethodField()
 
     class Meta:
         model = PointOfSale
-        fields = ["id", "name", "slug", "online_enabled", "description", "address", "phone", "is_active", "created_at", "track_stock", "price_markup_percent"]
+        fields = ["id", "name", "slug", "online_enabled", "description", "address", "phone", "is_active", "created_at", "track_stock", "price_markup_percent", "price_markup_amount"]
 
     def get_track_stock(self, store):
         return get_settings(store).track_stock
 
     def get_price_markup_percent(self, store):
         return str(get_settings(store).price_markup_percent)
+
+    def get_price_markup_amount(self, store):
+        return get_settings(store).price_markup_amount
 
     def validate_name(self, value):
         value = value.strip()
@@ -134,7 +138,7 @@ class InventoryCountDetailSerializer(InventoryCountSerializer):
 
 SETTINGS_FIELDS = [
     "timezone", "email", "legal_form", "share_capital", "ninea", "rccm", "vat_rate", "prices_include_vat",
-    "payment_methods", "wave_pay_url", "orange_pay_url", "wave_number", "orange_number", "track_stock", "price_markup_percent", "receipt_slogan", "receipt_footer", "module_hold", "module_history", "module_qr",
+    "payment_methods", "wave_pay_url", "orange_pay_url", "wave_number", "orange_number", "track_stock", "price_markup_percent", "price_markup_amount", "receipt_slogan", "receipt_footer", "module_hold", "module_history", "module_qr",
     "module_dine_in", "module_customer_orders", "module_drawer", "module_xreport", "module_daily_menu",
     "social_links", "loyalty_enabled", "loyalty_mode", "loyalty_threshold", "loyalty_min_order", "loyalty_reward_type",
     "loyalty_reward_value", "loyalty_reward_label", "loyalty_valid_days",
