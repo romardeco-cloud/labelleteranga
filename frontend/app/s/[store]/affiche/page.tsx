@@ -1,7 +1,7 @@
 "use client";
 
 import { useEffect, useState } from "react";
-import ProductVisual, { thumb } from "@/components/ProductVisual";
+import PhotoPrix from "@/components/PhotoPrix";
 import { useSite } from "@/components/site/SiteContext";
 import { Product, fetchProducts } from "@/lib/api";
 import { shortName } from "@/lib/site";
@@ -109,13 +109,8 @@ export default function AffichePage() {
                     return (
                       <div key={p.id} className="rounded-xl border border-gray-100 bg-white p-1.5 flex flex-col items-center text-center">
                         <div className="w-full aspect-square overflow-hidden rounded-lg bg-white flex items-center justify-center">
-                          {p.image ? (
-                            // photo entiere (jamais recadree) : le produit reste reconnaissable sur l'affiche
-                            // eslint-disable-next-line @next/next/no-img-element
-                            <img src={thumb(p.image, 320)} alt={p.name} loading="lazy" className="max-w-full max-h-full object-contain" />
-                          ) : (
-                            <ProductVisual image={null} name={p.name} category={p.category?.name} size="tile" />
-                          )}
+                          {/* photo entiere ; un prix deja ecrit dedans est recouvert par le prix actuel */}
+                          <PhotoPrix product={p} size="tile" entiere />
                         </div>
                         <p className="mt-1 text-[11px] sm:text-xs font-semibold leading-tight text-gray-900 line-clamp-2">{p.name}</p>
                         {format(p) && <p className="text-[10px] sm:text-[11px] text-gray-500 leading-tight">{format(p)}</p>}

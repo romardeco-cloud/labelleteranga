@@ -33,6 +33,9 @@ class Product(models.Model):
     )
     unit = models.CharField(max_length=32, default="unite", help_text="unite, kg, sac, etc.")
     image = models.ImageField(upload_to="products/", null=True, blank=True)
+    # Zone de la photo ou un prix est deja ecrit (affiche, photo avec etiquette) : le site la recouvre avec le prix
+    # actuel. {"x", "y", "w", "h"} en fraction de l'image (0 a 1), "bg"/"fg" couleurs, "contenu" : prix | poids_prix.
+    price_zone = models.JSONField("Zone du prix sur la photo", null=True, blank=True)
     is_active = models.BooleanField(default=True)
     created_at = models.DateTimeField(auto_now_add=True)
     updated_at = models.DateTimeField(auto_now=True)

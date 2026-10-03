@@ -4,7 +4,7 @@ import { useEffect, useState } from "react";
 import { useParams } from "next/navigation";
 import Link from "next/link";
 import PriceTag from "@/components/PriceTag";
-import ProductVisual from "@/components/ProductVisual";
+import PhotoPrix from "@/components/PhotoPrix";
 import { telechargerImageAvecPrix } from "@/lib/productLabel";
 import ProductShowcase from "@/components/ProductShowcase";
 import { useSite } from "@/components/site/SiteContext";
@@ -65,8 +65,8 @@ export default function ProductDetailPage() {
     <div className="max-w-3xl mx-auto px-4 py-8 grid sm:grid-cols-2 gap-8">
       <div>
         <div className={`relative bg-brand-light rounded-lg flex items-center justify-center overflow-hidden ${product.image ? "" : "aspect-square"}`}>
-          <ProductVisual image={product.image} name={product.name} category={product.category?.name} natural />
-          {product.image && <PriceTag product={product} size="large" />}
+          <PhotoPrix product={product} mode="natural" />
+          {product.image && !product.price_zone && <PriceTag product={product} size="large" />}
         </div>
         <button
           onClick={() => telechargerImageAvecPrix(product, site.name.replace(/ La Belle Teranga$/i, "")).catch(() => setError("Image impossible a creer."))}

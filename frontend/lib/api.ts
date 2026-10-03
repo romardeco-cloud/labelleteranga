@@ -67,10 +67,16 @@ export type Product = {
   stocks: Stock[];
   unit: string;
   image: string | null;
+  /** Zone de la photo ou un prix est deja ecrit : le site la recouvre avec le prix actuel (voir PhotoPrix). */
+  price_zone?: PriceZone | null;
   is_active: boolean;
   in_stock: boolean;
   combo_items?: string[];
 };
+
+/** Rectangle de la photo (fractions 0 a 1) a recouvrir, avec ses couleurs. */
+export type ZoneArea = { x: number; y: number; w: number; h: number; bg: string; fg: string };
+export type PriceZone = ZoneArea & { contenu: "prix" | "poids_prix"; /** pastille du poids, ecrite a part */ poids?: ZoneArea };
 
 /** Avec `pointOfSale` : seulement les categories qui ont au moins un produit de ce point de vente. */
 export async function fetchCategories(pointOfSale?: number | null) {

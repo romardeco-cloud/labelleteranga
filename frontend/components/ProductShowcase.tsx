@@ -1,5 +1,6 @@
 "use client";
 
+import PhotoPrix from "@/components/PhotoPrix";
 import { Product } from "@/lib/api";
 import { Site } from "@/lib/site";
 
@@ -48,8 +49,8 @@ export default function ProductShowcase({ product, site }: { product: Product; s
   if (!COLLAGE_ONLY.has(product.category?.name ?? "") && product.image) {
     return (
       <div className="rounded-2xl overflow-hidden shadow-lg bg-[#6e0d0d]">
-        {/* eslint-disable-next-line @next/next/no-img-element */}
-        <img src={product.image} alt={product.name} className="block w-full h-auto" />
+        {/* fiche complete : le prix dessine dedans est recouvert par le prix actuel si sa zone est definie */}
+        <PhotoPrix product={product} mode="natural" />
       </div>
     );
   }

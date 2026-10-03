@@ -1,4 +1,4 @@
-import type { Product } from "@/lib/api";
+import type { Product, ZoneArea } from "@/lib/api";
 
 export const money = (v: string | number) => new Intl.NumberFormat("fr-SN", { maximumFractionDigits: 0 }).format(Number(v)) + " FCFA";
 
@@ -75,7 +75,31 @@ export async function imageAvecPrix(p: Product, magasin: string): Promise<Blob> 
       const img = await chargerImage(p.image);
       const k = Math.min((S - 120) / img.width, zoneH / img.height);
       const w = img.width * k, h = img.height * k;
-      ctx.drawImage(img, (S - w) / 2, 110 + (zoneH - h) / 2, w, h);
+      const ix = (S - w) / 2, iy = 110 + (zoneH - h) / 2;
+      ctx.drawImage(img, ix, iy, w, h);
+      // prix deja ecrit dans la photo : recouvert par le prix actuel (meme rendu que sur le site)
+      const z = p.price_zone;
+      const cacher = (a: ZoneArea, txt: string[]) => {
+        const zx = ix + a.x * w, zy = iy + a.y * h, zw = a.w * w, zh = a.h * h;
+        ctx.fillStyle = a.bg;
+        ctx.beginPath();
+        ctx.roundRect(zx, zy, zw, zh, Math.min(zw, zh) * 0.18);
+        ctx.fill();
+        const long = Math.max(...txt.map((t) => t.length));
+        const taille = Math.min((zh / txt.length) * 0.72, (zw * 0.88) / (long * 0.62));
+        ctx.fillStyle = a.fg;
+        txt.forEach((t, i) => {
+          const last = i === txt.length - 1;
+          ctx.font = `${last ? "bold " : ""}${Math.round(last ? taille : taille * 0.8)}px Arial, sans-serif`;
+          ctx.fillText(t, zx + zw / 2, zy + (zh / txt.length) * (i + 0.5), zw * 0.92);
+        });
+      };
+      if (z) {
+        const f = poids(p);
+        const prix = money(prixAffiche(p).actuel);
+        cacher(z, z.contenu === "poids_prix" && f ? [f, prix] : [prix]);
+        if (z.poids && f) cacher(z.poids, [f]);
+      }
     } catch {
       /* photo indisponible : l'image reste lisible avec le nom et le prix */
     }

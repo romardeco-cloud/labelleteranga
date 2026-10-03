@@ -105,3 +105,44 @@ class CategoriesByStoreTests(TestCase):
         self.assertEqual(names({"point_of_sale": sm.pk}), ["Fruits"])
         self.assertEqual(names({"point_of_sale": resto.pk}), ["Plats"])
         self.assertTrue({"Fruits", "Plats", "Vide"} <= set(names({"page_size": 100})))  # sans filtre : toutes
+
+
+class PriceZoneTests(TestCase):
+    """Zone de la photo ou un prix est deja ecrit : le site la recouvre avec le prix actuel."""
+
+    def setUp(self):
+        self.client = APIClient()
+        self.client.force_authenticate(User.objects.create_user("admin-zone", is_staff=True))
+        self.p = Product.objects.create(sku="Z-1", name="Carotte 1kg", price=600)
+
+    def test_zone_saved_normalised_and_cleared(self):
+        url = f"/api/catalog/products/{self.p.pk}/"
+        res = self.client.patch(url, {"price_zone": {"x": 0.6, "y": 0.7, "w": 0.6, "h": 0.2, "bg": "#d6283a", "fg": "bad", "contenu": "poids_prix"}}, format="json")
+        self.assertEqual(res.status_code, 200, res.data)
+        z = res.data["price_zone"]
+        self.assertEqual((z["x"], z["w"], z["bg"], z["fg"], z["contenu"]), (0.6, 0.4, "#d6283a", "#14213d", "poids_prix"))
+        # changer le prix ne touche pas la zone
+        res = self.client.patch(url, {"price": 700}, format="json")
+        self.assertEqual(res.data["price_zone"]["x"], 0.6)
+        # zone hors de la photo refusee, null efface
+        self.assertEqual(self.client.patch(url, {"price_zone": {"x": 1.2, "y": 0, "w": 0.1, "h": 0.1}}, format="json").status_code, 400)
+        self.assertIsNone(self.client.patch(url, {"price_zone": None}, format="json").data["price_zone"])
+        # zone du poids facultative, separee du prix
+        res = self.client.patch(url, {"price_zone": {"x": 0.5, "y": 0.7, "w": 0.4, "h": 0.2, "poids": {"x": 0.05, "y": 0.68, "w": 0.4, "h": 0.12, "bg": "#1f6f43"}}}, format="json")
+        self.assertEqual(res.data["price_zone"]["poids"], {"x": 0.05, "y": 0.68, "w": 0.4, "h": 0.12, "bg": "#1f6f43", "fg": "#14213d"})
+
+    def test_new_photo_resets_zone(self):
+        import io
+
+        from PIL import Image
+
+        self.p.price_zone = {"x": 0.1, "y": 0.1, "w": 0.2, "h": 0.2}
+        self.p.save()
+        buf = io.BytesIO()
+        Image.new("RGB", (20, 20), "white").save(buf, "PNG")
+        buf.name = "photo.png"
+        buf.seek(0)
+        res = self.client.patch(f"/api/catalog/products/{self.p.pk}/", {"image": buf}, format="multipart")
+        self.assertEqual(res.status_code, 200, res.data)
+        self.p.refresh_from_db()
+        self.assertIsNone(self.p.price_zone)

@@ -17,6 +17,7 @@ import { getAdminToken } from "@/lib/auth";
 import { matchKey, prepareImage } from "@/lib/images";
 import { apiErrorMessage, downloadFile } from "@/lib/documents";
 import { telechargerImageAvecPrix } from "@/lib/productLabel";
+import ZonePrixEditor from "@/components/admin/ZonePrixEditor";
 
 function formatXof(value: string | number) {
   return new Intl.NumberFormat("fr-SN", { maximumFractionDigits: 0 }).format(Number(value)) + " FCFA";
@@ -53,6 +54,7 @@ export default function AdminProductsPage() {
   const [uploadingId, setUploadingId] = useState<number | null>(null);
   const [photoMsg, setPhotoMsg] = useState("");
   const [photoErr, setPhotoErr] = useState("");
+  const [zoneProduit, setZoneProduit] = useState<Product | null>(null);
   const bulkRef = useRef<HTMLInputElement>(null);
   // --- actions groupees ---
   const [selected, setSelected] = useState<Set<number>>(new Set());
@@ -1083,6 +1085,15 @@ export default function AdminProductsPage() {
                     >
                       Image avec prix
                     </button>
+                    {p.image && (
+                      <button
+                        onClick={() => setZoneProduit(p)}
+                        className={`text-xs underline ${p.price_zone ? "text-green-700" : "text-brand"}`}
+                        title="Un prix est deja ecrit sur la photo ? Tracez sa zone : le site la recouvrira toujours avec le prix actuel"
+                      >
+                        {p.price_zone ? "Prix photo ✓" : "Prix sur la photo"}
+                      </button>
+                    )}
                     <button onClick={() => handleDelete(p.id)} className="text-red-500 text-xs">
                       Supprimer
                     </button>
@@ -1117,6 +1128,13 @@ export default function AdminProductsPage() {
           ))}
         </tbody>
       </table>
+      {zoneProduit && (
+        <ZonePrixEditor
+          product={zoneProduit}
+          onClose={() => setZoneProduit(null)}
+          onSaved={(np) => setProducts((cur) => cur.map((x) => (x.id === np.id ? np : x)))}
+        />
+      )}
     </div>
   );
 }

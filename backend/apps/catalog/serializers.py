@@ -42,6 +42,7 @@ class ProductSerializer(serializers.ModelSerializer):
             "stocks",
             "unit",
             "image",
+            "price_zone",
             "is_active",
             "in_stock",
             "store_stock",
@@ -50,6 +51,55 @@ class ProductSerializer(serializers.ModelSerializer):
             "updated_at",
         ]
         read_only_fields = ["id", "slug", "created_at", "updated_at"]
+
+    def validate_price_zone(self, value):
+        """Accepte null (pas de zone) ou {x, y, w, h} en fraction de la photo, + couleurs et contenu facultatifs."""
+        import json
+        import re
+
+        if value in (None, "", "null"):
+            return None
+        if isinstance(value, str):  # envoye via un formulaire multipart
+            try:
+                value = json.loads(value)
+            except ValueError:
+                raise serializers.ValidationError("Zone invalide.")
+        if not isinstance(value, dict):
+            raise serializers.ValidationError("Zone invalide.")
+        try:
+            zone = {k: round(float(value[k]), 4) for k in ("x", "y", "w", "h")}
+        except (KeyError, TypeError, ValueError):
+            raise serializers.ValidationError("La zone doit avoir x, y, w et h.")
+        if not (0 <= zone["x"] < 1 and 0 <= zone["y"] < 1 and 0 < zone["w"] <= 1 and 0 < zone["h"] <= 1):
+            raise serializers.ValidationError("La zone doit rester dans la photo.")
+        zone["w"] = min(zone["w"], 1 - zone["x"])
+        zone["h"] = min(zone["h"], 1 - zone["y"])
+        for k, defaut in (("bg", "#ffffff"), ("fg", "#14213d")):
+            c = str(value.get(k) or defaut)
+            zone[k] = c if re.fullmatch(r"#[0-9a-fA-F]{6}", c) else defaut
+        zone["contenu"] = "poids_prix" if value.get("contenu") == "poids_prix" else "prix"
+        # zone facultative du poids, quand il est ecrit a part sur la photo (pastille "1 kg")
+        pz = value.get("poids")
+        if isinstance(pz, dict):
+            try:
+                zp = {k: round(float(pz[k]), 4) for k in ("x", "y", "w", "h")}
+            except (KeyError, TypeError, ValueError):
+                raise serializers.ValidationError("La zone du poids doit avoir x, y, w et h.")
+            if not (0 <= zp["x"] < 1 and 0 <= zp["y"] < 1 and 0 < zp["w"] <= 1 and 0 < zp["h"] <= 1):
+                raise serializers.ValidationError("La zone du poids doit rester dans la photo.")
+            zp["w"] = min(zp["w"], 1 - zp["x"])
+            zp["h"] = min(zp["h"], 1 - zp["y"])
+            for k, defaut in (("bg", "#ffffff"), ("fg", "#14213d")):
+                c = str(pz.get(k) or defaut)
+                zp[k] = c if re.fullmatch(r"#[0-9a-fA-F]{6}", c) else defaut
+            zone["poids"] = zp
+        return zone
+
+    def update(self, instance, validated_data):
+        # nouvelle photo sans nouvelle zone : l'ancienne zone ne correspond plus a rien
+        if "image" in validated_data and "price_zone" not in validated_data:
+            validated_data["price_zone"] = None
+        return super().update(instance, validated_data)
 
     def _total_stock(self, product):
         # somme en memoire sur les stocks deja precharges (prefetch_related) : evite une requete SQL par produit

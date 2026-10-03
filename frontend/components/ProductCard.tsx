@@ -3,7 +3,7 @@
 import Link from "next/link";
 import { useState } from "react";
 import PriceTag from "@/components/PriceTag";
-import ProductVisual from "@/components/ProductVisual";
+import PhotoPrix from "@/components/PhotoPrix";
 import { useSite } from "@/components/site/SiteContext";
 import { Product, addToCart } from "@/lib/api";
 
@@ -14,7 +14,8 @@ function formatXof(value: string | number) {
 export default function ProductCard({ product }: { product: Product }) {
   const { base, site } = useSite();
   // Resto : les photos sont deja des affiches avec le prix dessine dedans, on n'ajoute rien par-dessus
-  const etiquette = site.slug !== "resto" && product.image;
+  // ni sur une photo dont le prix ecrit est deja recouvert par le prix actuel (zone definie)
+  const etiquette = site.slug !== "resto" && product.image && !product.price_zone;
   const [loading, setLoading] = useState(false);
   const [added, setAdded] = useState(false);
   const [error, setError] = useState("");
@@ -36,7 +37,7 @@ export default function ProductCard({ product }: { product: Product }) {
   return (
     <div className="border rounded-lg bg-white overflow-hidden flex flex-col">
       <Link href={`${base}/product/${product.id}`} className="relative block aspect-square bg-brand-light overflow-hidden">
-        <ProductVisual image={product.image} name={product.name} category={product.category?.name} />
+        <PhotoPrix product={product} />
         {etiquette && <PriceTag product={product} />}
       </Link>
       <div className="p-3 flex flex-col gap-1 flex-1">
