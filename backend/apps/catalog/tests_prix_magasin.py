@@ -72,3 +72,30 @@ class PrixParMagasinTests(TestCase):
         self.assertEqual(resoudre_ligne(self.sucre, self.mbour).unit_price, Decimal("700"))
         VariantStock.objects.create(variant=self.sac, point_of_sale=self.zig, price_override=24000)
         self.assertEqual(resoudre_ligne(self.riz, self.zig, self.sac.pk).unit_price, Decimal("24000"))
+
+
+class TransfertStockTests(PrixParMagasinTests):
+    """Transfert de stock entre magasins : produit simple et format, refuse si stock insuffisant."""
+
+    def test_transfert(self):
+        from apps.stores.models import StockMovement
+
+        Stock.objects.filter(product=self.sucre, point_of_sale=self.mbour).update(quantity=30)
+        VariantStock.objects.create(variant=self.sac, point_of_sale=self.mbour, quantity=10)
+        url = f"/api/catalog/products/{self.sucre.pk}/transfer-stock/"
+        res = self.admin.post(url, {"from_point_of_sale": self.mbour.pk, "to_point_of_sale": self.zig.pk, "quantity": 12}, format="json")
+        self.assertEqual(res.status_code, 200, res.data)
+        self.assertEqual(Stock.objects.get(product=self.sucre, point_of_sale=self.mbour).quantity, 18)
+        self.assertEqual(Stock.objects.get(product=self.sucre, point_of_sale=self.zig).quantity, 12)
+        self.assertEqual(StockMovement.objects.filter(product=self.sucre, reference__startswith="transfert").count(), 2)
+        # format : obligatoire pour un produit a formats
+        url = f"/api/catalog/products/{self.riz.pk}/transfer-stock/"
+        self.assertEqual(self.admin.post(url, {"from_point_of_sale": self.mbour.pk, "to_point_of_sale": self.zig.pk, "quantity": 3}, format="json").status_code, 400)
+        res = self.admin.post(url, {"from_point_of_sale": self.mbour.pk, "to_point_of_sale": self.zig.pk, "quantity": 3, "variant": self.sac.pk}, format="json")
+        self.assertEqual(res.status_code, 200, res.data)
+        self.assertEqual(VariantStock.objects.get(variant=self.sac, point_of_sale=self.mbour).quantity, 7)
+        self.assertEqual(VariantStock.objects.get(variant=self.sac, point_of_sale=self.zig).quantity, 3)
+        # stock insuffisant : rien ne bouge
+        res = self.admin.post(url, {"from_point_of_sale": self.mbour.pk, "to_point_of_sale": self.zig.pk, "quantity": 50, "variant": self.sac.pk}, format="json")
+        self.assertEqual(res.status_code, 400)
+        self.assertEqual(VariantStock.objects.get(variant=self.sac, point_of_sale=self.zig).quantity, 3)

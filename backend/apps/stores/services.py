@@ -203,7 +203,7 @@ def sortie_stock_ligne(item, store, *, reason, reference="", user=None, sens=-1,
 
 
 @transaction.atomic
-def transfer_stock(product, from_store, to_store, quantity, user=None):
+def transfer_stock(product, from_store, to_store, quantity, user=None, variant=None):
     """
     Deplace `quantity` unites de `product` de `from_store` vers `to_store`, en une seule operation atomique
     et tracee : jusqu'ici, un transfert entre points de vente se faisait "a la main" (une sortie manuelle d'un
@@ -224,12 +224,15 @@ def transfer_stock(product, from_store, to_store, quantity, user=None):
         raise ValidationError({"quantity": "La quantite a transferer doit etre positive."})
 
     short_id = uuid.uuid4().hex[:6]
-    out_movement = change_stock(
-        product, from_store, delta=-quantity, reason=StockMovement.Reason.MANUAL,
+    # format (variant) : stock du format de chaque cote ; le produit est rattache au magasin de destination si besoin
+    Stock.objects.get_or_create(product=product, point_of_sale=to_store)
+    bouger = (lambda store, **kw: change_variant_stock(variant, store, **kw)) if variant is not None else (lambda store, **kw: change_stock(product, store, **kw))
+    out_movement = bouger(
+        from_store, delta=-quantity, reason=StockMovement.Reason.MANUAL,
         reference=f"transfert #{short_id} -> {to_store.slug or to_store.name}", user=user,
     )
-    in_movement = change_stock(
-        product, to_store, delta=quantity, reason=StockMovement.Reason.MANUAL,
+    in_movement = bouger(
+        to_store, delta=quantity, reason=StockMovement.Reason.MANUAL,
         reference=f"transfert #{short_id} <- {from_store.slug or from_store.name}", user=user,
     )
     return out_movement, in_movement

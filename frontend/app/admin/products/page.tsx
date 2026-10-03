@@ -19,6 +19,7 @@ import { apiErrorMessage, downloadFile } from "@/lib/documents";
 import { telechargerImageAvecPrix } from "@/lib/productLabel";
 import ZonePrixEditor from "@/components/admin/ZonePrixEditor";
 import FormatsEditor from "@/components/admin/FormatsEditor";
+import TransfertStock from "@/components/admin/TransfertStock";
 
 function formatXof(value: string | number) {
   return new Intl.NumberFormat("fr-SN", { maximumFractionDigits: 0 }).format(Number(value)) + " FCFA";
@@ -57,6 +58,7 @@ export default function AdminProductsPage() {
   const [photoErr, setPhotoErr] = useState("");
   const [zoneProduit, setZoneProduit] = useState<Product | null>(null);
   const [formatsProduit, setFormatsProduit] = useState<Product | null>(null);
+  const [transfertProduit, setTransfertProduit] = useState<Product | null>(null);
   const bulkRef = useRef<HTMLInputElement>(null);
   // --- actions groupees ---
   const [selected, setSelected] = useState<Set<number>>(new Set());
@@ -1115,6 +1117,15 @@ export default function AdminProductsPage() {
                         {p.variants?.length ? `Formats (${p.variants.length})` : p.sold_by_weight ? "Au poids ✓" : "Formats / poids"}
                       </button>
                     )}
+                    {store && stores.length > 1 && (
+                      <button
+                        onClick={() => setTransfertProduit(p)}
+                        className="text-xs underline text-brand"
+                        title={`Envoyer du stock de ${store.name} vers un autre magasin`}
+                      >
+                        Transférer
+                      </button>
+                    )}
                     {p.image && (
                       <button
                         onClick={() => setZoneProduit(p)}
@@ -1164,6 +1175,18 @@ export default function AdminProductsPage() {
           store={store}
           onClose={() => setFormatsProduit(null)}
           onSaved={(np) => setProducts((cur) => cur.map((x) => (x.id === np.id ? np : x)))}
+        />
+      )}
+      {transfertProduit && store && (
+        <TransfertStock
+          product={transfertProduit}
+          depuis={store}
+          magasins={stores}
+          onClose={() => setTransfertProduit(null)}
+          onDone={(np, message) => {
+            setProducts((cur) => cur.map((x) => (x.id === np.id ? np : x)));
+            setPhotoMsg(message);
+          }}
         />
       )}
       {zoneProduit && (

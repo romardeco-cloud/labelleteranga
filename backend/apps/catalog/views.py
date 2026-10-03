@@ -118,6 +118,31 @@ class ProductViewSet(viewsets.ModelViewSet):
     def perform_update(self, serializer):
         self._zone_auto(self._save_with_photo_guard(serializer))
 
+    @action(detail=True, methods=["post"], permission_classes=[permissions.IsAdminUser], url_path="transfer-stock")
+    def transfer_stock_view(self, request, pk=None):
+        """POST {from_point_of_sale, to_point_of_sale, quantity, variant?} : deplace du stock d'un magasin a l'autre
+        (sortie et entree enregistrees ensemble dans le journal des mouvements, avec une reference commune)."""
+        from django.db import transaction
+
+        from apps.stores.services import transfer_stock
+
+        product = self.get_object()
+        source = self._store_from(request.data.get("from_point_of_sale"))
+        cible = self._store_from(request.data.get("to_point_of_sale"))
+        if not source or not cible:
+            raise ValidationError({"to_point_of_sale": "Choisissez le magasin d'origine et le magasin de destination."})
+        variant = None
+        if request.data.get("variant"):
+            variant = product.variants.filter(pk=request.data.get("variant")).first()
+            if not variant:
+                raise ValidationError({"variant": "Format introuvable pour ce produit."})
+        elif product.variants.filter(is_active=True).exists():
+            raise ValidationError({"variant": "Choisissez le format a transferer."})
+        with transaction.atomic():
+            transfer_stock(product, source, cible, request.data.get("quantity"), user=request.user, variant=variant)
+        fresh = Product.objects.prefetch_related("stocks__point_of_sale", "variants").get(pk=product.pk)
+        return Response(ProductSerializer(fresh, context=self.get_serializer_context()).data)
+
     @action(detail=True, methods=["post"], permission_classes=[permissions.IsAdminUser], url_path="store-price")
     def store_price(self, request, pk=None):
         """POST {point_of_sale, price (vide = automatique), variant?} : prix du produit (ou d'un format) dans CE magasin
