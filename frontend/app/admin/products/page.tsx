@@ -193,7 +193,7 @@ export default function AdminProductsPage() {
 
   async function handleAddCategory() {
     if (!newCategory.trim()) return;
-    const cat = await createCategory(newCategory.trim());
+    const cat = await createCategory(newCategory.trim(), storeId);
     setCategories([...categories, cat]);
     setNewCategory("");
   }

@@ -30,9 +30,24 @@ class CategoryViewSet(viewsets.ModelViewSet):
     def get_queryset(self):
         qs = super().get_queryset()
         store = self.request.query_params.get("point_of_sale")
-        if store:  # categories qui ont au moins un produit de ce point de vente (admin > Produits)
-            qs = qs.filter(products__stocks__point_of_sale_id=store).distinct()
+        if store:  # categories de ce point de vente : rattachees a lui (meme vides) ou contenant un de ses produits
+            from django.db.models import Q
+
+            qs = qs.filter(Q(store_links__point_of_sale_id=store) | Q(products__stocks__point_of_sale_id=store)).distinct()
         return qs
+
+    def perform_create(self, serializer):
+        category = serializer.save()
+        # creee depuis Admin > Produits avec un point de vente choisi : rattachee a lui, pour etre visible tout de suite
+        store = self.request.data.get("point_of_sale")
+        if store:
+            from django.db.models import Max
+
+            from apps.stores.models import StoreCategory
+
+            if PointOfSale.objects.filter(pk=store).exists():
+                last = StoreCategory.objects.filter(point_of_sale_id=store).aggregate(m=Max("order"))["m"]
+                StoreCategory.objects.get_or_create(point_of_sale_id=store, category=category, defaults={"order": (last or 0) + 1})
 
 
 class ProductViewSet(viewsets.ModelViewSet):

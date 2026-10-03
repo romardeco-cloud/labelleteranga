@@ -105,6 +105,14 @@ class CategoriesByStoreTests(TestCase):
         self.assertEqual(names({"point_of_sale": sm.pk}), ["Fruits"])
         self.assertEqual(names({"point_of_sale": resto.pk}), ["Plats"])
         self.assertTrue({"Fruits", "Plats", "Vide"} <= set(names({"page_size": 100})))  # sans filtre : toutes
+        # categorie rattachee au point de vente mais encore vide : visible aussi
+        from apps.stores.models import StoreCategory
+
+        StoreCategory.objects.create(point_of_sale=sm, category=vide)
+        self.assertEqual(names({"point_of_sale": sm.pk}), ["Fruits", "Vide"])
+        # creee depuis Admin > Produits avec un point de vente : rattachee automatiquement
+        client.post("/api/catalog/categories/", {"name": "Glaces", "point_of_sale": resto.pk}, format="json")
+        self.assertEqual(names({"point_of_sale": resto.pk}), ["Glaces", "Plats"])
 
 
 class PriceZoneTests(TestCase):

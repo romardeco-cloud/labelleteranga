@@ -86,8 +86,8 @@ export async function fetchCategories(pointOfSale?: number | null) {
   return (data.results ?? data) as Category[];
 }
 
-export async function createCategory(name: string) {
-  const { data } = await api.post<Category>("/catalog/categories/", { name });
+export async function createCategory(name: string, pointOfSale?: number | null) {
+  const { data } = await api.post<Category>("/catalog/categories/", { name, ...(pointOfSale ? { point_of_sale: pointOfSale } : {}) });
   return data;
 }
 
