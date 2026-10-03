@@ -8,7 +8,7 @@ import PromoBands from "@/components/site/PromoBands";
 import LoyaltyBanner from "@/components/site/LoyaltyBanner";
 import { useSite } from "@/components/site/SiteContext";
 import { Product, api, fetchProducts } from "@/lib/api";
-import { storeImage } from "@/lib/branding";
+import { categoryEmoji, storeImage } from "@/lib/branding";
 import { SiteCategory, shortName } from "@/lib/site";
 
 export default function StoreHomePage() {
@@ -97,22 +97,41 @@ export default function StoreHomePage() {
         />
 
         {categories.length > 0 && (
-          <div className="flex gap-2 overflow-x-auto pb-1 [scrollbar-width:none] [&::-webkit-scrollbar]:hidden">
-            {[{ id: null as number | null, name: "Tout", products_count: total }, ...categories].map((c) => (
-              <button
-                key={c.id ?? "all"}
-                onClick={() => {
-                  setPage(1);
-                  setCategory(c.id);
-                }}
-                className={`shrink-0 whitespace-nowrap px-4 py-2 rounded-full text-sm font-medium border transition ${
-                  category === c.id ? "bg-brand text-white border-brand" : "border-brand/30 text-brand-dark hover:bg-brand-light"
-                }`}
-              >
-                {c.name}
-                {c.products_count > 0 && <span className="ml-1.5 text-xs opacity-70">{c.products_count}</span>}
-              </button>
-            ))}
+          <div>
+            <p className="text-xs font-bold uppercase tracking-wide text-brand-dark/70 mb-1.5">
+              {isResto ? "Nos menus" : "Nos rayons"} <span className="font-normal normal-case">· touchez une famille pour la voir</span>
+            </p>
+            {/* telephone : 2 lignes qui defilent ; ordinateur : toutes les familles visibles d'un coup */}
+            <div className="grid grid-rows-2 grid-flow-col auto-cols-max gap-2 overflow-x-auto pb-1 sm:flex sm:flex-wrap sm:overflow-visible [scrollbar-width:none] [&::-webkit-scrollbar]:hidden">
+              {[{ id: null as number | null, name: "Tout", products_count: total }, ...categories].map((c) => {
+                const actif = category === c.id;
+                return (
+                  <button
+                    key={c.id ?? "all"}
+                    onClick={() => {
+                      setPage(1);
+                      setCategory(c.id);
+                    }}
+                    aria-pressed={actif}
+                    className={`flex items-center gap-2 rounded-xl border-2 px-3 py-2 text-left shadow-sm transition active:scale-95 ${
+                      actif ? "bg-brand border-brand text-white shadow-md" : "bg-white border-brand/25 text-brand-dark hover:border-brand hover:bg-brand-light"
+                    }`}
+                  >
+                    <span className="text-2xl leading-none" aria-hidden>
+                      {c.id === null ? "🛍️" : categoryEmoji(c.name)}
+                    </span>
+                    <span className="flex flex-col leading-tight">
+                      <span className="text-sm font-bold whitespace-nowrap">{c.name}</span>
+                      {c.products_count > 0 && (
+                        <span className={`text-[11px] ${actif ? "text-white/80" : "text-gray-500"}`}>
+                          {c.products_count} produit{c.products_count > 1 ? "s" : ""}
+                        </span>
+                      )}
+                    </span>
+                  </button>
+                );
+              })}
+            </div>
           </div>
         )}
         </div>
